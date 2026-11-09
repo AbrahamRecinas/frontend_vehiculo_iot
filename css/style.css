@@ -1,0 +1,694 @@
+/* ==========================================================================
+   Grúa RC IoT · Hoja de Estilos Mobile First (Consola de Control Oscura)
+   Desarrollado por Abraham Falcon Recinas · 2026
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. VARIABLES DE TEMA Y DESIGN TOKENS
+   -------------------------------------------------------------------------- */
+:root {
+  --app-bg: #070c18;
+  --surface-bg: #0f172a;
+  --surface-border: #1e293b;
+  --surface-active: #1e2c47;
+  
+  --accent-cyan: #06b6d4;
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-gray: #64748b;
+  
+  --led-green: #22c55e;
+  --led-amber: #f59e0b;
+  --led-red: #ef4444;
+  --led-gray: #64748b;
+
+  --joystick-track-bg: #0c1322;
+  --joystick-ring: #1e293b;
+  --joystick-knob-bg: #1e293b;
+  --joystick-knob-core: #06b6d4;
+  --joystick-size: min(64vw, 240px);
+
+  --stop-btn-bg: #dc2626;
+  --stop-btn-hover: #b91c1c;
+  --stop-btn-active: #991b1b;
+  
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* --------------------------------------------------------------------------
+   2. REINICIO Y CONFIGURACIÓN GLOBAL
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--app-bg);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: contain;
+}
+
+/* Layout "No Scroll" para móviles: la interfaz debe caber en una sola pantalla */
+body {
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* Evitar selección de texto no deseada durante el control del vehículo */
+.joystick-wrapper,
+.btn-action,
+.btn-giant-stop,
+.status-pill {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* --------------------------------------------------------------------------
+   3. HEADER Y BARRA DE CONECTIVIDAD (3 SEMÁFOROS)
+   -------------------------------------------------------------------------- */
+.app-header {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 1020;
+  flex-shrink: 0;
+}
+
+.app-header > .container-fluid {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.header-logo {
+  filter: drop-shadow(0 2px 4px rgba(6, 182, 212, 0.3));
+}
+
+.vehicle-badge {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.5rem;
+}
+
+.connectivity-bar {
+  background: #090e1a !important;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 9999px;
+  background: #0f172a;
+  border: 1px solid var(--surface-border);
+  transition: all 0.25s ease;
+  font-size: 0.72rem;
+  min-height: 38px;
+}
+
+.status-pill .status-title {
+  font-weight: 700;
+  color: #cbd5e1;
+  line-height: 1.1;
+  font-size: 0.72rem;
+}
+
+.status-pill .status-desc {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  display: block;
+  line-height: 1;
+}
+
+/* Semáforos LED con pulso óptico */
+.status-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.led-green {
+  background-color: var(--led-green);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+}
+
+.led-amber {
+  background-color: var(--led-amber);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+  animation: ledPulse 1.8s infinite ease-in-out;
+}
+
+.led-red {
+  background-color: var(--led-red);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.led-gray {
+  background-color: var(--led-gray);
+  box-shadow: none;
+  opacity: 0.8;
+}
+
+@keyframes ledPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+/* Modificadores de píldora */
+.status-pill--online {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+}
+.status-pill--connecting {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+.status-pill--offline {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+}
+.status-pill--unverified {
+  border-color: rgba(100, 116, 139, 0.3);
+  background: rgba(100, 116, 139, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   4. PANEL DE DIAGNÓSTICO
+   -------------------------------------------------------------------------- */
+.diag-panel {
+  background: #090e1a !important;
+  box-shadow: inset 0 -4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.diag-item {
+  background: #0d1526 !important;
+  font-size: 0.75rem;
+}
+
+/* --------------------------------------------------------------------------
+   5. BANNER DE ESTADO DEL VEHÍCULO
+   -------------------------------------------------------------------------- */
+.command-banner {
+  background: #0d1527;
+  border-color: #1e2c47 !important;
+}
+
+.pulse-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+  transition: all 0.3s;
+}
+
+.pulse-indicator.active-moving {
+  background: var(--accent-green);
+  box-shadow: 0 0 12px var(--accent-green);
+  animation: ledPulse 0.9s infinite ease-in-out;
+}
+
+.pulse-indicator.active-demo {
+  background: var(--accent-amber);
+  box-shadow: 0 0 12px var(--accent-amber);
+  animation: ledPulse 1s infinite ease-in-out;
+}
+
+.pulse-indicator.active-stopped {
+  background: #64748b;
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   6. JOYSTICK CIRCULAR TÁCTIL (HERO COMPONENT)
+   -------------------------------------------------------------------------- */
+.joystick-card {
+  min-height: 0;
+}
+
+.joystick-wrapper {
+  width: var(--joystick-size);
+  height: var(--joystick-size);
+  background: radial-gradient(circle, #0e172a 0%, #070c18 100%);
+  border-radius: 50%;
+  border: 3px solid #1e293b;
+  box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.8), 0 8px 24px rgba(0, 0, 0, 0.6);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none; /* Bloquea el scroll durante el arrastre */
+  cursor: grab;
+  outline: none;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.joystick-wrapper:focus-visible {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.4);
+}
+
+.joystick-wrapper.dragging {
+  cursor: grabbing;
+  border-color: var(--accent-cyan);
+  box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.9), 0 0 20px rgba(6, 182, 212, 0.35);
+}
+
+/* Anillo exterior de referencia */
+.joystick-ring {
+  position: absolute;
+  width: 78%;
+  height: 78%;
+  border-radius: 50%;
+  border: 1px dashed rgba(100, 116, 139, 0.35);
+  pointer-events: none;
+}
+
+/* Zona muerta central (deadzone) */
+.joystick-deadzone-indicator {
+  position: absolute;
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.3);
+  border: 1px dotted rgba(100, 116, 139, 0.25);
+  pointer-events: none;
+}
+
+/* Guías cardinales (N, S, E, W) */
+.joystick-guide {
+  position: absolute;
+  font-size: 0.9rem;
+  color: #475569;
+  font-weight: bold;
+  pointer-events: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.joystick-guide--n { top: 8px; left: 50%; transform: translateX(-50%); }
+.joystick-guide--s { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.joystick-guide--e { right: 10px; top: 50%; transform: translateY(-50%); }
+.joystick-guide--w { left: 10px; top: 50%; transform: translateY(-50%); }
+
+.joystick-guide.active {
+  color: var(--accent-cyan);
+  text-shadow: 0 0 8px var(--accent-cyan);
+  transform: translateX(-50%) scale(1.3);
+}
+.joystick-guide--e.active,
+.joystick-guide--w.active {
+  transform: translateY(-50%) scale(1.3);
+}
+
+/* Knob / Pomo móvil del joystick */
+.joystick-knob {
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #334155 0%, #1e293b 60%, #0f172a 100%);
+  border: 2px solid #475569;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.15);
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transform: translate3d(0px, 0px, 0);
+  transition: border-color 0.15s ease;
+  will-change: transform;
+}
+
+.knob-core {
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background-color: var(--joystick-knob-core);
+  box-shadow: 0 0 10px var(--accent-cyan);
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.joystick-wrapper.dragging .knob-core {
+  background-color: #22c55e;
+  box-shadow: 0 0 14px #22c55e;
+}
+
+/* --------------------------------------------------------------------------
+   7. BOTONES DE ACCIÓN SECUNDARIOS (PALA, DIAGONALES, AUXILIARES)
+   -------------------------------------------------------------------------- */
+.btn-action {
+  border-width: 1.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(100, 116, 139, 0.5) !important;
+  color: #e2e8f0 !important;
+  padding: 0.5rem !important;
+  transition: transform 0.1s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  min-height: 0;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* El detalle del CMD (#X) queda como etiqueta secundaria (oculta en la cuadrícula compacta) */
+.btn-action > .btn-subtext {
+  display: none;
+}
+
+/* Jerarquía tipográfica: ícono protagonista + nombre de acción en microcopy */
+.btn-action .action-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.btn-action:active {
+  transform: scale(0.96);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.btn-action .btn-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.btn-action .btn-subtext {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  opacity: 0.5;
+}
+
+/* Acento de color por comando: visible únicamente en el ícono (por defecto) */
+.btn-action[data-cmd="5"] .btn-icon,
+.btn-action[data-cmd="6"] .btn-icon { color: #f59e0b; }
+
+.btn-action[data-cmd="7"] .btn-icon,
+.btn-action[data-cmd="8"] .btn-icon { color: #3b82f6; }
+
+.btn-action[data-cmd="9"] .btn-icon,
+.btn-action[data-cmd="10"] .btn-icon { color: #06b6d4; }
+
+.btn-action[data-cmd="13"] .btn-icon { color: #22c55e; }
+
+.btn-action[data-cmd="14"] .btn-icon { color: #ef4444; }
+
+/* El botón se pinta con el acento del comando en hover */
+.btn-action[data-cmd="5"]:hover,
+.btn-action[data-cmd="6"]:hover {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+}
+
+.btn-action[data-cmd="7"]:hover,
+.btn-action[data-cmd="8"]:hover {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+  border-color: #3b82f6 !important;
+  color: #3b82f6 !important;
+}
+
+.btn-action[data-cmd="9"]:hover,
+.btn-action[data-cmd="10"]:hover {
+  background-color: rgba(6, 182, 212, 0.12) !important;
+  border-color: #06b6d4 !important;
+  color: #06b6d4 !important;
+}
+
+.btn-action[data-cmd="13"]:hover {
+  background-color: rgba(34, 197, 94, 0.12) !important;
+  border-color: #22c55e !important;
+  color: #22c55e !important;
+}
+
+.btn-action[data-cmd="14"]:hover {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+}
+
+.btn-action.btn-active-highlight {
+  background-color: rgba(6, 182, 212, 0.2) !important;
+  border-color: var(--accent-cyan) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+}
+
+/* --------------------------------------------------------------------------
+   8. BARRA STICKY INFERIOR Y BOTÓN GIGANTE DETENER (CMD #12)
+   -------------------------------------------------------------------------- */
+.sticky-stop-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1030;
+  background: rgba(11, 15, 25, 0.96) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding-bottom: calc(0.5rem + var(--safe-bottom)) !important;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.75);
+}
+
+.btn-giant-stop {
+  background: #c92a2a;
+  border: 2px solid #991b1b;
+  min-height: 64px;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  box-shadow: none;
+  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+  letter-spacing: 0.08em;
+}
+
+.btn-giant-stop:hover {
+  background: #a61e1e;
+  border-color: #7f1a1a;
+}
+
+.btn-giant-stop:active {
+  transform: scale(0.975);
+  background: #991b1b;
+}
+
+.btn-giant-stop .stop-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.btn-giant-stop .stop-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.btn-giant-stop .stop-subtitle {
+  font-size: 0.72rem;
+  color: #fecaca;
+  font-family: var(--font-mono);
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* --------------------------------------------------------------------------
+   9. FOOTER Y ACCESIBILIDAD
+   -------------------------------------------------------------------------- */
+.app-footer {
+  font-size: 0.75rem;
+  color: #64748b !important;
+}
+
+/* Soporte de navegación accesible por teclado */
+button:focus-visible,
+a:focus-visible,
+[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 3px;
+}
+
+/* Reducción de movimiento si el usuario lo prefiere */
+/* Dashboard: cuadrícula apretada 2x2 para paneles de controles */
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  align-items: start;
+}
+
+/* Anclar la barra de paro (DETENER) al fondo dentro del layout sin scroll */
+.sticky-stop-bar {
+  order: 4;
+  flex-shrink: 0;
+}
+
+.app-footer {
+  order: 3;
+  flex-shrink: 0;
+}
+
+/* Dashboard móvil: joystick compacto (máx 160px / 25vh) y compresión extrema */
+@media (max-width: 767.98px) {
+  :root {
+    --joystick-size: min(160px, 25vh);
+  }
+
+  /* Miniaturización de botones de control (Pala/Energía) */
+  .btn-action {
+    min-height: 0;
+  }
+
+  /* Compresión de tarjetas en móvil: ocultar headers no vitales */
+  .card-header {
+    display: none;
+  }
+
+  /* Compresión de tarjetas en móvil */
+  .card {
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* Header móvil: solo los indicadores de conectividad (título y diagnóstico ocultos vía d-none d-md-*) */
+  .connectivity-bar {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  .status-pill {
+    min-height: 30px;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .status-pill .status-title {
+    font-size: 0.68rem;
+  }
+
+  .status-pill .status-desc {
+    font-size: 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. MEDIA QUERIES RESPONSIVAS (TABLET, DESKTOP Y LANDSCAPE MÓVIL)
+   -------------------------------------------------------------------------- */
+
+/* Correcciones y utilidades propias (no cubiertas íntegramente por Bootstrap) */
+.app-wrapper {
+  background-color: var(--app-bg);
+}
+
+.main-content {
+  flex-grow: 1;
+}
+
+.bg-dark-subtle {
+  background-color: #0d1526 !important;
+}
+
+.bg-body-tertiary {
+  background-color: #0f172a !important;
+}
+
+.border-secondary-subtle {
+  border-color: var(--surface-border) !important;
+}
+
+.text-bg-dark {
+  color: #f8fafc !important;
+  background-color: #212529 !important;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --joystick-size: 280px;
+  }
+
+  .status-pill {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .status-pill .status-title {
+    font-size: 0.8rem;
+  }
+  
+  .status-pill .status-desc {
+    font-size: 0.7rem;
+  }
+
+  .btn-giant-stop {
+    min-height: 74px;
+  }
+
+  .btn-giant-stop .stop-title {
+    font-size: 1.7rem;
+  }
+}
+
+@media (min-width: 992px) {
+  .main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  :root {
+    --joystick-size: 280px;
+  }
+}
+
+/* Móvil en orientación horizontal (Landscape) */
+@media (max-height: 550px) and (orientation: landscape) {
+  :root {
+    --joystick-size: 190px;
+  }
+
+  .joystick-card {
+    min-height: auto;
+  }
+
+  .btn-action {
+    min-height: 0;
+    padding: 0.35rem 0.5rem !important;
+  }
+
+  .btn-giant-stop {
+    min-height: 54px;
+  }
+
+  .btn-giant-stop .stop-title {
+    font-size: 1.25rem;
+  }
+}
