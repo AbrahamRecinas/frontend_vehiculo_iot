@@ -363,6 +363,12 @@ body {
   transition: transform 0.1s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   min-height: 0;
   aspect-ratio: 1 / 1;
+  width: 84px; /* <--- NUEVO: Ancho base fijo para que aspect-ratio funcione perfecto */
+  height: 84px;/* <--- NUEVO: Altura base fija igual al ancho */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* El detalle del CMD (#X) queda como etiqueta secundaria (oculta en la cuadrícula compacta) */
@@ -379,6 +385,7 @@ body {
   opacity: 0.85;
   line-height: 1.2;
   margin: 0;
+  text-align: center; /* <--- NUEVO: Asegura que si el texto baja no se desalinee */
 }
 
 .btn-action:active {
@@ -453,7 +460,8 @@ body {
 }
 
 /* Botones compactos dentro de la cuadrícula de energía (Luces/Sonido/Encender/Apagar) */
-#energyCommandGrid .btn-action {
+#energyCommandGrid .btn-action,
+.pala-command-grid .btn-action {
   width: 84px;
   height: 84px;
   padding: 0.25rem !important;
@@ -461,17 +469,20 @@ body {
 
 /* Móvil: botones compactos para que el grid quepa en una sola fila */
 @media (max-width: 767.98px) {
-  #energyCommandGrid .btn-action {
+  #energyCommandGrid .btn-action,
+  .pala-command-grid .btn-action {
     width: 60px;
     height: 60px;
   }
 
-  #energyCommandGrid .stop-emergencia-btn {
+  #energyCommandGrid .stop-emergencia-btn,
+  .pala-command-grid .btn-action {
     min-width: 48px;
     min-height: 48px;
   }
 
-  #energyCommandGrid {
+  #energyCommandGrid,
+  .pala-command-grid .btn-action {
     gap: 0.25rem;
   }
 }
