@@ -70,7 +70,7 @@ body {
 /* Evitar selección de texto no deseada durante el control del vehículo */
 .joystick-wrapper,
 .btn-action,
-.btn-giant-stop,
+.stop-bar,
 .status-pill {
   user-select: none;
   -webkit-user-select: none;
@@ -455,49 +455,19 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   8. BARRA STICKY INFERIOR Y BOTÓN GIGANTE DETENER (CMD #12)
+   8. BARRA INFERIOR Y BOTÓN DETENER (CMD #12)
    -------------------------------------------------------------------------- */
-.sticky-stop-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 1030;
+.stop-bar {
   background: rgba(11, 15, 25, 0.96) !important;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   padding-bottom: calc(0.5rem + var(--safe-bottom)) !important;
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.75);
+  margin-top: auto;
 }
 
-.btn-giant-stop {
-  background: #c92a2a;
-  border: 2px solid #991b1b;
-  min-height: 64px;
-  border-radius: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  box-shadow: none;
-  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
-  letter-spacing: 0.08em;
-}
-
-.btn-giant-stop:hover {
-  background: #a61e1e;
-  border-color: #7f1a1a;
-}
-
-.btn-giant-stop:active {
-  transform: scale(0.975);
-  background: #991b1b;
-}
-
-.btn-giant-stop .stop-icon {
-  font-size: 1.8rem;
-  line-height: 1;
-}
-
-.btn-giant-stop .stop-title {
+/* Botón DETENER (CMD #12) — plano, sólido y contundente (Bootstrap .btn-danger) */
+.stop-title {
   font-size: 1.5rem;
   font-weight: 900;
   color: #ffffff;
@@ -505,7 +475,7 @@ body {
   letter-spacing: 0.08em;
 }
 
-.btn-giant-stop .stop-subtitle {
+.stop-subtitle {
   font-size: 0.72rem;
   color: #fecaca;
   font-family: var(--font-mono);
@@ -540,7 +510,7 @@ a:focus-visible,
 }
 
 /* Anclar la barra de paro (DETENER) al fondo dentro del layout sin scroll */
-.sticky-stop-bar {
+.stop-bar {
   order: 4;
   flex-shrink: 0;
 }
@@ -648,11 +618,7 @@ a:focus-visible,
     font-size: 0.7rem;
   }
 
-  .btn-giant-stop {
-    min-height: 74px;
-  }
-
-  .btn-giant-stop .stop-title {
+  .stop-title {
     font-size: 1.7rem;
   }
 }
@@ -684,11 +650,7 @@ a:focus-visible,
     padding: 0.35rem 0.5rem !important;
   }
 
-  .btn-giant-stop {
-    min-height: 54px;
-  }
-
-  .btn-giant-stop .stop-title {
+  .stop-title {
     font-size: 1.25rem;
   }
 }
