@@ -60,17 +60,16 @@ html, body {
   overscroll-behavior-y: contain;
 }
 
-/* Layout "No Scroll" para móviles: la interfaz debe caber en una sola pantalla */
+/* Scroll vertical inteligente: solo se bloquea el horizontal; el táctil se delega al joystick */
 body {
-  height: 100dvh;
-  overflow: hidden;
-  touch-action: none;
+  min-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Evitar selección de texto no deseada durante el control del vehículo */
 .joystick-wrapper,
 .btn-action,
-.stop-bar,
 .status-pill {
   user-select: none;
   -webkit-user-select: none;
@@ -363,7 +362,6 @@ body {
   padding: 0.5rem !important;
   transition: transform 0.1s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   min-height: 0;
-  width: 100%;
   aspect-ratio: 1 / 1;
 }
 
@@ -454,19 +452,15 @@ body {
   box-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
 }
 
-/* --------------------------------------------------------------------------
-   8. BARRA INFERIOR Y BOTÓN DETENER (CMD #12)
-   -------------------------------------------------------------------------- */
-.stop-bar {
-  background: rgba(11, 15, 25, 0.96) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding-bottom: calc(0.5rem + var(--safe-bottom)) !important;
-  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.75);
-  margin-top: auto;
+/* Botones compactos dentro de la cuadrícula de energía (Luces/Sonido/Encender/Apagar) */
+#energyCommandGrid .btn-action {
+  width: 84px;
+  height: 84px;
 }
 
-/* Botón DETENER (CMD #12) — plano, sólido y contundente (Bootstrap .btn-danger) */
+/* --------------------------------------------------------------------------
+   8. BOTÓN DETENER (CMD #12) — INTEGRADO EN LA TARETA DE ENERGÍA
+   -------------------------------------------------------------------------- */
 .stop-title {
   font-size: 1.5rem;
   font-weight: 900;
@@ -475,13 +469,10 @@ body {
   letter-spacing: 0.08em;
 }
 
-.stop-subtitle {
-  font-size: 0.72rem;
-  color: #fecaca;
-  font-family: var(--font-mono);
-  font-weight: normal;
-  text-transform: none;
-  letter-spacing: normal;
+/* Botón DETENER (CMD 12) integrado en la cuadrícula de energía: prominente pero plano */
+.stop-emergencia-btn {
+  min-width: 132px;
+  min-height: 60px;
 }
 
 /* --------------------------------------------------------------------------
@@ -507,12 +498,6 @@ a:focus-visible,
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   align-items: start;
-}
-
-/* Anclar la barra de paro (DETENER) al fondo dentro del layout sin scroll */
-.stop-bar {
-  order: 4;
-  flex-shrink: 0;
 }
 
 .app-footer {

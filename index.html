@@ -313,55 +313,58 @@
               <span class="badge text-bg-dark border border-secondary text-secondary">Comandos 9, 10, 13, 14</span>
             </div>
             <div class="card-body p-2">
-              <div class="row g-2 panel-grid">
+              <!-- Contenedor de energía/accesorios: DETENER integrado como botón central -->
+              <div class="d-flex flex-wrap justify-content-center align-items-center gap-2" id="energyCommandGrid">
                 <!-- Luces (9) -->
-                <div class="col-6 col-sm-3">
-                  <button
-                    type="button"
-                    class="btn btn-action w-100 d-flex flex-column align-items-center justify-content-center"
-                    data-cmd="9"
-                    id="btnLuces"
-                  >
-                    <i class="bi bi-lightbulb btn-icon mb-1" aria-hidden="true"></i>
-                    <strong class="fw-semibold text-light action-name mb-0">Luces</strong>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center"
+                  data-cmd="9"
+                  id="btnLuces"
+                >
+                  <i class="bi bi-lightbulb btn-icon mb-1" aria-hidden="true"></i>
+                  <strong class="fw-semibold text-light action-name mb-0">Luces</strong>
+                </button>
                 <!-- Sonido / Claxon (10) -->
-                <div class="col-6 col-sm-3">
-                  <button
-                    type="button"
-                    class="btn btn-action w-100 d-flex flex-column align-items-center justify-content-center"
-                    data-cmd="10"
-                    id="btnSonido"
-                  >
-                    <i class="bi bi-megaphone btn-icon mb-1" aria-hidden="true"></i>
-                    <strong class="fw-semibold text-light action-name mb-0">Sonido</strong>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center"
+                  data-cmd="10"
+                  id="btnSonido"
+                >
+                  <i class="bi bi-megaphone btn-icon mb-1" aria-hidden="true"></i>
+                  <strong class="fw-semibold text-light action-name mb-0">Sonido</strong>
+                </button>
+                <!-- DETENER (12) — botón central de la cuadrícula -->
+                <button
+                  type="button"
+                  class="btn btn-danger px-4 py-2 d-flex align-items-center justify-content-center gap-2 stop-emergencia-btn"
+                  id="btnEmergencyStop"
+                  aria-label="Detener vehículo inmediatamente (Comando de paro 12)"
+                >
+                  <i class="bi bi-octagon-fill fs-3" aria-hidden="true"></i>
+                  <span class="stop-title">DETENER</span>
+                </button>
                 <!-- Encender (13) -->
-                <div class="col-6 col-sm-3">
-                  <button
-                    type="button"
-                    class="btn btn-action w-100 d-flex flex-column align-items-center justify-content-center"
-                    data-cmd="13"
-                    id="btnEncender"
-                  >
-                    <i class="bi bi-lightning-charge btn-icon mb-1" aria-hidden="true"></i>
-                    <strong class="fw-semibold text-light action-name mb-0">Encender</strong>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="btn btn-action btn-sm btn-outline-success d-flex flex-column align-items-center justify-content-center"
+                  data-cmd="13"
+                  id="btnEncender"
+                >
+                  <i class="bi bi-lightning-charge btn-icon mb-1" aria-hidden="true"></i>
+                  <strong class="fw-semibold text-light action-name mb-0">Encender</strong>
+                </button>
                 <!-- Apagar (14) con confirmación previa -->
-                <div class="col-6 col-sm-3">
-                  <button
-                    type="button"
-                    class="btn btn-action w-100 d-flex flex-column align-items-center justify-content-center"
-                    data-cmd="14"
-                    id="btnApagar"
-                  >
-                    <i class="bi bi-power btn-icon mb-1" aria-hidden="true"></i>
-                    <strong class="fw-semibold text-light action-name mb-0">Apagar</strong>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="btn btn-action btn-sm btn-outline-danger d-flex flex-column align-items-center justify-content-center"
+                  data-cmd="14"
+                  id="btnApagar"
+                >
+                  <i class="bi bi-power btn-icon mb-1" aria-hidden="true"></i>
+                  <strong class="fw-semibold text-light action-name mb-0">Apagar</strong>
+                </button>
               </div>
             </div>
           </div>
@@ -408,22 +411,6 @@
         </div>
       </div>
     </main>
-
-    <!-- BARRA INFERIOR: BOTÓN GIGANTE E INCONFUNDIBLE DE DETENER (CMD 12) -->
-    <aside class="stop-bar bg-dark border-top border-danger p-2 mt-auto" aria-label="Control de paro de emergencia">
-      <div class="container-fluid px-2">
-        <button
-          type="button"
-          class="btn btn-danger w-100 text-white fw-bold py-3"
-          id="btnEmergencyStop"
-          aria-label="Detener vehículo inmediatamente (Comando de paro 12)"
-        >
-          <i class="bi bi-octagon-fill fs-4 me-2" aria-hidden="true"></i>
-          <span class="stop-title">DETENER</span>
-          <span class="stop-subtitle d-none d-md-inline">(CMD #12 · Paro General)</span>
-        </button>
-      </div>
-    </aside>
 
     <!-- FOOTER RESPONSIVO -->
     <footer class="app-footer py-2 px-3 bg-black border-top border-secondary-subtle text-center text-secondary small">
