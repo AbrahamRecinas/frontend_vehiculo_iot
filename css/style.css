@@ -471,8 +471,9 @@ body {
 
 /* Botón DETENER (CMD 12) integrado en la cuadrícula de energía: prominente pero plano */
 .stop-emergencia-btn {
-  min-width: 132px;
-  min-height: 60px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0.25rem;
 }
 
 /* --------------------------------------------------------------------------
@@ -603,8 +604,9 @@ a:focus-visible,
     font-size: 0.7rem;
   }
 
-  .stop-title {
-    font-size: 1.7rem;
+  .stop-emergencia-btn {
+    min-width: 64px;
+    min-height: 64px;
   }
 }
 
@@ -635,7 +637,8 @@ a:focus-visible,
     padding: 0.35rem 0.5rem !important;
   }
 
-  .stop-title {
-    font-size: 1.25rem;
+  .stop-emergencia-btn {
+    min-width: 52px;
+    min-height: 52px;
   }
 }
