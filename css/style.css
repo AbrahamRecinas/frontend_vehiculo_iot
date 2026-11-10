@@ -897,3 +897,23 @@ a:focus-visible,
     overflow: visible;
   }
 }
+
+/* --------------------------------------------------------------------------
+   11. DIRECCIÓN EXPLÍCITA DEL MODO CONTROL (JS: UI.setMandoMode)
+   -------------------------------------------------------------------------- */
+body.mando-control .mando-layout {
+  flex-direction: row;
+}
+
+body.mando-control #mandoLayout {
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  body.mando-control #mandoLayout {
+    height: auto;
+    overflow: visible;
+  }
+}

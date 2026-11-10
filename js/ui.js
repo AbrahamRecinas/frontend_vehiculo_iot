@@ -153,6 +153,10 @@ const UI = {
     // Marca global para condicionar textos largos vs LEDs minimales (solo movil)
     document.body.classList.toggle('mando-mode', Boolean(isActive));
 
+    // FASE UX: dirección explícita del layout de control mientras esté activo
+    // (mantiene la fila gamepad en cualquier dispositivo; se limpia al salir)
+    document.body.classList.toggle('mando-control', Boolean(isActive));
+
     return isActive;
   },
 
