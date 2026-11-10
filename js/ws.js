@@ -133,9 +133,12 @@ class WebSocketService {
         this.emit('fin_demo', payload);
       }
 
-      // Eco de comando ejecutado
-      if (typeof payload.id_comando === 'number') {
-        this.emit('command_echo', payload.id_comando);
+      // Eco de comando ejecutado (algunos clientes serializan el ID como cadena)
+      if (payload.id_comando !== undefined && payload.id_comando !== null && payload.id_comando !== '') {
+        const idComando = Number(payload.id_comando);
+        if (Number.isInteger(idComando)) {
+          this.emit('command_echo', idComando);
+        }
       }
     }
   }

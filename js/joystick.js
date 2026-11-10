@@ -44,17 +44,41 @@ export class JoystickController {
     this.track.addEventListener('pointercancel', (e) => this.handlePointerUp(e));
     this.track.addEventListener('lostpointercapture', (e) => this.handlePointerUp(e));
 
-    // Soporte accesible por teclado en el elemento joystick
-    this.track.addEventListener('keydown', (e) => this.handleKeyDown(e));
-    this.track.addEventListener('keyup', (e) => this.handleKeyUp(e));
-
-    // Si la ventana pierde foco mientras se arrastra, asegurar frenado
-    window.addEventListener('blur', () => {
-      if (this.isDragging) {
-        this.resetKnob();
-        if (this.callbacks.onRelease) this.callbacks.onRelease();
-      }
+    // Soporte accesible por teclado: global en modo mando cuando el foco no está en un control de formulario
+    window.addEventListener('keydown', (e) => {
+      if (this.shouldHandleKeyboardEvent(e)) this.handleKeyDown(e);
     });
+    window.addEventListener('keyup', (e) => {
+      if (this.armedByKey || this.shouldHandleKeyboardEvent(e)) this.handleKeyUp(e);
+    });
+
+    // Si la ventana o la pestaña pierden foco mientras hay movimiento activo, asegurar frenado
+    const releaseOnFocusLoss = () => {
+      if (this.isDragging || this.armedByKey || this.latchedCommand !== null) {
+        this.forceRelease();
+        if (this.callbacks.onRelease) this.callbacks.onRelease({ forcedStop: true });
+      }
+    };
+    window.addEventListener('blur', releaseOnFocusLoss);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') releaseOnFocusLoss();
+    });
+  }
+
+  shouldHandleKeyboardEvent(e) {
+    if (!document.body.classList.contains('mando-control')) return false;
+    if (e.altKey || e.ctrlKey || e.metaKey) return false;
+    const target = e.target;
+    if (target instanceof HTMLElement) {
+      const tag = target.tagName;
+      if (target.isContentEditable || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+        return false;
+      }
+      if (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) {
+        return false;
+      }
+    }
+    return true;
   }
 
   recalculateBounds() {
@@ -151,11 +175,10 @@ export class JoystickController {
     if (distance < this.deadzoneRadius) {
       if (this.latchedCommand !== null) {
         this.latchedCommand = null;
+        currentJoystickCmd = CONFIG.COMMANDS.DETENER;
+        this.resetKnob();
         if (this.callbacks.onRelease) {
-          this.callbacks.onRelease({ hadMovement: false });
-        }
-        if (this.callbacks.onLockChange) {
-          this.callbacks.onLockChange(null);
+          this.callbacks.onRelease({ hadMovement: true });
         }
       }
       return;
@@ -187,9 +210,15 @@ export class JoystickController {
           try { navigator.vibrate(15); } catch (_) {}
         }
 
-        // Emitir el POST del nuevo movimiento sin esperar a soltar el puntero
+        // Emitir el POST del nuevo movimiento sin esperar a soltar el puntero.
+        // Si la petición falla, se libera el comando recordado para permitir reintento.
         if (this.callbacks.onDirection) {
-          this.callbacks.onDirection(this.latchedCommand);
+          Promise.resolve(this.callbacks.onDirection(this.latchedCommand)).then((ok) => {
+            if (ok === false && currentJoystickCmd === detectedSector) {
+              currentJoystickCmd = CONFIG.COMMANDS.DETENER;
+              this.latchedCommand = null;
+            }
+          });
         }
       }
     }
@@ -227,7 +256,7 @@ export class JoystickController {
       return CONFIG.COMMANDS.DIAGONAL_DERECHA; // ID 7
     }
     if (angleDeg >= 135 || angleDeg < -135) {
-      return CONFIG.COMMANDS.DIAGONAL_IZQUIERA; // ID 8
+      return CONFIG.COMMANDS.DIAGONAL_IZQUIERDA; // ID 8
     }
     return null;
   }
@@ -278,12 +307,13 @@ export class JoystickController {
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        targetCmd = CONFIG.COMMANDS.DIAGONAL_IZQUIERA;
+        targetCmd = CONFIG.COMMANDS.DIAGONAL_IZQUIERDA;
         keyName = e.key;
         break;
       case ' ':
       case 'Escape':
         e.preventDefault();
+        this.forceRelease();
         if (this.callbacks.onRelease) this.callbacks.onRelease({ forcedStop: true });
         return;
       default:
@@ -292,13 +322,22 @@ export class JoystickController {
 
     if (targetCmd && !this.latchedCommand) {
       e.preventDefault();
+      this.recalculateBounds();
       this.latchedCommand = targetCmd;
       currentJoystickCmd = targetCmd;
       this.armedByKey = keyName;
+      this.track.classList.add('dragging');
+      if (this.callbacks.onLockChange) {
+        this.callbacks.onLockChange('joystick');
+      }
       this.animateKnobDirection(targetCmd);
 
       if (this.callbacks.onDirection) {
-        this.callbacks.onDirection(targetCmd);
+        Promise.resolve(this.callbacks.onDirection(targetCmd)).then((ok) => {
+          if (ok === false && currentJoystickCmd === targetCmd) {
+            this.forceRelease();
+          }
+        });
       }
     }
   }
@@ -308,11 +347,8 @@ export class JoystickController {
     if (keys.includes(e.key)) {
       e.preventDefault();
       // Solo liberar si la tecla que se suelta fue la que armo el movimiento
-      if (this.armedByKey === e.key) {
-        this.latchedCommand = null;
-        this.armedByKey = null;
-        currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
-        this.resetKnob();
+      if (this.armedByKey && this.armedByKey.toLowerCase() === e.key.toLowerCase()) {
+        this.forceRelease();
 
         if (this.callbacks.onRelease) {
           this.callbacks.onRelease({ hadMovement: true });
@@ -328,7 +364,7 @@ export class JoystickController {
     if (cmdId === CONFIG.COMMANDS.AVANZAR) y = -dist;
     if (cmdId === CONFIG.COMMANDS.RETROCEDER) y = dist;
     if (cmdId === CONFIG.COMMANDS.DIAGONAL_DERECHA) x = dist;
-    if (cmdId === CONFIG.COMMANDS.DIAGONAL_IZQUIERA) x = -dist;
+    if (cmdId === CONFIG.COMMANDS.DIAGONAL_IZQUIERDA) x = -dist;
 
     this.knob.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     if (this.callbacks.onVisualChange) {
@@ -343,8 +379,12 @@ export class JoystickController {
     this.activePointerId = null;
     this.isDragging = false;
     this.latchedCommand = null;
+    this.armedByKey = null;
     currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
     this.track.classList.remove('dragging');
     this.resetKnob();
+    if (this.callbacks.onLockChange) {
+      this.callbacks.onLockChange(null);
+    }
   }
 }

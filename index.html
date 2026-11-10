@@ -41,7 +41,7 @@
     <!-- HEADER / BARRA SUPERIOR -->
     <header class="app-header border-bottom border-secondary-subtle sticky-top">
       <div class="container-fluid px-3 py-2 d-flex align-items-center justify-content-between">
-        <div class="d-none d-md-flex align-items-center gap-2">
+        <div class="brand-lockup d-flex align-items-center gap-2">
           <img src="./assets/icons/favicon.svg" alt="Ícono Grúa IoT" class="header-logo" width="34" height="34" />
           <div>
             <h1 class="h6 mb-0 text-white fw-bold tracking-wide">Grúa RC IoT</h1>
@@ -49,13 +49,14 @@
           </div>
         </div>
 
-        <div class="d-none d-md-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
           <button
             type="button"
             id="btnToggleDiag"
-            class="btn btn-outline-info btn-sm d-none d-md-flex align-items-center gap-1"
+            class="btn btn-outline-info btn-sm diag-toggle d-flex align-items-center gap-1"
             aria-expanded="false"
             aria-controls="diagPanel"
+            aria-label="Abrir diagnóstico de red"
             title="Abrir diagnóstico de red"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
@@ -175,24 +176,24 @@
 
       <!-- LOBBY (FASE 1: vista inicial en móvil · oculto en PC) -->
       <section id="lobbyView" class="lobby-view flex-column align-items-center justify-content-center text-center p-2" aria-label="Lobby de estado y conexión">
-        <div class="card bg-body-tertiary border-secondary-subtle shadow-sm" style="max-width: 460px; width: 100%;">
-          <div class="card-body p-3">
+        <div class="card bg-body-tertiary border-secondary-subtle lobby-card">
+          <div class="card-body p-4">
             <div class="text-center mb-3">
-              <div style="font-size: 3rem; line-height: 1.1;" aria-hidden="true">🎮</div>
-              <h2 class="h5 text-white fw-bold mt-2 mb-1">ESTACIÓN DE MANDO</h2>
-              <p class="small text-secondary mb-0">Grúa RC IoT · Vehículo #1</p>
+              <div class="lobby-hero-icon" aria-hidden="true"><i class="bi bi-joystick"></i></div>
+              <span class="lobby-kicker">CONTROL REMOTO · VEHÍCULO #1</span>
+              <h2 class="h4 text-white fw-bold mt-2 mb-1">Estación de mando</h2>
+              <p class="small text-secondary mb-0">Control preciso, telemetría en vivo y paro inmediato.</p>
             </div>
-            <p class="small text-secondary mb-3">Estado del canal WSS, API AWS y persistencia RDS antes de entrar al mando:</p>
-            <div class="d-flex justify-content-center mb-4">
-              <span class="badge text-bg-dark border border-secondary text-secondary font-monospace px-3 py-2">
-                WSS · AWS · RDS
-              </span>
+            <div class="lobby-status-summary mb-4" aria-label="Canales supervisados">
+              <span><i class="bi bi-broadcast"></i> WSS</span>
+              <span><i class="bi bi-cloud-check"></i> AWS</span>
+              <span><i class="bi bi-database"></i> RDS</span>
             </div>
-            <button type="button" id="btnEnterMando" class="btn btn-primary btn-lg w-100 d-flex align-items-center justify-content-center gap-2">
-              <span class="fs-4" aria-hidden="true">🎮</span>
-              <span>Entrar a Modo Mando</span>
+            <button type="button" id="btnEnterMando" class="btn btn-primary btn-lg w-100 d-flex align-items-center justify-content-center gap-2 lobby-enter-btn">
+              <i class="bi bi-controller fs-4" aria-hidden="true"></i>
+              <span>Entrar al modo mando</span>
             </button>
-            <p class="tiny text-secondary mt-2 mb-0">Conexión en tiempo real · AWS · RDS honesta</p>
+            <p class="lobby-footnote text-secondary mt-3 mb-0">Se recomienda girar el teléfono al entrar.</p>
           </div>
         </div>
       </section>
@@ -200,7 +201,7 @@
       <!-- MODO MANDO (FASE 2: arquitectura de 3 columnas "Estación de Mando") -->
       <section id="mandoView" class="mando-view flex-column" aria-label="Modo mando">
         <!-- BARRA DE ESTADO COMPACTA (SOLO MÓVIL): 3 LEDS + SALIR -->
-        <div class="mando-status-bar d-flex d-md-none align-items-center justify-content-center gap-3 py-2 px-2" id="mandoStatusBar">
+        <div class="mando-status-bar" id="mandoStatusBar">
           <span class="mando-led" id="mandoLedWss" title="WebSocket WSS"><span class="status-led led-green"></span></span>
           <span class="mando-led" id="mandoLedAws" title="API AWS"><span class="status-led led-gray"></span></span>
           <span class="mando-led" id="mandoLedRds" title="Amazon RDS"><span class="status-led led-gray"></span></span>
@@ -210,11 +211,11 @@
         </div>
 
         <!-- LAYOUT DE 3 COLUMNAS (JOYSTICK / CENTRO-ENERGIA-DEMOS / D-PAD) -->
-        <div class="mando-layout d-flex flex-row w-100 h-100" id="mandoLayout">
+        <div class="mando-layout" id="mandoLayout">
 
           <!-- COLUMNA IZQUIERDA (30%): JOYSTICK EXCLUSIVO -->
           <section class="mando-col mando-col-left d-flex flex-column p-2" id="joystickPanel" aria-label="Control por joystick">
-            <section class="command-banner mb-2 p-2 rounded border border-secondary-subtle d-none d-md-flex align-items-center justify-content-between" aria-live="polite">
+            <section class="command-banner desktop-detail mb-2 p-2 rounded border border-secondary-subtle align-items-center justify-content-between" aria-live="polite">
               <div class="d-flex align-items-center gap-2">
                 <span class="pulse-indicator" id="pulseIndicator"></span>
                 <div>
@@ -253,8 +254,8 @@
                   <div class="joystick-ring"></div>
                   <div class="joystick-guide joystick-guide--n active" id="joystickGuideN" data-dir="1" title="Avanzar (1)">▲</div>
                   <div class="joystick-guide joystick-guide--s" id="joystickGuideS" data-dir="2" title="Retroceder (2)">▼</div>
-                  <div class="joystick-guide joystick-guide--e" id="joystickGuideE" data-dir="3" title="Girar Derecha (3)">►</div>
-                  <div class="joystick-guide joystick-guide--w" id="joystickGuideW" data-dir="4" title="Girar Izquierda (4)">◄</div>
+                  <div class="joystick-guide joystick-guide--e" id="joystickGuideE" data-dir="7" title="Avanzar a la derecha (7)">↗</div>
+                  <div class="joystick-guide joystick-guide--w" id="joystickGuideW" data-dir="8" title="Avanzar a la izquierda (8)">↖</div>
                   <div class="joystick-deadzone-indicator"></div>
 
                   <!-- Pomo / Knob móvil -->
@@ -265,11 +266,11 @@
 
                 <!-- Indicador contextual bajo el joystick -->
                 <div class="joystick-hint text-center mt-3">
-                  <p class="small text-secondary mb-1 d-none d-md-block" id="joystickHelpText">
-                    Arrastra hacia una dirección para avanzar. <span class="text-info fw-semibold">Al soltar, se frena automáticamente (12)</span>.
+                  <p class="small text-secondary mb-1 desktop-detail" id="joystickHelpText">
+                    Arrastra o usa <span class="text-info fw-semibold">flechas / WASD</span>. Al soltar, se frena automáticamente (12).
                   </p>
-                  <span class="small font-monospace text-muted d-none d-md-inline">
-                    (Soporte de teclado: Flechas ↑ ↓ ← → · Espacio = Detener)
+                  <span class="small font-monospace text-muted desktop-detail keyboard-hint">
+                    Espacio o Esc = paro inmediato
                   </span>
                 </div>
               </div>
@@ -287,7 +288,7 @@
                 </div>
                 <div class="card-body p-2">
                   <!-- Contenedor de energía/accesorios: DETENER integrado como botón central -->
-                  <div class="d-flex flex-wrap justify-content-center align-items-center gap-2" id="energyCommandGrid">
+                  <div id="energyCommandGrid">
                     <!-- Luces (9) -->
                     <button
                       type="button"
@@ -316,6 +317,7 @@
                       aria-label="Detener vehículo inmediatamente (Comando de paro 12)"
                     >
                       <i class="bi bi-octagon-fill fs-4" aria-hidden="true"></i>
+                      <span class="stop-label">DETENER</span>
                     </button>
                     <!-- Encender (13) -->
                     <button
@@ -342,39 +344,48 @@
               </div>
 
               <!-- SECCIÓN 3: MÓDULO DE DEMOSTRACIÓN -->
-              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm">
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm demo-card" id="demoCard">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                  <span class="fw-semibold text-white small">Rutina Autónoma (Demo Fábrica)</span>
-                  <span class="badge text-bg-warning text-dark small" id="demoStatusBadge">Inactiva</span>
-                </div>
-                <div class="card-body p-2">
-                  <!-- Selector dinámico de demos (se llena vía GET /demos) -->
-                  <div class="mb-2">
-                    <select id="demoSelect" class="form-select form-select-sm bg-dark text-white border-secondary shadow-sm" aria-label="Seleccionar demo"></select>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="demo-header-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span>
+                    <div>
+                      <span class="fw-semibold text-white small d-block lh-1">Rutinas autónomas</span>
+                      <small class="demo-subtitle desktop-detail">Secuencias preprogramadas en backend</small>
+                    </div>
                   </div>
-                  
-                  <!-- Contenedor dinámico de lista informativa de demos -->
-                  <div id="demosListContainer" class="small text-muted mb-3 font-monospace d-none d-md-block">
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                    Consultando catálogo de demos...
+                  <span class="demo-status-pill" id="demoStatusBadge">Inactiva</span>
+                </div>
+                <div class="card-body p-2 demo-card-body">
+                  <!-- Selector dinámico de demos (se llena vía GET /demos) -->
+                  <div class="demo-picker">
+                    <i class="bi bi-sliders2 demo-picker-icon" aria-hidden="true"></i>
+                    <select id="demoSelect" class="form-select form-select-sm demo-select" aria-label="Seleccionar rutina autónoma"></select>
                   </div>
 
-                  <div class="d-flex gap-2 mt-3">
+                  <!-- Catálogo interactivo en PC (sincronizado con el selector) -->
+                  <div id="demosListContainer" class="demo-catalog desktop-detail" aria-live="polite">
+                    <div class="demo-loading">
+                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      <span>Sincronizando rutinas disponibles...</span>
+                    </div>
+                  </div>
+
+                  <div class="demo-actions">
                     <button
                       type="button"
-                      class="btn btn-success w-50 d-flex align-items-center justify-content-center gap-1"
+                      class="btn demo-btn demo-btn--start"
                       id="btnIniciarDemo"
                     >
-                      <i class="bi bi-play-fill fs-5" aria-hidden="true"></i>
-                      <span>Iniciar</span>
+                      <i class="bi bi-play-fill" aria-hidden="true"></i>
+                      <span>Ejecutar</span>
                     </button>
                     <button
                       type="button"
-                      class="btn btn-outline-danger w-50 d-flex align-items-center justify-content-center gap-1"
+                      class="btn demo-btn demo-btn--stop"
                       id="btnCancelarDemo"
                     >
-                      <i class="bi bi-stop-fill fs-5" aria-hidden="true"></i>
-                      <span>Cancelar</span>
+                      <i class="bi bi-stop-fill" aria-hidden="true"></i>
+                      <span>Detener</span>
                     </button>
                   </div>
                 </div>

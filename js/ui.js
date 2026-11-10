@@ -9,6 +9,11 @@ import { CONFIG } from './config.js';
 
 const UI = {
   elements: {},
+  connectivityState: {
+    wss: { state: 'connecting', detail: 'Conectando...' },
+    aws: { state: 'connecting', detail: 'Verificando...', latencyMs: null, httpStatus: null },
+    rds: { state: 'unverified', detail: 'Sin verificar' },
+  },
 
   init: () => {
     UI.elements = {
@@ -63,20 +68,43 @@ const UI = {
   },
 
   /**
-   * Actualiza los tres semáforos de conectividad.
+   * Actualiza un LED individual (en píldoras del header o en la barra compacta).
+   */
+  applyLedClass: (container, state) => {
+    if (!container) return;
+    const dot = container.querySelector('.status-led') || container;
+    let ledClass = 'led-gray';
+    if (state === 'online' || state === 'open') {
+      ledClass = 'led-green';
+    } else if (state === 'connecting') {
+      ledClass = 'led-amber';
+    } else if (state === 'error' || state === 'offline' || state === 'closed') {
+      ledClass = 'led-red';
+    }
+    dot.className = `status-led ${ledClass}`;
+  },
+
+  /**
+   * Actualiza los tres semáforos de conectividad conservando estados parciales previos.
    */
   setConnectivity: (params) => {
-    const { wss, aws, rds } = params || {};
+    const current = UI.connectivityState;
+    const wss = params?.wss ? { ...current.wss, ...params.wss } : current.wss;
+    const aws = params?.aws ? { ...current.aws, ...params.aws } : current.aws;
+    const rds = { state: 'unverified', detail: 'Sin verificar', ...(params?.rds || {}) };
+    UI.connectivityState = { wss, aws, rds };
 
     if (UI.elements.pillWss) {
       UI.elements.pillWss.className = 'status-pill status-pill--' + String(wss?.state || 'closed');
       UI.elements.pillWss.title = wss?.detail || 'WSS';
+      UI.applyLedClass(UI.elements.pillWss, wss?.state);
       if (UI.elements.descWss) UI.elements.descWss.textContent = wss?.detail || '--';
     }
 
     if (UI.elements.pillAws) {
       UI.elements.pillAws.className = 'status-pill status-pill--' + String(aws?.state || 'closed');
       UI.elements.pillAws.title = `API: ${aws?.detail || '--'}`;
+      UI.applyLedClass(UI.elements.pillAws, aws?.state);
       if (UI.elements.descAws) {
         UI.elements.descAws.textContent = aws?.detail || '--';
         UI.elements.descAws.title = aws?.state === 'online' ? `HTTP OK · Latencia: ${aws?.latencyMs ?? '--'} ms` : (aws?.error || 'Sin comunicación');
@@ -87,6 +115,7 @@ const UI = {
     if (UI.elements.pillRds) {
       UI.elements.pillRds.className = 'status-pill status-pill--unverified';
       UI.elements.pillRds.title = 'Estado de Amazon RDS (Sin verificar - sin endpoint dedicado)';
+      UI.applyLedClass(UI.elements.pillRds, 'unverified');
       if (UI.elements.descRds) UI.elements.descRds.textContent = 'Sin verificar';
     }
 
@@ -98,7 +127,7 @@ const UI = {
 
   /**
    * Sincroniza los 3 LEDs minimales (WSS / AWS / RDS) del Modo Mando.
-   * Verde = operativo, Rojo = caido/error, Gris = sin verificar / sin estado.
+   * Verde = operativo, Ámbar = conectando, Rojo = caído/error, Gris = sin verificar.
    */
   syncMandoLeds: (states = {}) => {
     const ledMap = {
@@ -110,14 +139,7 @@ const UI = {
     Object.entries(ledMap).forEach(([key, elId]) => {
       const el = UI.elements[elId];
       if (!el) return;
-      const state = states[key]?.state;
-      let ledClass = 'led-gray';
-      if (state === 'online' || state === 'open') {
-        ledClass = 'led-green';
-      } else if (state === 'error' || state === 'offline' || state === 'closed') {
-        ledClass = 'led-red';
-      }
-      el.className = `mando-led ${ledClass}`;
+      UI.applyLedClass(el, states[key]?.state);
     });
   },
 
@@ -126,17 +148,35 @@ const UI = {
    * Se invoca directamente desde el manejador del evento open del WebSocket.
    */
   setWssOnline: (detail = 'En línea · Operativo') => {
-    if (UI.elements.pillWss) {
-      UI.elements.pillWss.className = 'status-pill status-pill--online';
-      UI.elements.pillWss.title = 'WebSocket WSS Activo';
-      if (UI.elements.descWss) {
-        UI.elements.descWss.textContent = detail;
-        UI.elements.descWss.title = 'Canal WSS operativo';
-      }
+    return UI.setConnectivity({
+      wss: { state: 'online', detail },
+    });
+  },
+
+  /**
+   * Actualiza los campos del panel de diagnóstico con métricas reales.
+   */
+  updateDiagnostics: (info = {}) => {
+    if (UI.elements.diagRestUrl && info.restUrl) {
+      UI.elements.diagRestUrl.textContent = info.restUrl;
     }
-    const result = { wss: { state: 'online', detail }, aws: { state: 'online', detail: 'Operativo', latencyMs: 0 }, rds: { state: 'unverified', detail: 'Sin verificar' } };
-    UI.syncMandoLeds(result);
-    return result;
+    if (UI.elements.diagWssUrl && info.wssUrl) {
+      UI.elements.diagWssUrl.textContent = info.wssUrl;
+    }
+    if (UI.elements.diagLatency && info.latencyMs !== undefined) {
+      UI.elements.diagLatency.textContent = Number.isFinite(info.latencyMs) ? `${info.latencyMs} ms` : '-- ms';
+    }
+    if (UI.elements.diagHttpStatus && info.httpStatus !== undefined) {
+      UI.elements.diagHttpStatus.textContent = info.httpStatus ? String(info.httpStatus) : 'Sin respuesta';
+    }
+    if (UI.elements.diagWsReconnects && info.wsReconnects !== undefined) {
+      UI.elements.diagWsReconnects.textContent = String(info.wsReconnects ?? 0);
+    }
+    if (UI.elements.diagLastWsMsg && info.lastWsMessage !== undefined) {
+      const raw = info.lastWsMessage;
+      UI.elements.diagLastWsMsg.textContent = raw ? String(raw) : 'Ninguno';
+      UI.elements.diagLastWsMsg.title = raw ? String(raw) : 'Ninguno';
+    }
   },
 
   /**
@@ -234,26 +274,68 @@ const UI = {
 
   renderDemos: (demos = []) => {
     const container = document.getElementById('demosListContainer');
+    const select = document.getElementById('demoSelect');
     if (!container) return;
 
+    container.textContent = '';
     if (!Array.isArray(demos) || demos.length === 0) {
-      container.innerHTML = '<span class="text-danger">No se encontraron demos disponibles.</span>';
+      const empty = document.createElement('div');
+      empty.className = 'demo-empty';
+      empty.textContent = 'No hay rutinas registradas.';
+      container.appendChild(empty);
       return;
     }
 
-    container.innerHTML = demos
-      .map((d) => {
-        const name = String(d.nombre || d.name || d.titulo || d.id || 'Demo');
-        const desc = String(d.descripcion || d.description || d.desc || 'Rutina de demostración automática.');
-        const status = Number(d.id_comando) === CONFIG.COMMANDS.DEMO_FABRICA ? 'ACTIVE' : 'PENDING';
-        return `
-          <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary-subtle">
-            <span class="text-light">${name}</span>
-            <span class="badge text-bg-${status === 'ACTIVE' ? 'warning' : 'secondary'} font-monospace small">${status}</span>
-          </div>
-        `;
-      })
-      .join('');
+    demos.forEach((d, index) => {
+      const value = String(d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid ?? index + 1);
+      const name = String(d.nombre || d.name || d.titulo || `Rutina #${value}`);
+      const desc = String(d.descripcion || d.description || d.desc || 'Secuencia automática lista para ejecutar.');
+
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'demo-catalog-item';
+      item.dataset.demoId = value;
+
+      const top = document.createElement('div');
+      top.className = 'demo-catalog-top';
+
+      const title = document.createElement('strong');
+      title.className = 'demo-catalog-name';
+      title.textContent = name;
+
+      const code = document.createElement('span');
+      code.className = 'demo-catalog-id';
+      code.textContent = `#${value}`;
+
+      const detail = document.createElement('span');
+      detail.className = 'demo-catalog-desc';
+      detail.textContent = desc;
+
+      top.append(title, code);
+      item.append(top, detail);
+
+      item.addEventListener('click', () => {
+        if (select) {
+          select.value = value;
+          select.dispatchEvent(new Event('change'));
+        }
+      });
+
+      container.appendChild(item);
+    });
+
+    UI.syncSelectedDemoCard(select?.value);
+  },
+
+  syncSelectedDemoCard: (selectedValue = '') => {
+    const container = document.getElementById('demosListContainer');
+    if (!container) return;
+    const value = String(selectedValue || '');
+    container.querySelectorAll('.demo-catalog-item').forEach((card) => {
+      const isSelected = card.dataset.demoId === value;
+      card.classList.toggle('is-selected', isSelected);
+      card.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    });
   },
 
   /**
@@ -264,16 +346,32 @@ const UI = {
     if (!select) return;
 
     const list = Array.isArray(demos) ? demos : [];
-    select.innerHTML = '<option value="">Selecciona una demo…</option>';
+    select.innerHTML = '';
 
-    list.forEach((d) => {
-      const value = d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid ?? '';
-      const name = d?.nombre || d?.name || d?.titulo || `Demo ${value}`;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = list.length > 0 ? 'Selecciona una rutina…' : 'Sin rutinas disponibles';
+    select.appendChild(placeholder);
+
+    list.forEach((d, index) => {
+      const value = d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid ?? index + 1;
+      const name = d?.nombre || d?.name || d?.titulo || `Rutina ${value}`;
       const opt = document.createElement('option');
       opt.value = String(value);
-      opt.textContent = name;
+      opt.textContent = `${name}`;
       select.appendChild(opt);
     });
+
+    if (list.length > 0) {
+      const firstValue = list[0]?.id_demo ?? list[0]?.id ?? list[0]?.id_comando ?? list[0]?.demo_id ?? list[0]?.uuid ?? 1;
+      select.value = String(firstValue);
+    }
+
+    if (!select.dataset.boundSync) {
+      select.addEventListener('change', () => UI.syncSelectedDemoCard(select.value));
+      select.dataset.boundSync = 'true';
+    }
+    UI.syncSelectedDemoCard(select.value);
   },
 
   /**
@@ -282,15 +380,23 @@ const UI = {
   renderDemoError: () => {
     const container = document.getElementById('demosListContainer');
     if (container) {
-      container.innerHTML = '<span class="text-danger">Error al cargar demos</span>';
+      container.textContent = '';
+      const err = document.createElement('div');
+      err.className = 'demo-empty demo-empty--error';
+      err.textContent = 'No se pudo sincronizar el catálogo de rutinas.';
+      container.appendChild(err);
     }
   },
 
   setDemoStatus: (isActive) => {
     const badge = UI.elements.demoStatusBadge;
+    const card = document.getElementById('demoCard');
     if (badge) {
-      badge.textContent = isActive ? 'Activa' : 'Inactiva';
-      badge.className = 'badge text-bg-' + (isActive ? 'warning' : 'secondary');
+      badge.textContent = isActive ? 'En ejecución' : 'Inactiva';
+      badge.className = 'demo-status-pill ' + (isActive ? 'is-running' : '');
+    }
+    if (card) {
+      card.classList.toggle('is-running', Boolean(isActive));
     }
   },
 
