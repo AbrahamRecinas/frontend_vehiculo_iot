@@ -73,6 +73,8 @@ export class JoystickController {
 
   handlePointerDown(e) {
     if (this.activePointerId !== null) return; // Solo un puntero activo a la vez
+    // FASE 4: exclusión mutua — si el D-Pad tiene el control, el joystick no responde
+    if (window.activeController === 'dpad') return;
     e.preventDefault();
 
     this.activePointerId = e.pointerId;
@@ -248,6 +250,9 @@ export class JoystickController {
   handleKeyDown(e) {
     // Ignorar repeticion automatica del sistema operativo para evitar rafagas de toggle
     if (e.repeat) return;
+
+    // FASE 4: exclusión mutua — si el D-Pad tiene el control, el joystick no responde
+    if (window.activeController === 'dpad') return;
 
     let targetCmd = null;
     let keyName = null;

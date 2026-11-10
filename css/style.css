@@ -639,6 +639,12 @@ body {
   pointer-events: none;
 }
 
+/* Feedback visual del estado deshabilitado (exclusión mutua Joystick <-> D-Pad) */
+.disabled-control {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* Columna del joystick ocupa todo el alto disponible del layout */
 .mando-col-left .joystick-card {
   flex: 1 1 auto;
@@ -807,7 +813,7 @@ a:focus-visible,
 }
 
 /* Móvil en orientación horizontal (Landscape) */
-@media (max-height: 550px) and (orientation: landscape) {
+@media (max-width: 767.98px) and (max-height: 550px) and (orientation: landscape) {
   :root {
     --joystick-size: 190px;
   }
@@ -824,5 +830,28 @@ a:focus-visible,
   .stop-emergencia-btn {
     min-width: 52px;
     min-height: 52px;
+  }
+
+  /* Anti-scroll en landscape móvil: el contenedor principal del mando no permite scroll */
+  #mandoLayout {
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* Header invasivo: ocultar barra de indicadores (WSS/AWS/RDS) y Diagnóstico en landscape móvil */
+  .app-header,
+  #diagPanel {
+    display: none !important;
+  }
+
+  /* Ajuste de columnas en landscape móvil: laterales flex:1, centro con mayor peso (Energía/Demos) */
+  .mando-col-left,
+  .mando-col-right {
+    flex: 1 1 0;
+  }
+
+  .mando-col-center {
+    flex: 1.2 1 0;
   }
 }

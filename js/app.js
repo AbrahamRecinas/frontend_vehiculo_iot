@@ -33,8 +33,9 @@ function initJoystick() {
         actualizarGuiaVisual(info);
       },
       onLockChange: (controller) => {
-        // FASE 4: exclusión mutua — sincroniza el controlador activo
+        // FASE 4: exclusión mutua — sincroniza el controlador activo (STATE + window)
         STATE.activeController = controller;
+        window.activeController = controller;
         UI.setControllerLock(controller);
       },
     }
@@ -77,6 +78,9 @@ const STATE = {
   toggleActive: new Set(), // IDs de botones (5-8) actualmente activos
   activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
 };
+
+// Controlador activo global (expuesto en window para exclusión mutua Joystick <-> D-Pad)
+window.activeController = null; // 'joystick' | 'dpad' | null
 
 // IDs de la cruceta D-Pad que gestiona el grupo de mecanismos (comandos 5, 6, 3 y 4)
 const MECANISMOS_IDS = [
@@ -205,8 +209,10 @@ async function enviarParo(comandoId) {
  * - Activa/desactiva visualmente el botón presionado.
  * - Al activar, envía el ID. Al desactivar (toggle off), reenvía el mismo ID.
  * - Solo un mecanismo del grupo puede estar activo a la vez.
+ * - `forzarActivacion` (D-Pad): el botón se activa al presionar sin toggle;
+ *   la detención (CMD 12) se gestiona en el release del D-Pad.
  */
-async function handleToggleCommand(btn, cmdId) {
+async function handleToggleCommand(btn, cmdId, { forzarActivacion = false } = {}) {
   if (STATE.busyCommands.has(cmdId)) return;
   STATE.busyCommands.add(cmdId);
 
@@ -222,8 +228,8 @@ async function handleToggleCommand(btn, cmdId) {
 
   const currentlyActive = STATE.toggleActive.has(btn.id);
 
-  // Si el botón presionado está encendido: toggle OFF (reenviar el mismo ID para detener)
-  if (currentlyActive) {
+  // Toggle OFF solo cuando no es una activación forzada (D-Pad: presionar = activar, soltar = DETENER)
+  if (!forzarActivacion && currentlyActive) {
     STATE.toggleActive.delete(btn.id);
     UI.setActionButtonActive(btn.id, false);
 
@@ -420,6 +426,8 @@ function salirDeModoMando() {
   } catch (_) { /* noop */ }
 
   STATE.activeController = null;
+  window.activeController = null;
+  UI.setControllerLock(null);
   UI.setMandoMode(false);
 }
 
@@ -482,7 +490,7 @@ async function boot() {
   });
 
   // Comando de acción disparado sobre un botón (click o cruceta D-Pad)
-  const ejecutarComandoBoton = async (btn) => {
+  const ejecutarComandoBoton = async (btn, opciones = {}) => {
       const cmdId = Number(btn.dataset.cmd);
 
       if (cmdId === CONFIG.COMMANDS.DEMO_FABRICA) {
@@ -524,7 +532,7 @@ async function boot() {
 
       // Comandos de toggle exclusivo (mecanismos: 5, 6, 3 y 4)
       if (MECANISMOS_IDS.includes(cmdId)) {
-        await handleToggleCommand(btn, cmdId);
+        await handleToggleCommand(btn, cmdId, { forzarActivacion: Boolean(opciones?.desdeDpad) });
         return;
       }
 
@@ -552,9 +560,11 @@ async function boot() {
   document.querySelectorAll('[data-cmd]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
-      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
+      // La cruceta D-Pad gestiona su propio ciclo via pointer events (press = accion, release = DETENER)
       const dpadGrid = document.getElementById('dpadGrid');
-      if (dpadGrid && dpadGrid.contains(btn) && STATE.activeController === 'joystick') {
+      if (dpadGrid && dpadGrid.contains(btn)) return;
+      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
+      if (dpadGrid && STATE.activeController === 'joystick') {
         return;
       }
       await ejecutarComandoBoton(btn);
@@ -571,15 +581,17 @@ async function boot() {
       const btn = target && typeof target.closest === 'function' ? target.closest('[data-cmd]') : null;
       if (!btn) return;
       STATE.activeController = 'dpad';
+      window.activeController = 'dpad';
       UI.setControllerLock(STATE.activeController);
-      // FASE 3/4: ejecutar el mecanismo (pala/rotacion) directamente al presionar
-      await ejecutarComandoBoton(btn);
+      // FASE 3/4: ejecutar el mecanismo (pala/rotacion) al presionar (sin toggle; el release envia DETENER)
+      await ejecutarComandoBoton(btn, { desdeDpad: true });
     });
 
     const handleDpadRelease = () => {
       // FASE 4: al soltar la cruceta se envía inmediatamente el DETENER (CMD 12)
       if (STATE.activeController !== 'dpad') return;
       STATE.activeController = null;
+      window.activeController = null;
       UI.setControllerLock(null);
       detenerVehiculo();
     };

@@ -164,8 +164,14 @@ const UI = {
     const joystickPanel = document.getElementById('joystickPanel');
     const dpadPanel = document.getElementById('dpadPanel');
 
-    if (joystickPanel) joystickPanel.classList.toggle('joystick-disabled', controller === 'dpad');
-    if (dpadPanel) dpadPanel.classList.toggle('dpad-disabled', controller === 'joystick');
+    if (joystickPanel) {
+      joystickPanel.classList.toggle('joystick-disabled', controller === 'dpad');
+      joystickPanel.classList.toggle('disabled-control', controller === 'dpad');
+    }
+    if (dpadPanel) {
+      dpadPanel.classList.toggle('dpad-disabled', controller === 'joystick');
+      dpadPanel.classList.toggle('disabled-control', controller === 'joystick');
+    }
 
     return controller;
   },
