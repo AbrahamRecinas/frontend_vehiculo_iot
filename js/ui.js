@@ -47,6 +47,15 @@ const UI = {
       btnSonido: document.getElementById('btnSonido'),
       btnEncender: document.getElementById('btnEncender'),
       btnApagar: document.getElementById('btnApagar'),
+      btnEnterMando: document.getElementById('btnEnterMando'),
+      btnExitMando: document.getElementById('btnExitMando'),
+      lobbyView: document.getElementById('lobbyView'),
+      mandoView: document.getElementById('mandoView'),
+      joystickPanel: document.getElementById('joystickPanel'),
+      dpadPanel: document.getElementById('dpadPanel'),
+      mandoLedWss: document.getElementById('mandoLedWss'),
+      mandoLedAws: document.getElementById('mandoLedAws'),
+      mandoLedRds: document.getElementById('mandoLedRds'),
       vehicleBadge: document.getElementById('vehicleBadge'),
       toastContainer: document.getElementById('toastContainer'),
       currentYear: document.getElementById('currentYear'),
@@ -81,7 +90,35 @@ const UI = {
       if (UI.elements.descRds) UI.elements.descRds.textContent = 'Sin verificar';
     }
 
+    // Sincronizar los LEDs minimales del Modo Mando (FASE 1)
+    UI.syncMandoLeds({ wss, aws, rds });
+
     return { wss, aws, rds };
+  },
+
+  /**
+   * Sincroniza los 3 LEDs minimales (WSS / AWS / RDS) del Modo Mando.
+   * Verde = operativo, Rojo = caido/error, Gris = sin verificar / sin estado.
+   */
+  syncMandoLeds: (states = {}) => {
+    const ledMap = {
+      wss: 'mandoLedWss',
+      aws: 'mandoLedAws',
+      rds: 'mandoLedRds',
+    };
+
+    Object.entries(ledMap).forEach(([key, elId]) => {
+      const el = UI.elements[elId];
+      if (!el) return;
+      const state = states[key]?.state;
+      let ledClass = 'led-gray';
+      if (state === 'online' || state === 'open') {
+        ledClass = 'led-green';
+      } else if (state === 'error' || state === 'offline' || state === 'closed') {
+        ledClass = 'led-red';
+      }
+      el.className = `mando-led ${ledClass}`;
+    });
   },
 
   /**
@@ -97,7 +134,40 @@ const UI = {
         UI.elements.descWss.title = 'Canal WSS operativo';
       }
     }
-    return { wss: { state: 'online', detail }, aws: { state: 'online', detail: 'Operativo', latencyMs: 0 }, rds: { state: 'unverified', detail: 'Sin verificar' } };
+    const result = { wss: { state: 'online', detail }, aws: { state: 'online', detail: 'Operativo', latencyMs: 0 }, rds: { state: 'unverified', detail: 'Sin verificar' } };
+    UI.syncMandoLeds(result);
+    return result;
+  },
+
+  /**
+   * FASE 1: alterna entre el Lobby (vista inicial movil) y el Modo Mando.
+   * En PC (>= 768px) el Lobby nunca se muestra: arranca directamente en el Modo Mando.
+   */
+  setMandoMode: (isActive) => {
+    const mando = document.getElementById('mandoView');
+    const lobby = document.getElementById('lobbyView');
+
+    if (mando) mando.classList.toggle('is-visible', Boolean(isActive));
+    if (lobby) lobby.classList.toggle('is-visible', !isActive);
+
+    // Marca global para condicionar textos largos vs LEDs minimales (solo movil)
+    document.body.classList.toggle('mando-mode', Boolean(isActive));
+
+    return isActive;
+  },
+
+  /**
+   * FASE 4: exclusión mutua entre el Joystick y la Cruceta D-Pad.
+   * controller: 'joystick' | 'dpad' | null
+   */
+  setControllerLock: (controller) => {
+    const joystickPanel = document.getElementById('joystickPanel');
+    const dpadPanel = document.getElementById('dpadPanel');
+
+    if (joystickPanel) joystickPanel.classList.toggle('joystick-disabled', controller === 'dpad');
+    if (dpadPanel) dpadPanel.classList.toggle('dpad-disabled', controller === 'joystick');
+
+    return controller;
   },
 
   setCommandState: (cmdId = CONFIG.COMMANDS.DETENER, label = 'VEHÍCULO DETENIDO') => {

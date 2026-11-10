@@ -1,19 +1,24 @@
 /**
  * joystick.js
- * Controlador táctil circular Mobile First con soporte Pointer Events y teclado accesible.
+ * Controlador tactil circular Mobile First con soporte Pointer Events y teclado accesible.
  * Implementa la regla estricta de hardware Toggle:
- *  - 1 solo POST de dirección al iniciar el arrastre (sin ráfagas ni repeticiones).
+ *  - 1 solo POST de direccion al iniciar el arrastre (sin rafagas ni repeticiones).
  *  - 1 POST obligatorio de comando 12 (DETENER) al soltar el joystick.
+ *  - Zona muerta del 25% del radio: sin direccion activa se libera (CMD 12).
+ *  - Control de cambio de estado: solo emite WSS si la direccion detectada difiere del ultimo CMD.
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
 import { CONFIG } from './config.js';
 
+// Estado de cambio de comando del joystick: 12 = DETENER (liberado / sin movimiento)
+let currentJoystickCmd = 12;
+
 export class JoystickController {
   /**
    * @param {HTMLElement} trackEl - Contenedor circular del joystick
-   * @param {HTMLElement} knobEl - Pomo móvil central
-   * @param {object} callbacks - { onDirection: (cmdId) => void, onRelease: () => void, onVisualChange: (info) => void }
+   * @param {HTMLElement} knobEl - Pomo movil central
+   * @param {object} callbacks - { onDirection: (cmdId) => void, onRelease: () => void, onVisualChange: (info) => void, onLockChange: (controller) => void }
    */
   constructor(trackEl, knobEl, callbacks = {}) {
     this.track = trackEl;
@@ -26,7 +31,7 @@ export class JoystickController {
     this.armedByKey = null;
     this.center = { x: 0, y: 0 };
     this.maxRadius = 70; // Se recalcula en pointerdown
-    this.deadzoneRadius = 20;
+    this.deadzoneRadius = 20; // Se recalcula en pointerdown (25% del radio)
 
     this.initEvents();
   }
@@ -63,7 +68,7 @@ export class JoystickController {
     const trackRadius = rect.width / 2;
 
     this.maxRadius = Math.max(30, trackRadius - knobRadius - 6);
-    this.deadzoneRadius = this.maxRadius * 0.28; // 28% de zona muerta
+    this.deadzoneRadius = this.maxRadius * 0.25; // Zona muerta: 25% del radio
   }
 
   handlePointerDown(e) {
@@ -74,7 +79,7 @@ export class JoystickController {
     try {
       this.track.setPointerCapture(e.pointerId);
     } catch (_) {
-      // Si la captura no es posible, el arrastre seguirá con los eventos de movimiento
+      // Si la captura no es posible, el arrastre seguira con los eventos de movimiento
     }
     this.recalculateBounds();
 
@@ -82,6 +87,11 @@ export class JoystickController {
     this.latchedCommand = null;
     this.armedByKey = null;
     this.track.classList.add('dragging');
+
+    // FASE 4: exclusión mutua — al tocar el joystick se activa este controlador
+    if (this.callbacks.onLockChange) {
+      this.callbacks.onLockChange('joystick');
+    }
 
     this.processPointerPosition(e.clientX, e.clientY);
   }
@@ -107,6 +117,7 @@ export class JoystickController {
     this.activePointerId = null;
     this.isDragging = false;
     this.latchedCommand = null;
+    currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
     this.track.classList.remove('dragging');
 
     // Regresar el pomo visualmente al centro
@@ -121,6 +132,11 @@ export class JoystickController {
     if (this.callbacks.onRelease) {
       this.callbacks.onRelease({ hadMovement: hadLatched });
     }
+
+    // FASE 4: limpiar exclusión mutua al liberar el control
+    if (this.callbacks.onLockChange) {
+      this.callbacks.onLockChange(null);
+    }
   }
 
   processPointerPosition(clientX, clientY) {
@@ -128,7 +144,22 @@ export class JoystickController {
     const rawDy = clientY - this.center.y;
     const distance = Math.hypot(rawDx, rawDy);
 
-    // Limitar el recorrido visual del pomo al radio máximo permitido
+    // Zona muerta (25% del radio): si el toque esta dentro, no hay direccion activa
+    // -> se libera el comando actual enviando el paro (CMD 12).
+    if (distance < this.deadzoneRadius) {
+      if (this.latchedCommand !== null) {
+        this.latchedCommand = null;
+        if (this.callbacks.onRelease) {
+          this.callbacks.onRelease({ hadMovement: false });
+        }
+        if (this.callbacks.onLockChange) {
+          this.callbacks.onLockChange(null);
+        }
+      }
+      return;
+    }
+
+    // Limitar el recorrido visual del pomo al maximo permitido
     let visualX = rawDx;
     let visualY = rawDy;
     if (distance > this.maxRadius) {
@@ -137,17 +168,19 @@ export class JoystickController {
       visualY = Math.sin(angle) * this.maxRadius;
     }
 
-    // Actualizar posición gráfica del pomo en pantalla
+    // Actualizar posicion grafica del pomo en pantalla
     this.knob.style.transform = `translate3d(${visualX}px, ${visualY}px, 0)`;
 
     const detectedSector = this.calculateSector(rawDx, rawDy);
 
-    // Durante el arrastre: si la dirección cambia, enviar el nuevo POST inmediatamente
+    // Durante el arrastre: si la direccion cambia, enviar el nuevo POST inmediatamente
     if (detectedSector && distance >= this.deadzoneRadius) {
-      if (!this.latchedCommand || detectedSector !== this.latchedCommand) {
+      // Anti-saturacion WSS: solo emitir si la nueva direccion difiere del ultimo CMD enviado
+      if (currentJoystickCmd !== detectedSector) {
+        currentJoystickCmd = detectedSector;
         this.latchedCommand = detectedSector;
 
-        // Vibración corta al enganchar la dirección
+        // Vibra corta al enganchar la direccion
         if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
           try { navigator.vibrate(15); } catch (_) {}
         }
@@ -171,17 +204,17 @@ export class JoystickController {
   }
 
   /**
-   * Mapea el vector (dx, dy) a los 4 sectores cardinales exclusivos del joystick:
+   * Mapea el vector (dx, dy) a los 4 sectores exclusivos del joystick:
    *  - Arriba: Avanzar (1)
    *  - Abajo: Retroceder (2)
-   *  - Derecha: Girar Derecha (3)
-   *  - Izquierda: Girar Izquierda (4)
+   *  - Derecha: Diagonal Derecha (7)
+   *  - Izquierda: Diagonal Izquierda (8)
    */
   calculateSector(dx, dy) {
-    // atan2 devuelve el ángulo en radianes de -PI a +PI (0 apunta al eje X positivo/Derecha)
+    // atan2 devuelve el angulo en radianes de -PI a +PI (0 apunta al eje X positivo/Derecha)
     const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
 
-    // Sectores simétricos de 90° con bisectrices en 45°, 135°, -135°, -45°
+    // Sectores simetricos de 90° con bisectrices en 45°, 135°, -135°, -45°
     if (angleDeg >= -135 && angleDeg < -45) {
       return CONFIG.COMMANDS.AVANZAR; // ID 1
     }
@@ -189,10 +222,10 @@ export class JoystickController {
       return CONFIG.COMMANDS.RETROCEDER; // ID 2
     }
     if (angleDeg >= -45 && angleDeg < 45) {
-      return CONFIG.COMMANDS.GIRAR_DERECHA; // ID 3
+      return CONFIG.COMMANDS.DIAGONAL_DERECHA; // ID 7
     }
     if (angleDeg >= 135 || angleDeg < -135) {
-      return CONFIG.COMMANDS.GIRAR_IZQUIERDA; // ID 4
+      return CONFIG.COMMANDS.DIAGONAL_IZQUIERA; // ID 8
     }
     return null;
   }
@@ -213,7 +246,7 @@ export class JoystickController {
      SOPORTE ACCESIBLE DE TECLADO
      ------------------------------------------------------------------------ */
   handleKeyDown(e) {
-    // Ignorar repetición automática del sistema operativo para evitar ráfagas de toggle
+    // Ignorar repeticion automatica del sistema operativo para evitar rafagas de toggle
     if (e.repeat) return;
 
     let targetCmd = null;
@@ -234,13 +267,13 @@ export class JoystickController {
       case 'ArrowRight':
       case 'd':
       case 'D':
-        targetCmd = CONFIG.COMMANDS.GIRAR_DERECHA;
+        targetCmd = CONFIG.COMMANDS.DIAGONAL_DERECHA;
         keyName = e.key;
         break;
       case 'ArrowLeft':
       case 'a':
       case 'A':
-        targetCmd = CONFIG.COMMANDS.GIRAR_IZQUIERDA;
+        targetCmd = CONFIG.COMMANDS.DIAGONAL_IZQUIERA;
         keyName = e.key;
         break;
       case ' ':
@@ -255,6 +288,7 @@ export class JoystickController {
     if (targetCmd && !this.latchedCommand) {
       e.preventDefault();
       this.latchedCommand = targetCmd;
+      currentJoystickCmd = targetCmd;
       this.armedByKey = keyName;
       this.animateKnobDirection(targetCmd);
 
@@ -268,10 +302,11 @@ export class JoystickController {
     const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'W', 's', 'S', 'a', 'A', 'd', 'D'];
     if (keys.includes(e.key)) {
       e.preventDefault();
-      // Solo liberar si la tecla que se suelta fue la que armó el movimiento
+      // Solo liberar si la tecla que se suelta fue la que armo el movimiento
       if (this.armedByKey === e.key) {
         this.latchedCommand = null;
         this.armedByKey = null;
+        currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
         this.resetKnob();
 
         if (this.callbacks.onRelease) {
@@ -287,8 +322,8 @@ export class JoystickController {
     let y = 0;
     if (cmdId === CONFIG.COMMANDS.AVANZAR) y = -dist;
     if (cmdId === CONFIG.COMMANDS.RETROCEDER) y = dist;
-    if (cmdId === CONFIG.COMMANDS.GIRAR_DERECHA) x = dist;
-    if (cmdId === CONFIG.COMMANDS.GIRAR_IZQUIERDA) x = -dist;
+    if (cmdId === CONFIG.COMMANDS.DIAGONAL_DERECHA) x = dist;
+    if (cmdId === CONFIG.COMMANDS.DIAGONAL_IZQUIERA) x = -dist;
 
     this.knob.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     if (this.callbacks.onVisualChange) {
@@ -303,6 +338,7 @@ export class JoystickController {
     this.activePointerId = null;
     this.isDragging = false;
     this.latchedCommand = null;
+    currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
     this.track.classList.remove('dragging');
     this.resetKnob();
   }

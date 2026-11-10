@@ -32,6 +32,11 @@ function initJoystick() {
       onVisualChange: (info) => {
         actualizarGuiaVisual(info);
       },
+      onLockChange: (controller) => {
+        // FASE 4: exclusión mutua — sincroniza el controlador activo
+        STATE.activeController = controller;
+        UI.setControllerLock(controller);
+      },
     }
   );
 }
@@ -52,7 +57,7 @@ function actualizarGuiaVisual(info) {
   if (info && info.latchedCommand) {
     const key = info.latchedCommand === CONFIG.COMMANDS.AVANZAR ? 'N'
       : info.latchedCommand === CONFIG.COMMANDS.RETROCEDER ? 'S'
-      : info.latchedCommand === CONFIG.COMMANDS.GIRAR_DERECHA ? 'E'
+      : info.latchedCommand === CONFIG.COMMANDS.DIAGONAL_DERECHA ? 'E'
       : 'W';
     const el = guides[key];
     if (el) el.classList.add('active');
@@ -70,7 +75,24 @@ const STATE = {
   demoActive: false,
   busyCommands: new Set(),
   toggleActive: new Set(), // IDs de botones (5-8) actualmente activos
+  activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
 };
+
+// IDs de la cruceta D-Pad que gestiona el grupo de mecanismos (comandos 5, 6, 3 y 4)
+const MECANISMOS_IDS = [
+  CONFIG.COMMANDS.ALZAR_PALA,
+  CONFIG.COMMANDS.BAJAR_PALA,
+  CONFIG.COMMANDS.GIRAR_IZQUIERDA,
+  CONFIG.COMMANDS.GIRAR_DERECHA,
+];
+
+// IDs de movimiento de tracción / diagonal gestionados como movimiento continuo
+const MOVIMIENTO_IDS = [
+  CONFIG.COMMANDS.AVANZAR,
+  CONFIG.COMMANDS.RETROCEDER,
+  CONFIG.COMMANDS.DIAGONAL_DERECHA,
+  CONFIG.COMMANDS.DIAGONAL_IZQUIERA,
+];
 
 // ---------------------------------------------------------------------------
 // GESTIÓN DE COMANDOS DE MOVIMIENTO / DEMO
@@ -84,7 +106,7 @@ async function handleMovimiento(idComando) {
     return;
   }
 
-  const isMovementCmd = cmdId >= CONFIG.COMMANDS.AVANCEAR && cmdId <= CONFIG.COMMANDS.GIRAR_IZQUIERDA;
+  const isMovementCmd = MOVIMIENTO_IDS.includes(cmdId);
 
   if (STATE.busyCommands.has(cmdId)) {
     return; // Evitar repeticiones de comando sin procesar
@@ -159,7 +181,7 @@ async function enviarParo(comandoId) {
 
     // Al detener (CMD 12), se limpian los estados activos de los comandos de toggle (5-8)
     STATE.toggleActive.clear();
-    ['btnPalaSubir', 'btnPalaBajar', 'btnDiagDer', 'btnDiagIzq'].forEach((id) => {
+    ['btnPalaSubir', 'btnPalaBajar', 'btnGirarDer', 'btnGirarIzq'].forEach((id) => {
       UI.setActionButtonActive(id, false);
     });
 
@@ -364,10 +386,56 @@ async function iniciarSaludPolling() {
 }
 
 // ---------------------------------------------------------------------------
+// FASE 1: FLUJO LOBBY <-> MODO MANDO
+// ---------------------------------------------------------------------------
+async function entrarAModoMando() {
+  // Play: pantalla completa + orientación landscape en móvil
+  try {
+    if (typeof document.documentElement.requestFullscreen === 'function') {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch (_) { /* Fullscreen no disponible o denegado por el usuario */ }
+
+  try {
+    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+      await screen.orientation.lock('landscape');
+    }
+  } catch (_) { /* Orientación lock no soportada (ej. iOS Safari) */ }
+
+  STATE.activeController = null;
+  UI.setMandoMode(true);
+}
+
+function salirDeModoMando() {
+  try {
+    if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+      document.exitFullscreen().catch(() => {});
+    }
+  } catch (_) { /* noop */ }
+
+  try {
+    if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+      screen.orientation.unlock();
+    }
+  } catch (_) { /* noop */ }
+
+  STATE.activeController = null;
+  UI.setMandoMode(false);
+}
+
+// ---------------------------------------------------------------------------
 // INICIALIZACIÓN GLOBAL
 // ---------------------------------------------------------------------------
 async function boot() {
   UI.init();
+
+  // FASE 1: flujo inicial — Lobby en móvil, Modo Mando directo en PC
+  const esPC = window.matchMedia && window.matchMedia('(min-width: 768px)').matches;
+  if (esPC) {
+    UI.setMandoMode(true);
+  } else {
+    UI.setMandoMode(false);
+  }
 
   getEl('btnEmergencyStop').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -375,6 +443,14 @@ async function boot() {
     UI.showToast('Enviando paro de emergencia (CMD 12)...', 'warning');
     await detenerVehiculo();
     UI.setStopButtonState(false);
+  });
+
+  getEl('btnEnterMando').addEventListener('click', async () => {
+    await entrarAModoMando();
+  });
+
+  getEl('btnExitMando').addEventListener('click', () => {
+    salirDeModoMando();
   });
 
   getEl('btnIniciarDemo').addEventListener('click', iniciarDemo);
@@ -405,10 +481,8 @@ async function boot() {
     bootstrap.Collapse.getOrCreateInstance(getEl('diagPanel')).toggle();
   });
 
-  // Botones de acción secundaria por data-cmd
-  document.querySelectorAll('[data-cmd]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
+  // Comando de acción disparado sobre un botón (click o cruceta D-Pad)
+  const ejecutarComandoBoton = async (btn) => {
       const cmdId = Number(btn.dataset.cmd);
 
       if (cmdId === CONFIG.COMMANDS.DEMO_FABRICA) {
@@ -421,7 +495,7 @@ async function boot() {
         return;
       }
 
-      if (cmdId >= CONFIG.COMMANDS.AVANCEAR && cmdId <= CONFIG.COMMANDS.GIRAR_IZQUIERDA) {
+      if (MOVIMIENTO_IDS.includes(cmdId)) {
         await handleMovimiento(cmdId);
         return;
       }
@@ -448,8 +522,8 @@ async function boot() {
         return;
       }
 
-      // Comandos de toggle exclusivo (5, 6, 7, 8)
-      if (cmdId >= CONFIG.COMMANDS.ALZAR_PALA && cmdId <= CONFIG.COMMANDS.DIAGONAL_IZQUIERDA) {
+      // Comandos de toggle exclusivo (mecanismos: 5, 6, 3 y 4)
+      if (MECANISMOS_IDS.includes(cmdId)) {
         await handleToggleCommand(btn, cmdId);
         return;
       }
@@ -472,8 +546,47 @@ async function boot() {
           await detenerVehiculo();
         }
       }
+  };
+
+  // Botones de acción secundaria por data-cmd
+  document.querySelectorAll('[data-cmd]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
+      const dpadGrid = document.getElementById('dpadGrid');
+      if (dpadGrid && dpadGrid.contains(btn) && STATE.activeController === 'joystick') {
+        return;
+      }
+      await ejecutarComandoBoton(btn);
     });
   });
+
+  // FASE 2/4: eventos táctiles de la Cruceta D-Pad (grid de 4 botones)
+  const dpadGrid = document.getElementById('dpadGrid');
+  if (dpadGrid) {
+    dpadGrid.addEventListener('pointerdown', async (e) => {
+      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
+      if (STATE.activeController === 'joystick') return;
+      const target = e.target;
+      const btn = target && typeof target.closest === 'function' ? target.closest('[data-cmd]') : null;
+      if (!btn) return;
+      STATE.activeController = 'dpad';
+      UI.setControllerLock(STATE.activeController);
+      // FASE 3/4: ejecutar el mecanismo (pala/rotacion) directamente al presionar
+      await ejecutarComandoBoton(btn);
+    });
+
+    const handleDpadRelease = () => {
+      // FASE 4: al soltar la cruceta se envía inmediatamente el DETENER (CMD 12)
+      if (STATE.activeController !== 'dpad') return;
+      STATE.activeController = null;
+      UI.setControllerLock(null);
+      detenerVehiculo();
+    };
+
+    dpadGrid.addEventListener('pointerup', handleDpadRelease);
+    dpadGrid.addEventListener('pointercancel', handleDpadRelease);
+  }
 
   // Año dinámico en el footer
   if (getEl('currentYear')) {
