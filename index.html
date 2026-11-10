@@ -209,7 +209,7 @@
           </button>
         </div>
 
-        <!-- LAYOUT DE 3 COLUMNAS (JOYSTICK / D-PAD / ACCESORIOS-CENTRO) -->
+        <!-- LAYOUT DE 3 COLUMNAS (JOYSTICK / CENTRO-ENERGIA-DEMOS / D-PAD) -->
         <div class="mando-layout d-flex flex-row w-100 h-100" id="mandoLayout">
 
           <!-- COLUMNA IZQUIERDA (30%): JOYSTICK EXCLUSIVO -->
@@ -276,33 +276,7 @@
             </div>
           </section>
 
-          <!-- COLUMNA DERECHA (30%): CRUCETA D-PAD -->
-          <section class="mando-col mando-col-right d-flex flex-column p-2" id="dpadPanel" aria-label="Control de cruceta D-Pad">
-            <div class="card bg-body-tertiary border-secondary-subtle shadow-sm h-100">
-              <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                <span class="fw-semibold text-white small">Control de Máquinaria</span>
-                <span class="badge text-bg-dark border border-secondary text-secondary">Pala · Rotación</span>
-              </div>
-              <div class="card-body p-2 d-flex align-items-center justify-content-center">
-                <div class="dpad-grid" id="dpadGrid" role="group" aria-label="Cruceta de control D-Pad">
-                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)">
-                    <i class="bi bi-arrow-up btn-icon" aria-hidden="true"></i>
-                  </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)">
-                    <i class="bi bi-arrow-left btn-icon" aria-hidden="true"></i>
-                  </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)">
-                    <i class="bi bi-arrow-down btn-icon" aria-hidden="true"></i>
-                  </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)">
-                    <i class="bi bi-arrow-right btn-icon" aria-hidden="true"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- COLUMNA CENTRO (40%): ENERGÍA + DEMOS (SCROLL INTERNO) -->
+          <!-- COLUMNA CENTRO (40%): TARJETAS DE ENERGÍA + DEMOS (SCROLL INTERNO) -->
           <section class="mando-col mando-col-center d-flex flex-column p-2 overflow-hidden" id="centerPanel" aria-label="Energía y demos">
             <div class="mando-center-scroll flex-grow-1">
               <!-- SECCIÓN 2: ENERGÍA Y AUXILIARES -->
@@ -403,6 +377,32 @@
                       <span>Cancelar</span>
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- COLUMNA DERECHA (30%): TARJETA DE CONTROL DE MAQUINARIA (D-PAD) -->
+          <section class="mando-col mando-col-right d-flex flex-column p-2" id="dpadPanel" aria-label="Control de cruceta D-Pad">
+            <div class="card bg-body-tertiary border-secondary-subtle shadow-sm h-100">
+              <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span class="fw-semibold text-white small">Control de Máquinaria</span>
+                <span class="badge text-bg-dark border border-secondary text-secondary">Pala · Rotación</span>
+              </div>
+              <div class="card-body p-2 d-flex align-items-center justify-content-center">
+                <div class="dpad-container" id="dpadGrid" role="group" aria-label="Cruceta de control D-Pad">
+                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)">
+                    <i class="bi bi-arrow-up btn-icon" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)">
+                    <i class="bi bi-arrow-left btn-icon" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)">
+                    <i class="bi bi-arrow-down btn-icon" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)">
+                    <i class="bi bi-arrow-right btn-icon" aria-hidden="true"></i>
+                  </button>
                 </div>
               </div>
             </div>

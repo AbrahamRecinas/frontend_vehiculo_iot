@@ -460,44 +460,33 @@ body {
 }
 
 /* Botones compactos dentro de la cuadrícula de energía (Luces/Sonido/Encender/Apagar) */
-#energyCommandGrid .btn-action,
-.pala-command-grid .btn-action {
-  width: 84px;
-  height: 84px;
+#energyCommandGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 250px;
+  margin: 0 auto;
+}
+
+#energyCommandGrid .btn-action {
+  width: 60px;
+  height: 60px;
   padding: 0.25rem !important;
 }
 
-/* Móvil: botones compactos para que el grid quepa en una sola fila */
-@media (max-width: 767.98px) {
-  #energyCommandGrid .btn-action,
-  .pala-command-grid .btn-action {
-    width: 60px;
-    height: 60px;
-  }
-
-  #energyCommandGrid .stop-emergencia-btn,
-  .pala-command-grid .btn-action {
-    min-width: 48px;
-    min-height: 48px;
-  }
-
-  #energyCommandGrid,
-  .pala-command-grid .btn-action {
-    gap: 0.25rem;
-  }
+/* Botón DETENER (CMD 12) integrado en la cuadrícula: ligeramente más grande */
+#energyCommandGrid .stop-emergencia-btn {
+  width: 70px;
+  height: 70px;
+  min-width: 70px;
+  min-height: 70px;
+  padding: 0.25rem;
 }
 
 /* --------------------------------------------------------------------------
    8. BOTÓN DETENER (CMD #12) — INTEGRADO EN LA TARETA DE ENERGÍA
    -------------------------------------------------------------------------- */
-.stop-title {
-  font-size: 1.5rem;
-  font-weight: 900;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 /* Botón DETENER (CMD 12) integrado en la cuadrícula de energía: puro icono hexagonal */
 .stop-emergencia-btn {
   min-width: 56px;
@@ -612,33 +601,30 @@ body {
 /* --------------------------------------------------------------------------
    MODULO D-PAD (CRUZ DE BOTONES) - FASE 2
    -------------------------------------------------------------------------- */
-.dpad-grid {
+.dpad-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  grid-template-areas:
-    ". up ."
-    ".   ."
-    "left down right";
-  gap: 6px;
-  width: 100%;
+  grid-template-columns: 65px 65px 65px;
+  grid-template-rows: 65px 65px 65px;
+  gap: 8px;
+  justify-content: center;
+  align-content: center;
   height: 100%;
-  min-height: 180px;
+  min-height: 250px;
 }
 
-.dpad-up { grid-area: up; }
-.dpad-down { grid-area: down; }
-.dpad-left { grid-area: left; }
-.dpad-right { grid-area: right; }
+.dpad-up { grid-column: 2; grid-row: 1; }
+.dpad-down { grid-column: 2; grid-row: 3; }
+.dpad-left { grid-column: 1; grid-row: 2; }
+.dpad-right { grid-column: 3; grid-row: 2; }
 
 .dpad-btn {
-  width: 100% !important;
-  height: 100% !important;
-  aspect-ratio: auto !important;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
   min-height: 0;
   display: flex;
   align-items: center;
-  justify-content-content: center;
+  justify-content: center;
 }
 
 .dpad-btn .btn-icon {
