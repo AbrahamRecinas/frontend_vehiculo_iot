@@ -812,8 +812,8 @@ a:focus-visible,
   }
 }
 
-/* Móvil en orientación horizontal (Landscape) */
-@media (max-width: 767.98px) and (max-height: 550px) and (orientation: landscape) {
+/* Modo Gamepad Táctil: cualquier dispositivo con pantalla táctil (coarse pointer) en landscape */
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) {
   :root {
     --joystick-size: 190px;
   }
@@ -832,20 +832,20 @@ a:focus-visible,
     min-height: 52px;
   }
 
-  /* Anti-scroll en landscape móvil: el contenedor principal del mando no permite scroll */
+  /* Candado fuerte anti-scroll: el dedo no debe deslizar la pantalla en landscape táctil */
   #mandoLayout {
     height: 100dvh;
     overflow: hidden;
     touch-action: none;
   }
 
-  /* Header invasivo: ocultar barra de indicadores (WSS/AWS/RDS) y Diagnóstico en landscape móvil */
+  /* Limpieza: Header gigante (WSS/AWS/RDS) y Diagnóstico ocultos; LEDs minimales visibles */
   .app-header,
   #diagPanel {
     display: none !important;
   }
 
-  /* Ajuste de columnas en landscape móvil: laterales flex:1, centro con mayor peso (Energía/Demos) */
+  /* Ajuste: cuadrícula de Energía y D-Pad ocupan el 100% de la altura disponible sin salirse */
   .mando-col-left,
   .mando-col-right {
     flex: 1 1 0;
@@ -853,5 +853,47 @@ a:focus-visible,
 
   .mando-col-center {
     flex: 1.2 1 0;
+  }
+}
+
+/* Modo Vertical Universal: cualquier dispositivo en orientación portrait (stack + scroll restaurado) */
+@media (orientation: portrait) {
+  .mando-layout {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .mando-col,
+  .mando-col-left,
+  .mando-col-right,
+  .mando-col-center {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  /* Header normal en portrait y ocultar LEDs minimales */
+  .app-header {
+    display: block;
+  }
+
+  .mando-status-bar {
+    display: none;
+  }
+}
+
+/* Modo PC: monitor con ratón (hover + fine pointer) en orientation landscape */
+@media (hover: hover) and (pointer: fine) and (orientation: landscape) {
+  .mando-layout {
+    flex-direction: row;
+  }
+
+  /* Contenido expandido: Header gigante visible y columnas en fila con espacio suficiente */
+  .app-header {
+    display: block;
+  }
+
+  #mandoLayout {
+    height: auto;
+    overflow: visible;
   }
 }
