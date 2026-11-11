@@ -315,6 +315,8 @@ async function cancelarDemo() {
     await enviarParo(12);
   } else {
     UI.showToast(`Error al cancelar demo: ${res.error}`, 'danger');
+    // El paro de seguridad se envía igualmente aunque falle la cancelación
+    await enviarParo(12);
   }
 }
 
@@ -444,21 +446,29 @@ async function iniciarSaludPolling() {
 // FASE 1: FLUJO LOBBY <-> MODO MANDO
 // ---------------------------------------------------------------------------
 async function entrarAModoMando() {
-  // Play: pantalla completa + orientación landscape en móvil
+  // Cambio de vista inmediato: no depende de que fullscreen u orientación se resuelvan
+  STATE.activeController = null;
+  window.activeController = null;
+  UI.setControllerLock(null);
+  UI.setMandoMode(true);
+
+  // Pantalla completa y orientación se solicitan sin bloquear la vista
+  const docEl = document.documentElement;
+  const lockLandscape = () => {
+    try {
+      if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (_) { /* Orientación lock no soportada (ej. iOS Safari) */ }
+  };
+
   try {
-    if (typeof document.documentElement.requestFullscreen === 'function') {
-      await document.documentElement.requestFullscreen();
+    if (typeof docEl.requestFullscreen === 'function' && !document.fullscreenElement) {
+      Promise.resolve(docEl.requestFullscreen()).catch(() => {}).then(lockLandscape);
+    } else {
+      lockLandscape();
     }
   } catch (_) { /* Fullscreen no disponible o denegado por el usuario */ }
-
-  try {
-    if (screen.orientation && typeof screen.orientation.lock === 'function') {
-      await screen.orientation.lock('landscape');
-    }
-  } catch (_) { /* Orientación lock no soportada (ej. iOS Safari) */ }
-
-  STATE.activeController = null;
-  UI.setMandoMode(true);
 }
 
 function salirDeModoMando() {
@@ -502,8 +512,15 @@ async function boot() {
     window.activeController = null;
     UI.setControllerLock(null);
     UI.setStopButtonState(true);
-    UI.showToast('Enviando paro de emergencia (CMD 12)...', 'warning');
-    await detenerVehiculo();
+
+    // Si hay una rutina autónoma en curso, DETENER también la cancela en el backend
+    if (STATE.demoActive) {
+      UI.showToast('Cancelando rutina autónoma y deteniendo...', 'warning');
+      await cancelarDemo();
+    } else {
+      UI.showToast('Enviando paro de emergencia (CMD 12)...', 'warning');
+      await detenerVehiculo();
+    }
     UI.setStopButtonState(false);
   });
 
