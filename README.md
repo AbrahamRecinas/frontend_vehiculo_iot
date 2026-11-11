@@ -6,7 +6,7 @@ Aplicación web **Mobile First** (HTML5 semántico + CSS3 + Bootstrap 5 + Vanill
 
 | Fase | Módulo | Estado |
 |---|---|---|
-| **Control** | `index.html`, `css/style.css`, `js/{config,api,ws,joystick,ui,app}.js` | ✅ En desarrollo |
+| **Control** | `index.html`, `assets/css/style.css`, `assets/js/{config,api,ws,joystick,ui,app}.js` | ✅ En desarrollo |
 | Monitoreo | Panel de telemetría / estado del vehículo | ⬜ No iniciado |
 | Administración | Gestión de vehículos / usuarios | ⬜ No iniciado |
 
@@ -78,8 +78,8 @@ GET /health        // (o /api/health según configuración)
 1. El repositorio debe estar configurado con GitHub Actions como origen de Pages.
 2. El workflow en `.github/workflows/pages.yml` publica la rama `main`.
 3. Las rutas relativas se usan para que funcione en el subpath del repositorio:
-   - `./css/style.css`
-   - `./js/app.js`
+   - `./assets/css/style.css`
+   - `./assets/js/app.js`
    - `./manifest.webmanifest`
    - `./assets/icons/favicon.svg`
 4. **CORS:** el backend FastAPI ya debe permitir el origen `https://<usuario>.github.io`.
