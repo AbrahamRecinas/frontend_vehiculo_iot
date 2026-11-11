@@ -504,6 +504,18 @@ body {
   color: #ef4444 !important;
 }
 
+/* Apagar armado: confirmación visible en el propio botón (segundo toque envía) */
+.btn-action.is-armed {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-color: #ef4444 !important;
+  color: #fecaca !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
+}
+
+.btn-action.is-armed .btn-icon {
+  color: #ef4444;
+}
+
 .btn-action.btn-active-highlight {
   background-color: rgba(6, 182, 212, 0.2) !important;
   border-color: var(--accent-cyan) !important;

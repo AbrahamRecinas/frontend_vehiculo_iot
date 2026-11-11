@@ -190,6 +190,12 @@ async function enviarParo(comandoId) {
 // ---------------------------------------------------------------------------
 // DEMO: INICIAR Y CANCELAR
 // ---------------------------------------------------------------------------
+function armarBotonApagar(btn, armado) {
+  btn.classList.toggle('is-armed', armado);
+  const label = btn.querySelector('.action-name');
+  if (label) label.textContent = armado ? 'Confirmar' : 'Apagar';
+}
+
 async function iniciarDemo() {
   const select = document.getElementById('demoSelect');
   const idDemo = select ? Number(select.value) : NaN;
@@ -521,10 +527,18 @@ async function boot() {
           const now = Date.now();
           if (now > STATE.apagarArmadoHasta) {
             STATE.apagarArmadoHasta = now + 3000;
+            armarBotonApagar(btn, true);
             UI.showToast('Pulsa Apagar otra vez en 3 s para confirmar', 'warning');
+            setTimeout(() => {
+              if (STATE.apagarArmadoHasta && Date.now() >= STATE.apagarArmadoHasta) {
+                STATE.apagarArmadoHasta = 0;
+                armarBotonApagar(btn, false);
+              }
+            }, 3000);
             return;
           }
           STATE.apagarArmadoHasta = 0;
+          armarBotonApagar(btn, false);
         }
         if (STATE.busyCommands.has(cmdId)) return;
         STATE.busyCommands.add(cmdId);
