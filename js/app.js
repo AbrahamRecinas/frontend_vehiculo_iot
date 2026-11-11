@@ -65,6 +65,7 @@ const STATE = {
   lastSentCommand: CONFIG.COMMANDS.DETENER,
   movementInFlight: null, // Promise del último movimiento
   movementSequence: 0, // Ignora respuestas visuales de movimientos obsoletos
+  apagarArmadoHasta: 0, // Ventana de confirmación del botón Apagar (timestamp ms)
   demoActive: false,
   busyCommands: new Set(),
   activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
@@ -424,6 +425,14 @@ async function boot() {
     UI.setMandoMode(false);
   }
 
+  // Si el navegador sale de pantalla completa (gesto del sistema o tecla Esc),
+  // en móvil se regresa al lobby para evitar ver el mando recortado
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement || esPC) return;
+    if (!document.body.classList.contains('mando-control')) return;
+    salirDeModoMando();
+  });
+
   getEl('btnEmergencyStop').addEventListener('click', async (e) => {
     e.preventDefault();
     if (joystickController) joystickController.forceRelease();
@@ -506,9 +515,16 @@ async function boot() {
         cmdId === CONFIG.COMMANDS.ENCENDER ||
         cmdId === CONFIG.COMMANDS.APAGAR
       ) {
+        // Confirmación dentro de la app (sin diálogos nativos que saquen de pantalla completa):
+        // el primer toque arma Apagar y el segundo, dentro de 3 s, lo envía
         if (cmdId === CONFIG.COMMANDS.APAGAR) {
-          const confirmOff = window.confirm('¿Confirmas apagar la grúa (pulso largo de 3 s)?');
-          if (!confirmOff) return;
+          const now = Date.now();
+          if (now > STATE.apagarArmadoHasta) {
+            STATE.apagarArmadoHasta = now + 3000;
+            UI.showToast('Pulsa Apagar otra vez en 3 s para confirmar', 'warning');
+            return;
+          }
+          STATE.apagarArmadoHasta = 0;
         }
         if (STATE.busyCommands.has(cmdId)) return;
         STATE.busyCommands.add(cmdId);
