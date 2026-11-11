@@ -1123,13 +1123,30 @@ body {
   aspect-ratio: 1 / 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
 }
 
 .dpad-btn .btn-icon {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   line-height: 1;
+}
+
+/* Palabra clave bajo el icono: indica la función sin romper la cruceta */
+.dpad-label {
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.dpad-btn:active .dpad-label {
+  color: #e2e8f0;
 }
 
 /* Exclusión mutua (Fase 4): control bloqueado / opacidad reducida */

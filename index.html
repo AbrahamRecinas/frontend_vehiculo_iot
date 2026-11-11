@@ -329,7 +329,7 @@
                 <!-- Indicador contextual bajo el joystick -->
                 <div class="joystick-hint text-center mt-3">
                   <p class="small text-secondary mb-1 desktop-detail" id="joystickHelpText">
-                    Arrastra o usa <span class="text-info fw-semibold">flechas / WASD</span>. Al soltar, se frena automáticamente (12).
+                    Arrastra o usa <span class="text-info fw-semibold">WASD / flechas</span>: <span class="text-info">W+D</span> avanza curvo a la derecha. Al soltar, se frena (12).
                   </p>
                   <span class="small font-monospace text-muted desktop-detail keyboard-hint">
                     Espacio o Esc = paro inmediato
@@ -464,17 +464,21 @@
               </div>
               <div class="card-body p-2 d-flex align-items-center justify-content-center">
                 <div class="dpad-container" id="dpadGrid" role="group" aria-label="Cruceta de control D-Pad">
-                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)">
-                    <i class="bi bi-arrow-up btn-icon" aria-hidden="true"></i>
+                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)" title="Alzar pala (mantener presionado)">
+                    <i class="bi bi-arrow-bar-up btn-icon" aria-hidden="true"></i>
+                    <span class="dpad-label">Alzar</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)">
-                    <i class="bi bi-arrow-left btn-icon" aria-hidden="true"></i>
+                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)" title="Girar a la izquierda (mantener presionado)">
+                    <i class="bi bi-arrow-counterclockwise btn-icon" aria-hidden="true"></i>
+                    <span class="dpad-label">Izq.</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)">
-                    <i class="bi bi-arrow-down btn-icon" aria-hidden="true"></i>
+                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)" title="Bajar pala (mantener presionado)">
+                    <i class="bi bi-arrow-bar-down btn-icon" aria-hidden="true"></i>
+                    <span class="dpad-label">Bajar</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)">
-                    <i class="bi bi-arrow-right btn-icon" aria-hidden="true"></i>
+                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)" title="Girar a la derecha (mantener presionado)">
+                    <i class="bi bi-arrow-clockwise btn-icon" aria-hidden="true"></i>
+                    <span class="dpad-label">Der.</span>
                   </button>
                 </div>
               </div>

@@ -14,6 +14,15 @@ import { CONFIG } from './config.js';
 // Estado de cambio de comando del joystick: 12 = DETENER (liberado / sin movimiento)
 let currentJoystickCmd = 12;
 
+// Teclado: origen del comando y direcciones pulsadas (WASD y flechas)
+const KEYBOARD_SOURCE = 'keyboard';
+const KEY_DIRECTIONS = {
+  ArrowUp: 'up', w: 'up', W: 'up',
+  ArrowDown: 'down', s: 'down', S: 'down',
+  ArrowRight: 'right', d: 'right', D: 'right',
+  ArrowLeft: 'left', a: 'left', A: 'left',
+};
+
 export class JoystickController {
   /**
    * @param {HTMLElement} trackEl - Contenedor circular del joystick
@@ -29,6 +38,7 @@ export class JoystickController {
     this.isDragging = false;
     this.latchedCommand = null; // Comando enclavado en el arrastre actual
     this.armedByKey = null;
+    this.heldKeys = new Set();
     this.center = { x: 0, y: 0 };
     this.maxRadius = 70; // Se recalcula en pointerdown
     this.deadzoneRadius = 20; // Se recalcula en pointerdown (25% del radio)
@@ -277,83 +287,82 @@ export class JoystickController {
      SOPORTE ACCESIBLE DE TECLADO
      ------------------------------------------------------------------------ */
   handleKeyDown(e) {
-    // Ignorar repeticion automatica del sistema operativo para evitar rafagas de toggle
+    if (e.key === ' ' || e.key === 'Escape') {
+      e.preventDefault();
+      if (e.repeat) return;
+      this.heldKeys.clear();
+      this.forceRelease();
+      if (this.callbacks.onRelease) this.callbacks.onRelease({ forcedStop: true });
+      return;
+    }
+
+    const direction = KEY_DIRECTIONS[e.key];
+    if (!direction) return;
+    e.preventDefault();
     if (e.repeat) return;
 
-    // FASE 4: exclusión mutua — si el D-Pad tiene el control, el joystick no responde
-    if (window.activeController === 'dpad') return;
+    // FASE 4: exclusión mutua — con la cruceta o el puntero en uso, el teclado no responde
+    if (window.activeController === 'dpad' || this.isDragging) return;
 
-    let targetCmd = null;
-    let keyName = null;
-    switch (e.key) {
-      case 'ArrowUp':
-      case 'w':
-      case 'W':
-        targetCmd = CONFIG.COMMANDS.AVANZAR;
-        keyName = e.key;
-        break;
-      case 'ArrowDown':
-      case 's':
-      case 'S':
-        targetCmd = CONFIG.COMMANDS.RETROCEDER;
-        keyName = e.key;
-        break;
-      case 'ArrowRight':
-      case 'd':
-      case 'D':
-        targetCmd = CONFIG.COMMANDS.DIAGONAL_DERECHA;
-        keyName = e.key;
-        break;
-      case 'ArrowLeft':
-      case 'a':
-      case 'A':
-        targetCmd = CONFIG.COMMANDS.DIAGONAL_IZQUIERDA;
-        keyName = e.key;
-        break;
-      case ' ':
-      case 'Escape':
-        e.preventDefault();
-        this.forceRelease();
-        if (this.callbacks.onRelease) this.callbacks.onRelease({ forcedStop: true });
-        return;
-      default:
-        return;
-    }
-
-    if (targetCmd && !this.latchedCommand) {
-      e.preventDefault();
-      this.recalculateBounds();
-      this.latchedCommand = targetCmd;
-      currentJoystickCmd = targetCmd;
-      this.armedByKey = keyName;
-      this.track.classList.add('dragging');
-      if (this.callbacks.onLockChange) {
-        this.callbacks.onLockChange('joystick');
-      }
-      this.animateKnobDirection(targetCmd);
-
-      if (this.callbacks.onDirection) {
-        Promise.resolve(this.callbacks.onDirection(targetCmd)).then((ok) => {
-          if (ok === false && currentJoystickCmd === targetCmd) {
-            this.forceRelease();
-          }
-        });
-      }
-    }
+    this.heldKeys.add(direction);
+    this.applyKeyboardDirection();
   }
 
   handleKeyUp(e) {
-    const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'W', 's', 'S', 'a', 'A', 'd', 'D'];
-    if (keys.includes(e.key)) {
-      e.preventDefault();
-      // Solo liberar si la tecla que se suelta fue la que armo el movimiento
-      if (this.armedByKey && this.armedByKey.toLowerCase() === e.key.toLowerCase()) {
-        this.forceRelease();
+    const direction = KEY_DIRECTIONS[e.key];
+    if (!direction) return;
+    e.preventDefault();
+    this.heldKeys.delete(direction);
+    this.applyKeyboardDirection();
+  }
 
-        if (this.callbacks.onRelease) {
-          this.callbacks.onRelease({ hadMovement: true });
-        }
+  /**
+   * Convierte las teclas pulsadas en uno de los 4 comandos del joystick.
+   * W+D = avance curvo a la derecha (7), W+A = avance curvo a la izquierda (8).
+   */
+  keyboardCommandFromKeys() {
+    const h = this.heldKeys;
+    if (h.has('up') && h.has('left')) return CONFIG.COMMANDS.DIAGONAL_IZQUIERDA;
+    if (h.has('up') && h.has('right')) return CONFIG.COMMANDS.DIAGONAL_DERECHA;
+    if (h.has('up')) return CONFIG.COMMANDS.AVANZAR;
+    if (h.has('down')) return CONFIG.COMMANDS.RETROCEDER;
+    if (h.has('right')) return CONFIG.COMMANDS.DIAGONAL_DERECHA;
+    if (h.has('left')) return CONFIG.COMMANDS.DIAGONAL_IZQUIERDA;
+    return null;
+  }
+
+  applyKeyboardDirection() {
+    if (this.isDragging) return;
+
+    const cmd = this.keyboardCommandFromKeys();
+
+    if (cmd === null) {
+      // Se soltaron todas las teclas de movimiento: DETENER solo si el teclado tenía el control
+      if (this.armedByKey === KEYBOARD_SOURCE) {
+        this.forceRelease();
+        if (this.callbacks.onRelease) this.callbacks.onRelease({ hadMovement: true });
       }
+      return;
+    }
+
+    if (cmd === this.latchedCommand) return;
+
+    this.recalculateBounds();
+    this.armedByKey = KEYBOARD_SOURCE;
+    this.latchedCommand = cmd;
+    currentJoystickCmd = cmd;
+    this.track.classList.add('dragging');
+    if (this.callbacks.onLockChange) {
+      this.callbacks.onLockChange('joystick');
+    }
+    this.animateKnobDirection(cmd);
+
+    if (this.callbacks.onDirection) {
+      Promise.resolve(this.callbacks.onDirection(cmd)).then((ok) => {
+        if (ok === false && this.latchedCommand === cmd) {
+          this.forceRelease();
+        }
+      });
     }
   }
 
@@ -380,6 +389,7 @@ export class JoystickController {
     this.isDragging = false;
     this.latchedCommand = null;
     this.armedByKey = null;
+    this.heldKeys.clear();
     currentJoystickCmd = CONFIG.COMMANDS.DETENER; // 12 = DETENER
     this.track.classList.remove('dragging');
     this.resetKnob();

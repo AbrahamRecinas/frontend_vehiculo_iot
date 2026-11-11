@@ -97,7 +97,7 @@ async function handleMovimiento(idComando) {
   const isMovementCmd = MOVIMIENTO_IDS.includes(cmdId);
 
   if (STATE.busyCommands.has(cmdId)) {
-    return false; // Evitar repeticiones de comando sin procesar
+    return true; // Ya hay un envío idéntico en vuelo: no es un fallo
   }
 
   const sequence = ++STATE.movementSequence;
@@ -123,7 +123,7 @@ async function handleMovimiento(idComando) {
   STATE.busyCommands.delete(cmdId);
 
   // Una respuesta antigua no debe sobrescribir el comando más reciente ni el paro.
-  if (isMovementCmd && sequence !== STATE.movementSequence) return false;
+  if (isMovementCmd && sequence !== STATE.movementSequence) return true; // Respuesta superada por otro comando
 
   if (res.ok) {
     STATE.lastSentCommand = cmdId;
