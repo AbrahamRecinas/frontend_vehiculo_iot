@@ -67,20 +67,11 @@ const STATE = {
   movementSequence: 0, // Ignora respuestas visuales de movimientos obsoletos
   demoActive: false,
   busyCommands: new Set(),
-  toggleActive: new Set(), // IDs de botones (5-8) actualmente activos
   activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
 };
 
 // Controlador activo global (expuesto en window para exclusión mutua Joystick <-> D-Pad)
 window.activeController = null; // 'joystick' | 'dpad' | null
-
-// IDs de la cruceta D-Pad que gestiona el grupo de mecanismos (comandos 5, 6, 3 y 4)
-const MECANISMOS_IDS = [
-  CONFIG.COMMANDS.ALZAR_PALA,
-  CONFIG.COMMANDS.BAJAR_PALA,
-  CONFIG.COMMANDS.GIRAR_IZQUIERDA,
-  CONFIG.COMMANDS.GIRAR_DERECHA,
-];
 
 // IDs de movimiento de tracción / diagonal gestionados como movimiento continuo
 const MOVIMIENTO_IDS = [
@@ -183,12 +174,6 @@ async function enviarParo(comandoId) {
     UI.setCommandState(comandoId, 'VEHÍCULO DETENIDO');
     UI.setPulseState('active-stopped');
 
-    // Al detener (CMD 12), se limpian los estados activos de los comandos de toggle (5-8)
-    STATE.toggleActive.clear();
-    ['btnPalaSubir', 'btnPalaBajar', 'btnGirarDer', 'btnGirarIzq'].forEach((id) => {
-      UI.setActionButtonActive(id, false);
-    });
-
     return true;
   }
 
@@ -204,72 +189,6 @@ async function enviarParo(comandoId) {
 // ---------------------------------------------------------------------------
 // DEMO: INICIAR Y CANCELAR
 // ---------------------------------------------------------------------------
-/**
- * Maneja comandos de toggle exclusivo (5, 6, 7, 8).
- * - Activa/desactiva visualmente el botón presionado.
- * - Al activar, envía el ID. Al desactivar (toggle off), reenvía el mismo ID.
- * - Solo un mecanismo del grupo puede estar activo a la vez.
- * - `forzarActivacion` (D-Pad): el botón se activa al presionar sin toggle;
- *   la detención (CMD 12) se gestiona en el release del D-Pad.
- */
-async function handleToggleCommand(btn, cmdId, { forzarActivacion = false } = {}) {
-  if (STATE.busyCommands.has(cmdId)) return;
-  STATE.busyCommands.add(cmdId);
-
-  // Si otro mecanismo del grupo está activo, quitar activo al anterior
-  if (STATE.toggleActive.size > 0) {
-    for (const activeId of Array.from(STATE.toggleActive)) {
-      if (activeId !== btn.id) {
-        UI.setActionButtonActive(activeId, false);
-        STATE.toggleActive.delete(activeId);
-      }
-    }
-  }
-
-  const currentlyActive = STATE.toggleActive.has(btn.id);
-
-  // Toggle OFF solo cuando no es una activación forzada (D-Pad: presionar = activar, soltar = DETENER)
-  if (!forzarActivacion && currentlyActive) {
-    STATE.toggleActive.delete(btn.id);
-    UI.setActionButtonActive(btn.id, false);
-
-    const res = await api.enviarMovimiento(cmdId);
-
-    if (res.ok) {
-      if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
-        await detenerVehiculo();
-      }
-    } else {
-      UI.showToast(`Fallo envío comando ${cmdId}: ${res.error}`, 'danger');
-      if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
-        await detenerVehiculo();
-      }
-    }
-
-    STATE.busyCommands.delete(cmdId);
-    return;
-  }
-
-  // Activar: enviar el comando y mantener el estado visual activo
-  STATE.toggleActive.add(btn.id);
-  UI.setActionButtonActive(btn.id, true);
-
-  const res = await api.enviarMovimiento(cmdId);
-
-  STATE.busyCommands.delete(cmdId);
-
-  if (res.ok) {
-    STATE.lastSentCommand = Number(cmdId);
-  } else {
-    STATE.toggleActive.delete(btn.id);
-    UI.setActionButtonActive(btn.id, false);
-    UI.showToast(`Fallo envío comando ${cmdId}: ${res.error}`, 'danger');
-    if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
-      await detenerVehiculo();
-    }
-  }
-}
-
 async function iniciarDemo() {
   const select = document.getElementById('demoSelect');
   const idDemo = select ? Number(select.value) : NaN;
@@ -562,7 +481,7 @@ async function boot() {
   });
 
   // Comando de acción disparado sobre un botón (click o cruceta D-Pad)
-  const ejecutarComandoBoton = async (btn, opciones = {}) => {
+  const ejecutarComandoBoton = async (btn) => {
       const cmdId = Number(btn.dataset.cmd);
 
       if (cmdId === CONFIG.COMMANDS.DEMO_FABRICA) {
@@ -606,9 +525,10 @@ async function boot() {
         return;
       }
 
-      // Comandos de toggle exclusivo (mecanismos: 5, 6, 3 y 4)
-      if (MECANISMOS_IDS.includes(cmdId)) {
-        await handleToggleCommand(btn, cmdId, { forzarActivacion: Boolean(opciones?.desdeDpad) });
+      // Mecanismos de la cruceta (3, 4, 5, 6): envían al presionar; el DETENER llega al soltar
+      if (cmdId === CONFIG.COMMANDS.ALZAR_PALA || cmdId === CONFIG.COMMANDS.BAJAR_PALA ||
+          cmdId === CONFIG.COMMANDS.GIRAR_DERECHA || cmdId === CONFIG.COMMANDS.GIRAR_IZQUIERDA) {
+        await handleMovimiento(cmdId);
         return;
       }
 
@@ -660,7 +580,7 @@ async function boot() {
       window.activeController = 'dpad';
       UI.setControllerLock(STATE.activeController);
       // FASE 3/4: ejecutar el mecanismo (pala/rotacion) al presionar (sin toggle; el release envia DETENER)
-      await ejecutarComandoBoton(btn, { desdeDpad: true });
+      await ejecutarComandoBoton(btn);
     });
 
     const handleDpadRelease = () => {
