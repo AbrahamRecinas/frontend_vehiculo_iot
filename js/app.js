@@ -462,6 +462,10 @@ async function boot() {
     await entrarAModoMando();
   });
 
+  getEl('btnLobbyCheck').addEventListener('click', async () => {
+    await actualizarSaludApi({ showToast: true });
+  });
+
   getEl('btnExitMando').addEventListener('click', () => {
     salirDeModoMando();
   });

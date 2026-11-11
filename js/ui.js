@@ -121,8 +121,30 @@ const UI = {
 
     // Sincronizar los LEDs minimales del Modo Mando (FASE 1)
     UI.syncMandoLeds({ wss, aws, rds });
+    UI.syncLobby({ wss, aws, rds });
 
     return { wss, aws, rds };
+  },
+
+  /**
+   * Replica el estado de conectividad en el panel de entrada (lobby) móvil.
+   */
+  syncLobby: (states = {}) => {
+    const details = {
+      wss: states.wss?.detail || '--',
+      aws: states.aws?.detail || '--',
+      rds: 'Sin verificar',
+    };
+
+    document.querySelectorAll('[data-lobby-led]').forEach((led) => {
+      const key = led.dataset.lobbyLed;
+      UI.applyLedClass(led, key === 'rds' ? 'unverified' : states[key]?.state);
+    });
+
+    document.querySelectorAll('[data-lobby-detail]').forEach((el) => {
+      const key = el.dataset.lobbyDetail;
+      el.textContent = details[key] || '--';
+    });
   },
 
   /**
@@ -177,6 +199,26 @@ const UI = {
       UI.elements.diagLastWsMsg.textContent = raw ? String(raw) : 'Ninguno';
       UI.elements.diagLastWsMsg.title = raw ? String(raw) : 'Ninguno';
     }
+
+    // Mismos datos en el panel de entrada (lobby) mediante atributos data-diag
+    const setDiag = (key, text) => {
+      document.querySelectorAll(`[data-diag="${key}"]`).forEach((el) => {
+        el.textContent = text;
+        el.title = text;
+      });
+    };
+    if (info.restUrl) setDiag('restUrl', info.restUrl);
+    if (info.wssUrl) setDiag('wssUrl', info.wssUrl);
+    if (info.latencyMs !== undefined) {
+      setDiag('latency', Number.isFinite(info.latencyMs) ? `${info.latencyMs} ms` : '-- ms');
+    }
+    if (info.httpStatus !== undefined) {
+      setDiag('httpStatus', info.httpStatus ? String(info.httpStatus) : 'Sin respuesta');
+    }
+    if (info.wsReconnects !== undefined) setDiag('wsReconnects', String(info.wsReconnects ?? 0));
+    if (info.lastWsMessage !== undefined) {
+      setDiag('lastWsMessage', info.lastWsMessage ? String(info.lastWsMessage) : 'Ninguno');
+    }
   },
 
   /**
@@ -227,6 +269,11 @@ const UI = {
     if (UI.elements.activeCommandId) {
       UI.elements.activeCommandId.textContent = `ID: ${cmdId}`;
     }
+    const short = String(label).replace(/^VEHÍCULO\s*·?\s*/i, '').trim() || 'DETENIDO';
+    document.querySelectorAll('[data-lobby="vehicleState"]').forEach((el) => {
+      el.textContent = short;
+      el.title = label;
+    });
   },
 
   setPulseState: (state) => {
@@ -366,6 +413,10 @@ const UI = {
       const firstValue = list[0]?.id_demo ?? list[0]?.id ?? list[0]?.id_comando ?? list[0]?.demo_id ?? list[0]?.uuid ?? 1;
       select.value = String(firstValue);
     }
+
+    document.querySelectorAll('[data-lobby="demoCount"]').forEach((el) => {
+      el.textContent = String(list.length);
+    });
 
     if (!select.dataset.boundSync) {
       select.addEventListener('change', () => UI.syncSelectedDemoCard(select.value));

@@ -569,65 +569,192 @@ body {
   font-size: 0.72rem;
 }
 
-.lobby-card {
-  max-width: 440px;
+.lobby-shell {
   width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.95rem;
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(8, 13, 25, 0.96)) !important;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(8, 13, 25, 0.96));
+  border: 1px solid var(--surface-border);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.48);
 }
 
-.lobby-hero-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto;
-  border-radius: 18px;
-  display: inline-flex;
+.lobby-header {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.9rem;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.26);
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .lobby-kicker {
-  display: inline-block;
-  margin-top: 0.75rem;
-  font-size: 0.68rem;
+  font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: #38bdf8;
 }
 
-.lobby-status-summary {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+.lobby-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
 }
 
-.lobby-status-summary span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.7rem;
+.lobby-vehicle-state {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: #cbd5e1;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid var(--surface-border);
 }
 
-.lobby-enter-btn {
+.lobby-channels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.lobby-channel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.55rem;
   border-radius: 14px;
-  padding: 0.8rem 1rem;
+  background: rgba(8, 13, 25, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.lobby-channel .status-led {
+  width: 9px;
+  height: 9px;
+}
+
+.lobby-channel-text {
+  min-width: 0;
+}
+
+.lobby-channel-name {
+  display: block;
+  font-size: 0.62rem;
   font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #cbd5e1;
+}
+
+.lobby-channel-detail {
+  display: block;
+  font-size: 0.64rem;
+  line-height: 1.2;
+  color: #94a3b8;
+  overflow-wrap: anywhere;
+}
+
+.lobby-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.lobby-metrics > div {
+  padding: 0.45rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(8, 13, 25, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.lobby-metrics dt {
+  margin: 0;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.lobby-metrics dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.lobby-endpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(8, 13, 25, 0.6);
+  border: 1px dashed rgba(148, 163, 184, 0.2);
+}
+
+.lobby-endpoints > div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lobby-endpoints span {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.lobby-endpoints code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  background: none;
+  font-size: 0.66rem;
+  color: #67e8f9;
+}
+
+.lobby-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 0.5rem;
+}
+
+.lobby-check-btn,
+.lobby-enter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 46px;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.lobby-enter-btn {
   box-shadow: 0 12px 28px rgba(37, 99, 235, 0.32);
 }
 
 .lobby-footnote {
-  font-size: 0.75rem;
+  margin: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: #64748b;
 }
 
 /* Módulo de rutinas autónomas (Demos) */
@@ -870,10 +997,10 @@ body {
 .lobby-view {
   display: none;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(100dvh - 180px);
-  padding: 1rem;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0.5rem;
 }
 
 .lobby-view.is-visible {

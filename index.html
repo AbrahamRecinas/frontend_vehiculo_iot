@@ -174,27 +174,89 @@
     <!-- CUERPO PRINCIPAL DEL CONTROLADOR -->
     <main class="container-fluid px-2 py-2 flex-grow-1 main-content" id="mainContent">
 
-      <!-- LOBBY (FASE 1: vista inicial en móvil · oculto en PC) -->
-      <section id="lobbyView" class="lobby-view flex-column align-items-center justify-content-center text-center p-2" aria-label="Lobby de estado y conexión">
-        <div class="card bg-body-tertiary border-secondary-subtle lobby-card">
-          <div class="card-body p-4">
-            <div class="text-center mb-3">
-              <div class="lobby-hero-icon" aria-hidden="true"><i class="bi bi-joystick"></i></div>
-              <span class="lobby-kicker">CONTROL REMOTO · VEHÍCULO #1</span>
-              <h2 class="h4 text-white fw-bold mt-2 mb-1">Estación de mando</h2>
-              <p class="small text-secondary mb-0">Control preciso, telemetría en vivo y paro inmediato.</p>
+      <!-- LOBBY: panel de estado previo al modo mando (móvil · oculto en PC) -->
+      <section id="lobbyView" class="lobby-view" aria-label="Panel de estado y conexión">
+        <div class="lobby-shell">
+          <header class="lobby-header">
+            <div class="brand-lockup d-flex align-items-center gap-2">
+              <img src="./assets/icons/favicon.svg" alt="" class="header-logo" width="32" height="32" />
+              <div>
+                <span class="lobby-kicker d-block">Control remoto</span>
+                <h2 class="lobby-title">Grúa RC · Vehículo #1</h2>
+              </div>
             </div>
-            <div class="lobby-status-summary mb-4" aria-label="Canales supervisados">
-              <span><i class="bi bi-broadcast"></i> WSS</span>
-              <span><i class="bi bi-cloud-check"></i> AWS</span>
-              <span><i class="bi bi-database"></i> RDS</span>
+            <span class="lobby-vehicle-state" data-lobby="vehicleState">Detenido</span>
+          </header>
+
+          <div class="lobby-channels" role="list" aria-label="Estado de canales">
+            <div class="lobby-channel" role="listitem">
+              <span class="status-led led-amber" data-lobby-led="wss" aria-hidden="true"></span>
+              <div class="lobby-channel-text">
+                <span class="lobby-channel-name">WebSocket</span>
+                <span class="lobby-channel-detail" data-lobby-detail="wss">Conectando...</span>
+              </div>
             </div>
-            <button type="button" id="btnEnterMando" class="btn btn-primary btn-lg w-100 d-flex align-items-center justify-content-center gap-2 lobby-enter-btn">
-              <i class="bi bi-controller fs-4" aria-hidden="true"></i>
+            <div class="lobby-channel" role="listitem">
+              <span class="status-led led-amber" data-lobby-led="aws" aria-hidden="true"></span>
+              <div class="lobby-channel-text">
+                <span class="lobby-channel-name">Servidor AWS</span>
+                <span class="lobby-channel-detail" data-lobby-detail="aws">Verificando...</span>
+              </div>
+            </div>
+            <div class="lobby-channel" role="listitem">
+              <span class="status-led led-gray" data-lobby-led="rds" aria-hidden="true"></span>
+              <div class="lobby-channel-text">
+                <span class="lobby-channel-name">Amazon RDS</span>
+                <span class="lobby-channel-detail" data-lobby-detail="rds">Sin verificar</span>
+              </div>
+            </div>
+          </div>
+
+          <dl class="lobby-metrics">
+            <div>
+              <dt>Latencia API</dt>
+              <dd data-diag="latency">-- ms</dd>
+            </div>
+            <div>
+              <dt>Último HTTP</dt>
+              <dd data-diag="httpStatus">--</dd>
+            </div>
+            <div>
+              <dt>Reconexiones WS</dt>
+              <dd data-diag="wsReconnects">0</dd>
+            </div>
+            <div>
+              <dt>Rutinas</dt>
+              <dd data-lobby="demoCount">--</dd>
+            </div>
+          </dl>
+
+          <div class="lobby-endpoints">
+            <div>
+              <span>REST</span>
+              <code data-diag="restUrl">https://grua-abraham.duckdns.org</code>
+            </div>
+            <div>
+              <span>WSS</span>
+              <code data-diag="wssUrl">wss://grua-abraham.duckdns.org/ws/vehiculo/1</code>
+            </div>
+            <div>
+              <span>Último</span>
+              <code data-diag="lastWsMessage">Ninguno</code>
+            </div>
+          </div>
+
+          <div class="lobby-actions">
+            <button type="button" id="btnLobbyCheck" class="btn btn-outline-info lobby-check-btn">
+              <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+              <span>Comprobar enlace</span>
+            </button>
+            <button type="button" id="btnEnterMando" class="btn btn-primary lobby-enter-btn">
+              <i class="bi bi-controller" aria-hidden="true"></i>
               <span>Entrar al modo mando</span>
             </button>
-            <p class="lobby-footnote text-secondary mt-3 mb-0">Se recomienda girar el teléfono al entrar.</p>
           </div>
+          <p class="lobby-footnote">Al entrar se activa pantalla completa y orientación horizontal.</p>
         </div>
       </section>
 
