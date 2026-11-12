@@ -65,6 +65,7 @@ const STATE = {
   lastSentCommand: CONFIG.COMMANDS.DETENER,
   movementInFlight: null, // Promise del último movimiento
   movementSequence: 0, // Ignora respuestas visuales de movimientos obsoletos
+  demos: [], // Catálogo cargado desde GET /demos (nombre y descripción de la cronología)
   apagarArmadoHasta: 0, // Ventana de confirmación del botón Apagar (timestamp ms)
   demoActive: false,
   busyCommands: new Set(),
@@ -205,6 +206,12 @@ async function iniciarDemo() {
     return;
   }
 
+  const demo = STATE.demos.find((d) => String(d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid) === String(idDemo));
+  UI.demoTimelineStart({
+    name: demo?.nombre || demo?.name || `Rutina #${idDemo}`,
+    description: demo?.descripcion ? `Secuencia de referencia: ${demo.descripcion}` : '',
+  });
+
   UI.setActionButtonBusy('btnIniciarDemo', true);
   const res = await api.iniciarDemo(idDemo);
 
@@ -220,6 +227,7 @@ async function iniciarDemo() {
   } else {
     UI.setDemoStatus(false);
     UI.showToast(`Error al iniciar demo: ${res.error}`, 'danger');
+    UI.demoTimelineEnd('La rutina no pudo iniciarse', 'error');
     await detenerVehiculo();
   }
 }
@@ -236,6 +244,7 @@ async function cancelarDemo() {
     UI.setCommandState(CONFIG.COMMANDS.DETENER, 'VEHÍCULO DETENIDO');
     UI.setPulseState('active-stopped');
     UI.showToast('Demo Fábrica cancelada', 'info');
+    UI.demoTimelineEnd('Rutina cancelada desde la app', 'info');
 
     // Seguridad adicional: parar emergencia tras cancelar demo
     await enviarParo(12);
@@ -300,12 +309,14 @@ function bindWebSocketEvents() {
     UI.setPulseState('active-stopped');
     syncDiagnostics();
     UI.showToast(`Demo finalizada por el vehículo (${payload?.timestamp || 'evento'})`, 'info');
+    UI.demoTimelineEnd('Rutina finalizada por el vehículo', 'success');
   });
 
   wsService.on('command_echo', (idComando) => {
     const cmdId = Number(idComando);
     STATE.lastSentCommand = cmdId;
     syncDiagnostics();
+    UI.demoTimelineAddStep(cmdId);
 
     if (cmdId === CONFIG.COMMANDS.DETENER) {
       UI.setCommandState(cmdId, 'VEHÍCULO DETENIDO');
@@ -654,6 +665,7 @@ async function cargarCatalogoDemos() {
 
   if (res.ok) {
     const demos = res.data?.demos || res.data || [];
+    STATE.demos = Array.isArray(demos) ? demos : [];
     UI.renderDemos(demos);
     UI.renderDemoSelect(demos);
   } else {

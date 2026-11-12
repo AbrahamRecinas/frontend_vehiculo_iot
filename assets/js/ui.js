@@ -439,6 +439,96 @@ const UI = {
     }
   },
 
+  /**
+   * Cronología en vivo de la rutina (PC): abre el panel antes de enviar el inicio,
+   * para no perder pasos que lleguen por WSS antes de que responda el REST.
+   */
+  demoTimelineStart: ({ name = 'Rutina', description = '' } = {}) => {
+    const panel = document.getElementById('demoTimeline');
+    const list = document.getElementById('demoTimelineList');
+    const title = document.getElementById('demoTimelineTitle');
+    const hint = document.getElementById('demoTimelineHint');
+    const empty = document.getElementById('demoTimelineEmpty');
+    if (!panel || !list) return;
+
+    list.textContent = '';
+    if (title) title.textContent = name;
+    if (hint) hint.textContent = description || 'Esperando pasos del vehículo...';
+    if (empty) empty.textContent = 'Esperando pasos del vehículo...';
+    panel.classList.remove('is-finished');
+    panel.classList.add('is-live');
+  },
+
+  /**
+   * Añade un paso recibido por WSS (eco de comando). Solo actúa con la rutina abierta.
+   */
+  demoTimelineAddStep: (cmdId) => {
+    const panel = document.getElementById('demoTimeline');
+    const list = document.getElementById('demoTimelineList');
+    const empty = document.getElementById('demoTimelineEmpty');
+    if (!panel || !list || !panel.classList.contains('is-live')) return;
+
+    list.querySelectorAll('.demo-step.is-current').forEach((el) => {
+      el.classList.remove('is-current');
+      el.classList.add('is-past');
+    });
+
+    const meta = CONFIG.COMMAND_META[cmdId];
+    const li = document.createElement('li');
+    li.className = 'demo-step is-current';
+
+    const time = document.createElement('time');
+    time.className = 'demo-step-time';
+    time.textContent = new Date().toLocaleTimeString('es-ES', { hour12: false });
+
+    const name = document.createElement('span');
+    name.className = 'demo-step-name';
+    name.textContent = meta?.label || `Comando ${cmdId}`;
+
+    const chip = document.createElement('span');
+    chip.className = 'demo-step-id';
+    chip.textContent = `#${cmdId}`;
+
+    li.append(time, name, chip);
+    list.appendChild(li);
+    while (list.children.length > 60) list.removeChild(list.firstElementChild);
+
+    if (empty) empty.hidden = true;
+    list.scrollTop = list.scrollHeight;
+  },
+
+  /**
+   * Cierra la cronología con un mensaje final (finalizada, cancelada o error).
+   */
+  demoTimelineEnd: (text, tone = 'info') => {
+    const panel = document.getElementById('demoTimeline');
+    const list = document.getElementById('demoTimelineList');
+    if (!panel || !list) return;
+
+    list.querySelectorAll('.demo-step.is-current').forEach((el) => {
+      el.classList.remove('is-current');
+      el.classList.add('is-past');
+    });
+
+    const li = document.createElement('li');
+    li.className = `demo-step demo-step--end demo-step--${tone}`;
+
+    const time = document.createElement('time');
+    time.className = 'demo-step-time';
+    time.textContent = new Date().toLocaleTimeString('es-ES', { hour12: false });
+
+    const label = document.createElement('span');
+    label.className = 'demo-step-name';
+    label.textContent = text;
+
+    li.append(time, label);
+    list.appendChild(li);
+    list.scrollTop = list.scrollHeight;
+
+    panel.classList.remove('is-live');
+    panel.classList.add('is-finished');
+  },
+
   setDemoStatus: (isActive) => {
     const badge = UI.elements.demoStatusBadge;
     const card = document.getElementById('demoCard');

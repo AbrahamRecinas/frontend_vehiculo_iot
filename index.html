@@ -432,6 +432,19 @@
                     </div>
                   </div>
 
+                  <!-- Cronología en vivo de la rutina (PC): pasos recibidos por WSS en tiempo real -->
+                  <section id="demoTimeline" class="demo-timeline desktop-detail" aria-live="polite" aria-label="Movimientos de la rutina en tiempo real">
+                    <header class="demo-timeline-head">
+                      <span class="demo-live-dot" aria-hidden="true"></span>
+                      <div class="demo-timeline-titles">
+                        <strong id="demoTimelineTitle">Sin rutina en ejecución</strong>
+                        <small id="demoTimelineHint">Inicia una rutina para ver sus movimientos aquí.</small>
+                      </div>
+                    </header>
+                    <ol id="demoTimelineList" class="demo-timeline-list"></ol>
+                    <p id="demoTimelineEmpty" class="demo-timeline-empty">Esperando pasos del vehículo...</p>
+                  </section>
+
                   <div class="demo-actions">
                     <button
                       type="button"
