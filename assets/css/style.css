@@ -2032,16 +2032,6 @@ a:focus-visible,
   border-bottom: none;
 }
 
-.monitor-table tbody tr:last-child .monitor-movimiento-cell {
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-}
-
-.monitor-table tbody tr:first-child .monitor-movimiento-cell {
-  border-top-left-radius: 10px;
-  border-top-right-radius: 10px;
-}
-
 .monitor-movimiento-cell {
   font-weight: 600;
   color: #e2e8f0;
