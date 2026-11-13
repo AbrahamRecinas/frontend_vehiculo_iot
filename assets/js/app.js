@@ -16,6 +16,11 @@ import { UI } from './ui.js';
 // ---------------------------------------------------------------------------
 let joystickController = null;
 
+// Estado del Modo Mando (control) usado por la navegación para volver a la vista previa
+let mandoActivo = false;
+// Modo de Control preferido por el usuario (se restaura al volver de Monitoreo)
+let modoControlPreferido = false;
+
 const getEl = (id) => document.getElementById(id);
 
 function initJoystick() {
@@ -70,6 +75,7 @@ const STATE = {
   demoActive: false,
   busyCommands: new Set(),
   activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
+  monitorHistorial: [], // Últimos movimientos individuales persistidos (máx. 10) del panel de Monitoreo
 };
 
 // Controlador activo global (expuesto en window para exclusión mutua Joystick <-> D-Pad)
@@ -255,6 +261,512 @@ async function cancelarDemo() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// FASE MONITOREO: CARGA INICIAL (REST) + EVENTOS WSS EN TIEMPO REAL
+// Contratos:
+//  - GET  /api/vehiculos/{id}/estado      -> estado actual del vehículo
+//  - GET  /api/vehiculos/{id}/historial   -> últimos movimientos individuales persistidos
+//  - GET  /api/vehiculos/{id}/comandos    -> catálogo de comandos soportados por el vehículo
+//  - WSS  {"evento":"ESTADO_INICIAL",...}   -> estado actual (actualiza tarjeta, no tabla)
+//  - WSS  {"evento":"MOVIMIENTO_DEMO",...}  -> demo en curso (actualiza tarjeta, NO tabla)
+//  - WSS  {"tipo":"MOVIMIENTO_INDIVIDUAL",...} -> movimiento persistido (tarjeta + tabla)
+// ---------------------------------------------------------------------------
+const MONITOREO_MAX_REGISTROS = 10;
+
+function extraerFechaHora(timestamp) {
+  const iso = String(timestamp || '').replace(' ', 'T');
+  const fecha = iso.length >= 10 ? iso.slice(0, 10) : '';
+  const hora = iso.length > 10 ? iso.slice(11, 19) : '';
+  return { fecha, hora };
+}
+
+/**
+ * Normaliza un movimiento desde cualquier fuente (historial REST / WSS).
+ * @param {{ idRegistro?: number|null, idComando?: number|null, comando?: string|null, fecha?: string, hora?: string, timestamp?: string }} fuente
+ * @returns {{ idRegistro: number|null, idComando: number|null, comando: string, fecha: string, hora: string, timestamp: string|null }}
+ */
+function crearMovimiento({ idRegistro = null, idComando = null, comando = null, fecha = '', hora = '', timestamp = null } = {}) {
+  const nIdRegistro = (idRegistro === null || idRegistro === undefined) ? null : Number(idRegistro);
+  const nIdComando = (idComando === null || idComando === undefined) ? null : Number(idComando);
+  const meta = Number.isInteger(nIdComando) ? CONFIG.COMMAND_META?.[nIdComando] : null;
+  const nComando = String(
+    comando ||
+    (meta?.label ? meta.label : (nIdComando ? `CMD ${nIdComando}` : (nIdRegistro ? `Registro #${nIdRegistro}` : 'Movimiento')))
+  );
+  const { fecha: parsedFecha, hora: parsedHora } = extraerFechaHora(timestamp);
+  const nFecha = String(fecha || parsedFecha);
+  const nHora = String(hora || parsedHora);
+
+  return {
+    idRegistro: nIdRegistro,
+    idComando: nIdComando,
+    comando: nComando,
+    fecha: nFecha,
+    hora: nHora,
+    timestamp: timestamp || null,
+  };
+}
+
+/** Convierte la respuesta GET /historial a la lista de movimientos (máx. 10). */
+function aHistorial(data) {
+  const entries = data?.historial;
+  if (!Array.isArray(entries)) return [];
+  return entries.slice(0, MONITOREO_MAX_REGISTROS).map((entry) => {
+    const rawTimestamp = entry?.fecha_hora || entry?.timestamp || null;
+    const { fecha, hora } = extraerFechaHora(rawTimestamp);
+    const idComando = entry?.codigo ?? entry?.id_comando ?? null;
+    const nId = idComando !== null && idComando !== undefined ? Number(idComando) : null;
+    const comandoNombre = entry?.comando ?? entry?.nombre_comando ?? (nId ? CONFIG.COMMAND_META?.[nId]?.label : null);
+
+    return crearMovimiento({
+      idRegistro: entry?.id_historial ?? entry?.id_registro ?? null,
+      idComando: Number.isInteger(nId) ? nId : null,
+      comando: comandoNombre,
+      fecha: entry?.fecha || fecha,
+      hora: entry?.hora || hora,
+      timestamp: rawTimestamp,
+    });
+  });
+}
+
+/** Normaliza el payload del evento WSS {"evento":"ESTADO_INICIAL", ...} o GET /estado. */
+function aEstadoInicial(payload = {}) {
+  const estadoObj = Array.isArray(payload?.estado)
+    ? payload.estado[0]
+    : (payload?.estado || (Array.isArray(payload) ? payload[0] : payload) || {});
+
+  const idComando = estadoObj?.id_comando ?? estadoObj?.codigo;
+  const nIdComando = idComando !== null && idComando !== undefined ? Number(idComando) : null;
+  const comando = String(
+    estadoObj?.comando ||
+    estadoObj?.nombre ||
+    (Number.isInteger(nIdComando) ? (CONFIG.COMMAND_META?.[nIdComando]?.label || `CMD ${nIdComando}`) : 'Desconocido')
+  );
+  const rawTimestamp = payload?.timestamp || estadoObj?.fecha_actualizacion || estadoObj?.fecha_hora || null;
+  const { fecha, hora } = extraerFechaHora(rawTimestamp);
+
+  return crearMovimiento({
+    idRegistro: estadoObj?.id_historial ?? estadoObj?.id_registro ?? null,
+    idComando: Number.isInteger(nIdComando) ? nIdComando : null,
+    comando,
+    fecha: estadoObj?.fecha || fecha,
+    hora: estadoObj?.hora || hora,
+    timestamp: rawTimestamp,
+  });
+}
+
+/** Normaliza el payload WSS {"tipo":"MOVIMIENTO_INDIVIDUAL", ...} -> SÍ persiste en tabla. */
+function aMovimientoIndividual(payload = {}) {
+  const idComando = payload?.id_comando ?? payload?.codigo;
+  const nIdComando = idComando !== null && idComando !== undefined ? Number(idComando) : null;
+  const comando = String(
+    payload?.comando ||
+    (Number.isInteger(nIdComando) ? (CONFIG.COMMAND_META?.[nIdComando]?.label || `CMD ${nIdComando}`) : payload?.nombre_comando || 'Movimiento')
+  );
+  const rawTimestamp = payload?.timestamp || payload?.fecha_hora || null;
+  const { fecha, hora } = extraerFechaHora(rawTimestamp);
+
+  return crearMovimiento({
+    idRegistro: payload?.id_historial ?? payload?.id_registro ?? null,
+    idComando: Number.isInteger(nIdComando) ? nIdComando : null,
+    comando,
+    fecha: payload?.fecha || fecha,
+    hora: payload?.hora || hora,
+    timestamp: rawTimestamp,
+  });
+}
+
+// Mapeo semántico de nombres textuales de comandos a sus identificadores oficiales
+const COMMAND_NAME_ALIASES = Object.freeze({
+  'AVANZAR': 1,
+  'ADELANTE': 1,
+  'FORWARD': 1,
+  'RETROCEDER': 2,
+  'ATRAS': 2,
+  'ATRÁS': 2,
+  'BACKWARD': 2,
+  'GIRAR_DERECHA': 3,
+  'GIRAR DERECHA': 3,
+  'DERECHA': 3,
+  'RIGHT': 3,
+  'GIRAR_IZQUIERDA': 4,
+  'GIRAR IZQUIERDA': 4,
+  'IZQUIERDA': 4,
+  'LEFT': 4,
+  'SUBIR_EXCAVADORA': 5,
+  'SUBIR EXCAVADORA': 5,
+  'ALZAR_PALA': 5,
+  'ALZAR PALA': 5,
+  'PALA_ARRIBA': 5,
+  'BAJAR_EXCAVADORA': 6,
+  'BAJAR EXCAVADORA': 6,
+  'BAJAR_PALA': 6,
+  'BAJAR PALA': 6,
+  'PALA_ABAJO': 6,
+  'AVANZAR_DERECHA': 7,
+  'AVANZAR DERECHA': 7,
+  'DIAGONAL_DERECHA': 7,
+  'DIAGONAL DERECHA': 7,
+  'AVANZAR_IZQUIERDA': 8,
+  'AVANZAR IZQUIERDA': 8,
+  'DIAGONAL_IZQUIERDA': 8,
+  'DIAGONAL IZQUIERDA': 8,
+  'LUCES': 9,
+  'LUZ': 9,
+  'LIGHTS': 9,
+  'SONIDO': 10,
+  'CLAXON': 10,
+  'HORN': 10,
+  'SOUND': 10,
+  'DEMO_FABRICA': 11,
+  'DEMO FABRICA': 11,
+  'DEMO': 11,
+  'DETENER': 12,
+  'PARO': 12,
+  'STOP': 12,
+  'ENCENDER': 13,
+  'START': 13,
+  'APAGAR': 14,
+  'OFF': 14,
+});
+
+/**
+ * Resuelve el ID numérico de un comando desde cualquier estructura de payload
+ * (soporta id_comando, codigo, cmdId, o resolución por nombre textual).
+ */
+function resolverIdComando(payload) {
+  if (typeof payload === 'number') return Number.isInteger(payload) ? payload : null;
+  if (!payload || typeof payload !== 'object') return null;
+
+  const directId = payload?.id_comando ?? payload?.codigo ?? payload?.idComando ?? payload?.cmdId;
+  if (directId !== undefined && directId !== null && directId !== '') {
+    const num = Number(directId);
+    if (Number.isInteger(num)) return num;
+  }
+
+  const raw = String(payload?.comando || payload?.nombre || payload?.nombre_comando || '').trim().toUpperCase();
+  if (raw && COMMAND_NAME_ALIASES[raw]) {
+    return COMMAND_NAME_ALIASES[raw];
+  }
+
+  return null;
+}
+
+/** Normaliza el payload WSS {"evento":"MOVIMIENTO_DEMO", ...} -> NO persiste en tabla. */
+function aMovimientoDemo(payload = {}) {
+  const rawTimestamp = payload?.timestamp || payload?.fecha_hora || null;
+  const { fecha, hora } = extraerFechaHora(rawTimestamp);
+  const idComando = resolverIdComando(payload);
+  const meta = idComando ? CONFIG.COMMAND_META?.[idComando] : null;
+  const comando = String(payload?.comando || payload?.nombre_comando || meta?.label || 'Demo');
+  return crearMovimiento({
+    idComando: Number.isInteger(idComando) ? idComando : null,
+    comando,
+    fecha,
+    hora,
+    timestamp: rawTimestamp,
+  });
+}
+
+/**
+ * Renderiza la tarjeta destacada del último movimiento.
+ * - mov === null  -> Estado visual "Cargando"
+ * - sin idComando -> Estado visual "Sin movimientos"
+ */
+function renderUltimoMovimiento(mov) {
+  const commandEl = document.getElementById('monitorLastCommand');
+  const metaEl = document.getElementById('monitorLastMeta');
+  const fechaEl = document.getElementById('monitorLastFecha');
+  const horaEl = document.getElementById('monitorLastHora');
+  const statusEl = document.getElementById('monitorLastMovementStatus');
+
+  if (!commandEl || !metaEl || !fechaEl || !horaEl || !statusEl) return;
+
+  const paint = (comando, metaText, fecha, hora, statusText, statusTone, idComando) => {
+    if (commandEl) {
+      commandEl.textContent = '';
+      const cmdMeta = idComando ? CONFIG.COMMAND_META?.[idComando] : null;
+      if (cmdMeta?.icon) {
+        const ico = document.createElement('i');
+        ico.className = `bi ${cmdMeta.icon} me-1`;
+        commandEl.appendChild(ico);
+      }
+      commandEl.appendChild(document.createTextNode(comando));
+    }
+    if (metaEl) metaEl.textContent = metaText;
+    if (fechaEl) fechaEl.textContent = fecha;
+    if (horaEl) horaEl.textContent = hora;
+    if (statusEl) {
+      statusEl.textContent = statusText;
+      statusEl.className = 'badge ' + statusTone;
+    }
+  };
+
+  if (!mov) {
+    // Estado visual: "Cargando"
+    paint('—', 'Consultando último movimiento…', '—', '—', 'Cargando', 'text-bg-secondary');
+    return;
+  }
+
+  const esSinMovimientos = !mov.idComando && !mov.idRegistro;
+  const esDetenido = mov.idComando === CONFIG.COMMANDS.DETENER || String(mov.comando).toLowerCase().includes('detener');
+
+  if (esSinMovimientos) {
+    // Estado visual: "Sin movimientos"
+    paint('—', 'Sin movimientos registrados para el vehículo.', '—', '—', 'Sin movimientos', 'text-bg-secondary');
+    return;
+  }
+
+  const metaText = mov.fecha
+    ? `Último movimiento: ${mov.comando} · ${mov.fecha} ${mov.hora || ''}`.trim()
+    : `Último movimiento: ${mov.comando} · CMD ${mov.idComando}`;
+
+  paint(
+    mov.comando,
+    metaText,
+    mov.fecha || '—',
+    mov.hora || '—',
+    esDetenido ? 'Vehículo Detenido' : 'Último Movimiento Registrado',
+    esDetenido ? 'text-bg-danger' : 'text-bg-success',
+    mov.idComando
+  );
+}
+
+/**
+ * Renderiza la tabla semántica de los últimos movimientos (máx. 10).
+ * Columnas: #, Movimiento, Fecha, Hora.
+ */
+function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registrados para el vehículo.') {
+  const tbody = document.getElementById('monitorHistorialBody');
+  const empty = document.getElementById('monitorHistorialEmpty');
+  const countBadge = document.getElementById('monitorHistorialCount');
+
+  if (!tbody) return;
+
+  const movs = Array.isArray(movimientos) ? movimientos.slice(0, MONITOREO_MAX_REGISTROS) : [];
+
+  tbody.textContent = '';
+
+  if (movs.length === 0) {
+    if (empty) {
+      empty.hidden = false;
+      let msgEl = empty.querySelector('.monitor-empty-text');
+      if (!msgEl) {
+        msgEl = document.createElement('span');
+        msgEl.className = 'small text-secondary monitor-empty-text';
+        empty.appendChild(msgEl);
+      }
+      msgEl.textContent = emptyText;
+    }
+    if (countBadge) countBadge.textContent = '0 movimientos';
+    return;
+  }
+
+  if (empty) empty.hidden = true;
+  if (countBadge) countBadge.textContent = `${movs.length} ${movs.length === 1 ? 'movimiento' : 'movimientos'}`;
+
+  movs.forEach((mov, index) => {
+    const tr = document.createElement('tr');
+
+    const tdNumero = document.createElement('td');
+    tdNumero.className = 'text-center';
+    const badge = document.createElement('span');
+    badge.className = 'badge text-bg-dark border border-secondary font-monospace';
+    badge.textContent = `#${mov.idRegistro ?? mov.idComando ?? index + 1}`;
+    tdNumero.appendChild(badge);
+
+    const tdMovimiento = document.createElement('td');
+    tdMovimiento.className = 'monitor-movimiento-cell';
+    const meta = mov.idComando ? CONFIG.COMMAND_META?.[mov.idComando] : null;
+    if (meta?.icon) {
+      const ico = document.createElement('i');
+      ico.className = `bi ${meta.icon} me-1`;
+      tdMovimiento.appendChild(ico);
+    }
+    tdMovimiento.appendChild(document.createTextNode(mov.comando));
+
+    const tdFecha = document.createElement('td');
+    tdFecha.className = 'text-center font-monospace';
+    tdFecha.textContent = mov.fecha || '—';
+
+    const tdHora = document.createElement('td');
+    tdHora.className = 'text-center font-monospace';
+    tdHora.textContent = mov.hora || '—';
+
+    tr.append(tdNumero, tdMovimiento, tdFecha, tdHora);
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * Renderiza el catálogo de comandos soportados por el vehículo desde GET /comandos.
+ */
+function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponibles.') {
+  const tbody = document.getElementById('monitorComandosBody');
+  const empty = document.getElementById('monitorComandosEmpty');
+  const countBadge = document.getElementById('monitorComandosCount');
+
+  if (!tbody) return;
+
+  tbody.textContent = '';
+
+  const lista = Array.isArray(comandos) ? comandos : [];
+
+  if (lista.length === 0) {
+    if (empty) {
+      empty.hidden = false;
+      let msgEl = empty.querySelector('.monitor-empty-text');
+      if (!msgEl) {
+        msgEl = document.createElement('span');
+        msgEl.className = 'small text-secondary monitor-empty-text';
+        empty.appendChild(msgEl);
+      }
+      msgEl.textContent = emptyText;
+    }
+    if (countBadge) countBadge.textContent = '0 comandos';
+    return;
+  }
+
+  if (empty) empty.hidden = true;
+  if (countBadge) countBadge.textContent = `${lista.length} comandos`;
+
+  lista.forEach((cmd) => {
+    const tr = document.createElement('tr');
+
+    const tdNumero = document.createElement('td');
+    tdNumero.className = 'text-center';
+    const badge = document.createElement('span');
+    badge.className = 'badge text-bg-dark border border-secondary font-monospace';
+    const codigo = cmd?.codigo ?? cmd?.id_comando;
+    badge.textContent = codigo ? `#${codigo}` : '—';
+    tdNumero.appendChild(badge);
+
+    const tdNombre = document.createElement('td');
+    tdNombre.className = 'monitor-movimiento-cell';
+    const meta = codigo ? CONFIG.COMMAND_META?.[codigo] : null;
+    if (meta?.icon) {
+      const ico = document.createElement('i');
+      ico.className = `bi ${meta.icon} me-1`;
+      tdNombre.appendChild(ico);
+    }
+    tdNombre.appendChild(document.createTextNode(cmd?.nombre || '—'));
+
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'text-secondary small';
+    tdDesc.textContent = cmd?.descripcion || '—';
+
+    const tdEstado = document.createElement('td');
+    tdEstado.className = 'text-center';
+    const activo = cmd?.activo === 1 || cmd?.activo === true;
+    const badgeEstado = document.createElement('span');
+    badgeEstado.className = activo
+      ? 'badge bg-success-subtle text-success border border-success-subtle'
+      : 'badge bg-secondary-subtle text-secondary border border-secondary-subtle';
+    badgeEstado.textContent = activo ? 'Activo' : 'Inactivo';
+    tdEstado.appendChild(badgeEstado);
+
+    tr.append(tdNumero, tdNombre, tdDesc, tdEstado);
+    tbody.appendChild(tr);
+  });
+}
+
+/** Carga inicial del panel de Monitoreo: GET estado + GET historial + GET comandos (REST). */
+async function cargarPanelMonitoreo() {
+  // Estado visual inicial: "Cargando"
+  renderUltimoMovimiento(null);
+  renderHistorial([], 'Consultando historial de movimientos…');
+  renderComandosCatalogo([], 'Consultando catálogo de comandos…');
+
+  try {
+    const [estadoRes, historialRes, comandosRes] = await Promise.all([
+      api.obtenerEstado(),
+      api.obtenerHistorial(),
+      api.obtenerComandos(),
+    ]);
+
+    // 1. Catálogo de comandos soportados por el vehículo
+    const comandos = Array.isArray(comandosRes?.data) ? comandosRes.data : [];
+    renderComandosCatalogo(comandos);
+
+    // 2. Historial de movimientos persistidos
+    const historial = aHistorial(historialRes?.data);
+    STATE.monitorHistorial = historial;
+    renderHistorial(historial);
+
+    // 3. Tarjeta destacada de último movimiento
+    let ultimo = null;
+    if (historial.length > 0) {
+      ultimo = historial[0];
+    } else if (estadoRes?.ok) {
+      ultimo = aEstadoInicial({ estado: estadoRes.data, timestamp: null });
+    }
+
+    renderUltimoMovimiento(ultimo);
+  } catch (err) {
+    // Ante cualquier fallo de carga se muestra el estado honesto (nunca queda en "Cargando")
+    console.error('[MONITOREO] Error al cargar panel de monitoreo:', err);
+    renderUltimoMovimiento({
+      idRegistro: null,
+      idComando: null,
+      comando: 'Sin movimientos registrados',
+      fecha: '',
+      hora: '',
+      timestamp: null,
+    });
+    renderHistorial([], 'Sin movimientos disponibles por el momento.');
+    renderComandosCatalogo([], 'No fue posible cargar el catálogo de comandos.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NAVEGACIÓN PRINCIPAL: VISTA DE CONTROL <-> VISTA DE MONITOREO
+// ---------------------------------------------------------------------------
+function actualizarNavPills(vistaActiva) {
+  const btnControl = document.getElementById('navBtnControl');
+  const btnMonitor = document.getElementById('navBtnMonitor');
+  if (btnControl && btnMonitor) {
+    const esMonitor = vistaActiva === 'monitor';
+    btnControl.classList.toggle('active', !esMonitor);
+    btnControl.setAttribute('aria-selected', String(!esMonitor));
+    btnMonitor.classList.toggle('active', esMonitor);
+    btnMonitor.setAttribute('aria-selected', String(esMonitor));
+  }
+}
+
+function bindViewNavigation() {
+  document.querySelectorAll('[data-view-switch]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const vista = btn.dataset.viewSwitch;
+      if (vista === 'monitor') {
+        entrarAMonitor();
+      } else {
+        salirDeMonitor();
+      }
+    });
+  });
+
+  const btnRefresh = document.getElementById('btnRefreshMonitor');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => {
+      cargarPanelMonitoreo();
+    });
+  }
+}
+
+async function entrarAMonitor() {
+  // Ocultar mando/lobby y mostrar monitoreo (sin salir de fullscreen ni desbloquear orientación)
+  UI.setMonitorView(true);
+  actualizarNavPills('monitor');
+  await cargarPanelMonitoreo();
+}
+
+function salirDeMonitor() {
+  UI.setMonitorView(false);
+  actualizarNavPills('control');
+  // Restaurar la vista de control previa (mando o lobby)
+  UI.setMandoMode(modoControlPreferido);
+}
+
 function mapWssState(wsState, detail = '') {
   if (wsState === 'open') {
     return { state: 'online', detail: detail || 'En línea · Operativo' };
@@ -312,11 +824,78 @@ function bindWebSocketEvents() {
     UI.demoTimelineEnd('Rutina finalizada por el vehículo', 'success');
   });
 
-  wsService.on('command_echo', (idComando) => {
+  // FASE MONITOREO: estado inicial entregado por WSS (no es un movimiento persistido)
+  wsService.on('estado_inicial', (payload) => {
+    const mov = aEstadoInicial(payload);
+    renderUltimoMovimiento(mov);
+    syncDiagnostics();
+  });
+
+  // FASE MONITOREO: movimiento individual persistido -> SÍ entra a la tabla de historial
+  wsService.on('movimiento_individual', (payload) => {
+    const mov = aMovimientoIndividual(payload);
+
+    // Evitar duplicar el mismo registro exacto si ya existe por idRegistro o timestamp idéntico
+    const duplicado = STATE.monitorHistorial.some(
+      (m) =>
+        (mov.idRegistro && m.idRegistro === mov.idRegistro) ||
+        (mov.timestamp && m.timestamp && m.timestamp === mov.timestamp)
+    );
+
+    if (!duplicado) {
+      STATE.monitorHistorial.unshift(mov);
+      STATE.monitorHistorial = STATE.monitorHistorial.slice(0, MONITOREO_MAX_REGISTROS);
+      renderHistorial(STATE.monitorHistorial);
+    }
+
+    // Actualiza la tarjeta destacada del último movimiento en tiempo real
+    renderUltimoMovimiento(mov);
+    syncDiagnostics();
+  });
+
+  // Evento de movimiento emitido durante la ejecución de una DEMO
+  wsService.on('movimiento_demo', (payload) => {
+    STATE.demoActive = true;
+    UI.setDemoStatus(true);
+
+    const cmdId = resolverIdComando(payload);
+    const mov = aMovimientoDemo(payload);
+
+    // 1. Añadir el paso inmediatamente a la cronología de movimientos de la demo
+    UI.demoTimelineAddStep(cmdId, {
+      name: mov.comando || payload?.comando || payload?.nombre_comando,
+      cmdId: cmdId,
+      orden: payload?.orden,
+      duracionMs: payload?.duracion_ms,
+      timestamp: payload?.timestamp || payload?.fecha_hora,
+    });
+
+    // 2. Actualizar el indicador de comando activo y pulso visual
+    if (cmdId) {
+      STATE.lastSentCommand = cmdId;
+      const label = CONFIG.COMMAND_META[cmdId]?.label || mov.comando || `CMD ${cmdId}`;
+      UI.setCommandState(cmdId, `DEMO · ${label.toUpperCase()}`);
+      UI.setPulseState('active-demo');
+    }
+
+    // 3. Actualizar la tarjeta destacada en el panel de Monitoreo
+    renderUltimoMovimiento(mov);
+    syncDiagnostics();
+  });
+
+  wsService.on('command_echo', (idComando, payload) => {
     const cmdId = Number(idComando);
     STATE.lastSentCommand = cmdId;
     syncDiagnostics();
-    UI.demoTimelineAddStep(cmdId);
+
+    // Solo añade a la cronología si no proviene de un evento MOVIMIENTO_DEMO ya procesado
+    const ev = String(payload?.evento || payload?.tipo || '').toUpperCase();
+    if (ev !== 'MOVIMIENTO_DEMO' && ev !== 'DEMO_MOVIMIENTO') {
+      UI.demoTimelineAddStep(cmdId, {
+        name: CONFIG.COMMAND_META[cmdId]?.label || `Comando ${cmdId}`,
+        cmdId: cmdId,
+      });
+    }
 
     if (cmdId === CONFIG.COMMANDS.DETENER) {
       UI.setCommandState(cmdId, 'VEHÍCULO DETENIDO');
@@ -384,6 +963,8 @@ async function iniciarSaludPolling() {
 // ---------------------------------------------------------------------------
 async function entrarAModoMando() {
   // Cambio de vista inmediato: no depende de que fullscreen u orientación se resuelvan
+  mandoActivo = true;
+  modoControlPreferido = true;
   STATE.activeController = null;
   window.activeController = null;
   UI.setControllerLock(null);
@@ -424,6 +1005,7 @@ function salirDeModoMando() {
   STATE.activeController = null;
   window.activeController = null;
   UI.setControllerLock(null);
+  mandoActivo = false;
   UI.setMandoMode(false);
 }
 
@@ -437,8 +1019,12 @@ async function boot() {
   // No se usa el ancho del viewport: un móvil en horizontal también puede superar 768px.
   const esPC = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   if (esPC) {
+    mandoActivo = true;
+    modoControlPreferido = true;
     UI.setMandoMode(true);
   } else {
+    mandoActivo = false;
+    modoControlPreferido = false;
     UI.setMandoMode(false);
   }
 
@@ -652,6 +1238,7 @@ async function boot() {
   // Arrancar servicios
   bindWebSocketEvents();
   initJoystick();
+  bindViewNavigation();
   wsService.connect();
 
   // Carga inicial del catálogo de demos (informativo) en paralelo al polling de salud

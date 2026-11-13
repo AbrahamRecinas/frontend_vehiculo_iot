@@ -111,6 +111,9 @@ class WebSocketService {
    * Procesa mensajes de texto entrantes desde el backend.
    * Espera formatos JSON tales como:
    *  - {"id_comando": 1}
+   *  - {"evento": "ESTADO_INICIAL", "id_vehiculo": 1, "estado": {...}, "timestamp": "..."}
+   *  - {"tipo": "MOVIMIENTO_INDIVIDUAL", "id_vehiculo": 1, "id_comando": 12, "timestamp": "..."}
+   *  - {"evento": "MOVIMIENTO_DEMO", "orden": 1, "comando": "Girar Derecha", "duracion_ms": 2000, "pausa_ms": 500}
    *  - {"evento": "FIN_DEMO", "timestamp": "..."}
    */
   handleMessage(rawText) {
@@ -128,16 +131,35 @@ class WebSocketService {
     this.emit('message', payload);
 
     if (payload && typeof payload === 'object') {
+      const evento = String(payload.evento || payload.tipo || payload.event || payload.type || '').toUpperCase();
+
+      // Evento de estado inicial del vehículo (tarjeta de último movimiento / estado)
+      if (evento === 'ESTADO_INICIAL') {
+        this.emit('estado_inicial', payload);
+      }
+
       // Evento de finalización de demo
-      if (payload.evento === 'FIN_DEMO') {
+      if (evento === 'FIN_DEMO' || evento === 'DEMO_FIN') {
         this.emit('fin_demo', payload);
       }
 
+      // Evento de movimiento individual persistido (SÍ debe ir al historial del panel de Monitoreo)
+      if (evento === 'MOVIMIENTO_INDIVIDUAL') {
+        this.emit('movimiento_individual', payload);
+      }
+
+      // Evento de movimiento emitido por una demo (actualiza cronología en vivo y último movimiento)
+      const isDemoMovement = evento === 'MOVIMIENTO_DEMO' || evento === 'DEMO_MOVIMIENTO';
+      if (isDemoMovement) {
+        this.emit('movimiento_demo', payload);
+      }
+
       // Eco de comando ejecutado (algunos clientes serializan el ID como cadena)
-      if (payload.id_comando !== undefined && payload.id_comando !== null && payload.id_comando !== '') {
-        const idComando = Number(payload.id_comando);
+      const rawCmd = payload.id_comando ?? payload.codigo;
+      if (rawCmd !== undefined && rawCmd !== null && rawCmd !== '') {
+        const idComando = Number(rawCmd);
         if (Number.isInteger(idComando)) {
-          this.emit('command_echo', idComando);
+          this.emit('command_echo', idComando, payload);
         }
       }
     }

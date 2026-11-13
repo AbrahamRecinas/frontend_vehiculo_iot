@@ -171,6 +171,25 @@ class ApiService {
   }
 
   /**
+   * Consulta el estado actual del vehículo (último comando / estado operativo).
+   * GET /api/vehiculos/{id}/estado
+   */
+  async obtenerEstado() {
+    const endpoint = CONFIG.ENDPOINTS.ESTADO(this.vehicleId);
+    return this.request(endpoint, { method: 'GET' });
+  }
+
+  /**
+   * Consulta el historial de movimientos individuales persistidos (máximo 10).
+   * GET /api/vehiculos/{id}/historial
+   */
+  async obtenerHistorial() {
+    const endpoint = CONFIG.ENDPOINTS.HISTORIAL(this.vehicleId);
+    const res = await this.request(endpoint, { method: 'GET' });
+    return res;
+  }
+
+  /**
    * Comprueba la disponibilidad del servidor AWS realizando un GET a /docs.
    * @returns {Promise<{ ok: boolean, status: number, latencyMs: number, error?: string }>}
    */

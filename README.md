@@ -7,10 +7,10 @@ Aplicación web **Mobile First** (HTML5 semántico + CSS3 + Bootstrap 5 + Vanill
 | Fase | Módulo | Estado |
 |---|---|---|
 | **Control** | `index.html`, `assets/css/style.css`, `assets/js/{config,api,ws,joystick,ui,app}.js` | ✅ En desarrollo |
-| Monitoreo | Panel de telemetría / estado del vehículo | ⬜ No iniciado |
+| **Monitoreo** | Panel de telemetría / estado del vehículo (Vista integrada en el mismo sitio) | ✅ En desarrollo |
 | Administración | Gestión de vehículos / usuarios | ⬜ No iniciado |
 
-> Este repositorio contiene **ÚNICAMENTE** la fase de Control. No incluye backend nuevo, ni tablas, ni procedimientos almacenados, ni módulo de Monitoreo/Administración.
+> Este repositorio contiene las fases de **Control** y **Monitoreo**. No incluye backend nuevo, ni tablas, ni procedimientos almacenados, ni módulo de Administración.
 
 ## Especificación del Backend (AWS / FastAPI)
 

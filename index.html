@@ -67,6 +67,42 @@
         </div>
       </div>
 
+      <!-- NAVEGACIÓN PRINCIPAL: ALTERNAR ENTRE VISTA DE CONTROL Y VISTA DE MONITOREO -->
+      <nav class="app-nav" id="appNav" aria-label="Navegación principal de la aplicación">
+        <div class="container-fluid px-3">
+          <ul class="nav nav-pills app-nav-pills" id="appNavList">
+            <li class="nav-item" role="presentation">
+              <button
+                type="button"
+                class="nav-link app-nav-link active"
+                id="navBtnControl"
+                data-view-switch="control"
+                role="tab"
+                aria-selected="true"
+                aria-controls="viewControl"
+              >
+                <i class="bi bi-controller" aria-hidden="true"></i>
+                <span>Vista de Control</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                type="button"
+                class="nav-link app-nav-link"
+                id="navBtnMonitor"
+                data-view-switch="monitor"
+                role="tab"
+                aria-selected="false"
+                aria-controls="viewMonitor"
+              >
+                <i class="bi bi-activity" aria-hidden="true"></i>
+                <span>Vista de Monitoreo</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
       <!-- PANEL DE CONECTIVIDAD: TRES ESTADOS VISUALES DIFERENCIADOS -->
       <section class="connectivity-bar px-3 py-1 bg-dark-subtle border-top border-secondary-subtle" aria-label="Estado del sistema">
         <div class="container-fluid px-0">
@@ -497,6 +533,125 @@
               </div>
             </div>
           </section>
+        </div>
+      </section>
+
+      <!-- VISTA DE MONITOREO: NOMBRE DEL VEHÍCULO + TARJETA ÚLTIMO MOVIMIENTO + TABLA HISTORIAL -->
+      <section id="monitorView" class="monitor-view" aria-label="Panel de monitoreo y telemetría del vehículo">
+        <div class="container-fluid px-2 py-2">
+
+          <!-- NOMBRE DEL VEHÍCULO -->
+          <div class="d-flex align-items-center justify-content-between gap-2 mb-2 monitor-vehicle-head">
+            <div class="d-flex align-items-center gap-2 min-w-0">
+              <span class="monitor-vehicle-icon" aria-hidden="true">
+                <i class="bi bi-cargo"></i>
+              </span>
+              <div class="min-w-0">
+                <h2 class="h6 mb-0 text-white fw-bold text-truncate">Grúa RC IoT · Vehículo #1</h2>
+                <small class="text-secondary">Panel de monitoreo · Telemetría en tiempo real</small>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info"
+                id="btnRefreshMonitor"
+                title="Actualizar datos del panel de monitoreo"
+              >
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                <span class="d-none d-sm-inline ms-1">Actualizar</span>
+              </button>
+              <span class="badge text-bg-primary font-monospace" id="monitorVehicleBadge">ID: 1</span>
+            </div>
+          </div>
+
+          <!-- TARJETA DESTACADA: ÚLTIMO MOVIMIENTO (GET al abrir / WSS en tiempo real) -->
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-last-movement" id="monitorLastMovementCard">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+              <span class="fw-semibold text-white small">
+                <i class="bi bi-clock-history me-1" aria-hidden="true"></i>Último Movimiento
+              </span>
+              <span class="badge text-bg-dark border border-secondary monitor-last-status" id="monitorLastMovementStatus">Sin datos</span>
+            </div>
+            <div class="card-body p-2">
+              <div class="row align-items-center g-2">
+                <div class="col-12 col-md-5 d-flex flex-column align-items-center text-center">
+                  <span class="monitor-last-command" id="monitorLastCommand">—</span>
+                  <small class="text-secondary d-block" id="monitorLastMeta">Consultando estado del vehículo…</small>
+                </div>
+                <div class="col-12 col-md-7">
+                  <dl class="row g-2 small text-secondary mb-0 monitor-last-facts">
+                    <div class="col-6">
+                      <dt class="d-inline">Fecha:</dt>
+                      <dd class="d-inline font-monospace text-white" id="monitorLastFecha">—</dd>
+                    </div>
+                    <div class="col-6">
+                      <dt class="d-inline">Hora:</dt>
+                      <dd class="d-inline font-monospace text-white" id="monitorLastHora">—</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TABLA SEMÁNTICA DE ÚLTIMOS 10 MOVIMIENTOS INDIVIDUALES PERSISTIDOS -->
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+              <span class="fw-semibold text-white small">
+                <i class="bi bi-list-check me-1" aria-hidden="true"></i>Historial de Movimientos
+              </span>
+              <span class="badge text-bg-dark border border-secondary" id="monitorHistorialCount">0 movimientos</span>
+            </div>
+            <div class="card-body p-2">
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" id="monitorHistorialTable" aria-label="Historial de los últimos diez movimientos del vehículo">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center" style="width: 12%;">#</th>
+                      <th scope="col">Movimiento</th>
+                      <th scope="col" class="text-center">Fecha</th>
+                      <th scope="col" class="text-center">Hora</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monitorHistorialBody"></tbody>
+                </table>
+              </div>
+              <div class="monitor-empty-state text-center py-3" id="monitorHistorialEmpty">
+                <span class="spinner-border spinner-border-sm text-secondary me-2" role="status" aria-hidden="true"></span>
+                <span class="small text-secondary monitor-empty-text" id="monitorHistorialEmptyText">Consultando historial de movimientos…</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- CATÁLOGO DE COMANDOS REGISTRADOS EN LA API -->
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+              <span class="fw-semibold text-white small">
+                <i class="bi bi-cpu me-1" aria-hidden="true"></i>Catálogo de Comandos de la API
+              </span>
+              <span class="badge text-bg-dark border border-secondary" id="monitorComandosCount">0 comandos</span>
+            </div>
+            <div class="card-body p-2">
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" id="monitorComandosTable" aria-label="Catálogo de comandos soportados por la API">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center" style="width: 12%;">CMD</th>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Descripción</th>
+                      <th scope="col" class="text-center">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monitorComandosBody"></tbody>
+                </table>
+              </div>
+              <div class="monitor-empty-state text-center py-3" id="monitorComandosEmpty">
+                <span class="spinner-border spinner-border-sm text-secondary me-2" role="status" aria-hidden="true"></span>
+                <span class="small text-secondary monitor-empty-text" id="monitorComandosEmptyText">Consultando catálogo de comandos…</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>

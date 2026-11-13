@@ -23,6 +23,8 @@ export const CONFIG = Object.freeze({
     COMANDOS: (id = 1) => `/api/vehiculos/${id}/comandos`,
     DEMOS: (id = 1) => `/api/vehiculos/${id}/demos`,
     DEMO_INICIAR: (id = 1) => `/api/vehiculos/${id}/demo`,
+    ESTADO: (id = 1) => `/api/vehiculos/${id}/estado`,
+    HISTORIAL: (id = 1) => `/api/vehiculos/${id}/historial`,
   }),
 
   // Catálogo completo de comandos del vehículo
@@ -45,20 +47,20 @@ export const CONFIG = Object.freeze({
 
   // Metadatos amigables para renderizado e inspección
   COMMAND_META: Object.freeze({
-    1: { id: 1, label: 'Avanzar', icon: '▲', category: 'movimiento' },
-    2: { id: 2, label: 'Retroceder', icon: '▼', category: 'movimiento' },
-    3: { id: 3, label: 'Girar Derecha', icon: '►', category: 'movimiento' },
-    4: { id: 4, label: 'Girar Izquierda', icon: '◄', category: 'movimiento' },
-    5: { id: 5, label: 'Alzar Pala', icon: '🏗️ ⬆️', category: 'pala' },
-    6: { id: 6, label: 'Bajar Pala', icon: '🏗️ ⬇️', category: 'pala' },
-    7: { id: 7, label: 'Diagonal Derecha', icon: '↗️', category: 'diagonal' },
-    8: { id: 8, label: 'Diagonal Izquierda', icon: '↖️', category: 'diagonal' },
-    9: { id: 9, label: 'Luces', icon: '💡', category: 'auxiliar' },
-    10: { id: 10, label: 'Sonido', icon: '📢', category: 'auxiliar' },
-    11: { id: 11, label: 'Demo Fábrica', icon: '▶️', category: 'demo' },
-    12: { id: 12, label: 'DETENER', icon: '🛑', category: 'seguridad' },
-    13: { id: 13, label: 'Encender', icon: '⚡', category: 'energia' },
-    14: { id: 14, label: 'Apagar', icon: '🔌', category: 'energia' },
+    1:  { id: 1,  label: 'Avanzar',            icon: 'bi-arrow-up',               category: 'movimiento' },
+    2:  { id: 2,  label: 'Retroceder',          icon: 'bi-arrow-down',             category: 'movimiento' },
+    3:  { id: 3,  label: 'Girar Derecha',       icon: 'bi-arrow-clockwise',        category: 'movimiento' },
+    4:  { id: 4,  label: 'Girar Izquierda',     icon: 'bi-arrow-counterclockwise', category: 'movimiento' },
+    5:  { id: 5,  label: 'Alzar Pala',          icon: 'bi-arrow-bar-up',           category: 'pala' },
+    6:  { id: 6,  label: 'Bajar Pala',          icon: 'bi-arrow-bar-down',         category: 'pala' },
+    7:  { id: 7,  label: 'Diagonal Derecha',    icon: 'bi-arrow-up-right',         category: 'diagonal' },
+    8:  { id: 8,  label: 'Diagonal Izquierda',  icon: 'bi-arrow-up-left',          category: 'diagonal' },
+    9:  { id: 9,  label: 'Luces',               icon: 'bi-lightbulb',              category: 'auxiliar' },
+    10: { id: 10, label: 'Sonido',              icon: 'bi-megaphone',              category: 'auxiliar' },
+    11: { id: 11, label: 'Demo Fábrica',        icon: 'bi-play-circle',            category: 'demo' },
+    12: { id: 12, label: 'DETENER',             icon: 'bi-stop-circle',            category: 'seguridad' },
+    13: { id: 13, label: 'Encender',            icon: 'bi-lightning-charge',        category: 'energia' },
+    14: { id: 14, label: 'Apagar',              icon: 'bi-power',                  category: 'energia' },
   }),
 
   // Parámetros de temporización y resiliencia de red

@@ -56,12 +56,26 @@ const UI = {
       btnExitMando: document.getElementById('btnExitMando'),
       lobbyView: document.getElementById('lobbyView'),
       mandoView: document.getElementById('mandoView'),
+      monitorView: document.getElementById('monitorView'),
       joystickPanel: document.getElementById('joystickPanel'),
       dpadPanel: document.getElementById('dpadPanel'),
       mandoLedWss: document.getElementById('mandoLedWss'),
       mandoLedAws: document.getElementById('mandoLedAws'),
       mandoLedRds: document.getElementById('mandoLedRds'),
       vehicleBadge: document.getElementById('vehicleBadge'),
+      monitorVehicleBadge: document.getElementById('monitorVehicleBadge'),
+      monitorLastMovementCard: document.getElementById('monitorLastMovementCard'),
+      monitorLastCommand: document.getElementById('monitorLastCommand'),
+      monitorLastMeta: document.getElementById('monitorLastMeta'),
+      monitorLastFecha: document.getElementById('monitorLastFecha'),
+      monitorLastHora: document.getElementById('monitorLastHora'),
+      monitorLastMovementStatus: document.getElementById('monitorLastMovementStatus'),
+      monitorHistorialBody: document.getElementById('monitorHistorialBody'),
+      monitorHistorialEmpty: document.getElementById('monitorHistorialEmpty'),
+      monitorHistorialCount: document.getElementById('monitorHistorialCount'),
+      monitorComandosBody: document.getElementById('monitorComandosBody'),
+      monitorComandosEmpty: document.getElementById('monitorComandosEmpty'),
+      monitorComandosCount: document.getElementById('monitorComandosCount'),
       toastContainer: document.getElementById('toastContainer'),
       currentYear: document.getElementById('currentYear'),
     };
@@ -240,6 +254,29 @@ const UI = {
     document.body.classList.toggle('mando-control', Boolean(isActive));
 
     return isActive;
+  },
+
+  /**
+   * FASE MONITOREO: alterna la Vista de Monitoreo dentro del mismo panel de control.
+   * Mantiene el Modo Mando (Lobby/Joystick) como vista "Control" subyacente.
+   * @param {boolean} isActive
+   */
+  setMonitorView: (isActive) => {
+    const monitor = document.getElementById('monitorView');
+    const mando   = document.getElementById('mandoView');
+    const lobby   = document.getElementById('lobbyView');
+
+    if (isActive) {
+      // Ocultar TODAS las vistas hermanas para que monitoreo las reemplace
+      if (mando) mando.classList.remove('is-visible');
+      if (lobby) lobby.classList.remove('is-visible');
+      document.body.classList.remove('mando-mode', 'mando-control');
+      if (monitor) monitor.classList.add('is-visible');
+    } else {
+      // Solo ocultar monitoreo; el llamador decide qué vista restaurar
+      if (monitor) monitor.classList.remove('is-visible');
+    }
+    return Boolean(isActive);
   },
 
   /**
@@ -454,40 +491,74 @@ const UI = {
     list.textContent = '';
     if (title) title.textContent = name;
     if (hint) hint.textContent = description || 'Esperando pasos del vehículo...';
-    if (empty) empty.textContent = 'Esperando pasos del vehículo...';
+    if (empty) {
+      empty.hidden = false;
+      empty.textContent = 'Esperando pasos del vehículo...';
+    }
     panel.classList.remove('is-finished');
     panel.classList.add('is-live');
   },
 
   /**
-   * Añade un paso recibido por WSS (eco de comando). Solo actúa con la rutina abierta.
+   * Añade un paso recibido por WSS a la cronología de la rutina.
+   * Acepta un cmdId numérico o un objeto de opciones { name, cmdId, orden, duracionMs, timestamp }.
    */
-  demoTimelineAddStep: (cmdId) => {
+  demoTimelineAddStep: (cmdIdOrInfo, extraOptions = {}) => {
     const panel = document.getElementById('demoTimeline');
     const list = document.getElementById('demoTimelineList');
     const empty = document.getElementById('demoTimelineEmpty');
-    if (!panel || !list || !panel.classList.contains('is-live')) return;
+    if (!panel || !list) return;
+
+    // Asegura que el panel esté en estado activo
+    if (!panel.classList.contains('is-live')) {
+      panel.classList.remove('is-finished');
+      panel.classList.add('is-live');
+    }
+
+    const isObj = cmdIdOrInfo !== null && typeof cmdIdOrInfo === 'object';
+    const opts = isObj ? { ...cmdIdOrInfo, ...extraOptions } : extraOptions;
+    const rawCmdId = isObj ? (opts.cmdId ?? opts.id_comando ?? opts.codigo) : cmdIdOrInfo;
+    const numId = rawCmdId !== null && rawCmdId !== undefined && rawCmdId !== '' ? Number(rawCmdId) : null;
+    const cmdId = Number.isInteger(numId) ? numId : null;
 
     list.querySelectorAll('.demo-step.is-current').forEach((el) => {
       el.classList.remove('is-current');
       el.classList.add('is-past');
     });
 
-    const meta = CONFIG.COMMAND_META[cmdId];
+    const meta = cmdId ? CONFIG.COMMAND_META[cmdId] : null;
     const li = document.createElement('li');
     li.className = 'demo-step is-current';
 
     const time = document.createElement('time');
     time.className = 'demo-step-time';
-    time.textContent = new Date().toLocaleTimeString('es-ES', { hour12: false });
+    let horaFormateada = '';
+    if (opts.timestamp) {
+      const iso = String(opts.timestamp).replace(' ', 'T');
+      if (iso.length > 10) horaFormateada = iso.slice(11, 19);
+    }
+    time.textContent = horaFormateada || new Date().toLocaleTimeString('es-ES', { hour12: false });
 
     const name = document.createElement('span');
     name.className = 'demo-step-name';
-    name.textContent = meta?.label || `Comando ${cmdId}`;
+    if (meta?.icon) {
+      const ico = document.createElement('i');
+      ico.className = `bi ${meta.icon} me-1`;
+      name.appendChild(ico);
+    }
+    const labelTexto = opts.name || meta?.label || (cmdId ? `Comando ${cmdId}` : 'Movimiento');
+    name.appendChild(document.createTextNode(labelTexto));
+
+    if (opts.duracionMs && Number(opts.duracionMs) > 0) {
+      const dur = document.createElement('small');
+      dur.className = 'text-secondary ms-1';
+      dur.textContent = `(${(Number(opts.duracionMs) / 1000).toFixed(1)}s)`;
+      name.appendChild(dur);
+    }
 
     const chip = document.createElement('span');
-    chip.className = 'demo-step-id';
-    chip.textContent = `#${cmdId}`;
+    chip.className = 'demo-step-id font-monospace';
+    chip.textContent = cmdId ? `#${cmdId}` : (opts.orden ? `Paso ${opts.orden}` : '•');
 
     li.append(time, name, chip);
     list.appendChild(li);

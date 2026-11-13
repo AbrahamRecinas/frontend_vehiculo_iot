@@ -943,7 +943,7 @@ body {
   line-height: 1.25;
 }
 
-/* Cronología en vivo de la rutina (solo PC: pasos recibidos por WSS) */
+/* Cronología en vivo de la rutina (en PC y mientras esté activa en cualquier dispositivo) */
 @media (hover: hover) and (pointer: fine) {
   .demo-timeline.desktop-detail {
     display: flex !important;
@@ -954,6 +954,17 @@ body {
     background: rgba(8, 13, 25, 0.72);
     border: 1px solid rgba(148, 163, 184, 0.18);
   }
+}
+
+.demo-timeline.is-live,
+.demo-timeline.is-finished {
+  display: flex !important;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(8, 13, 25, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .demo-timeline-head {
@@ -1871,5 +1882,193 @@ a:focus-visible,
   body.mando-control #toastContainer {
     margin-bottom: 8px !important;
     padding: 8px !important;
+  }
+}
+
+/* ==========================================================================
+   12. MÓDULO DE MONITOREO — VISTA DE TELEMETRÍA Y HISTORIAL DE MOVIMIENTOS
+   ========================================================================== */
+
+/* Barra de navegación superior: alternar Vista de Control <-> Vista de Monitoreo */
+.app-nav {
+  background: rgba(8, 13, 26, 0.92);
+  border-bottom: 1px solid var(--surface-border);
+  flex-shrink: 0;
+}
+
+.app-nav .app-nav-pills {
+  display: flex;
+}
+
+.app-nav .app-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: #94a3b8 !important;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.app-nav .app-nav-link:hover {
+  color: #e2e8f0 !important;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.app-nav .app-nav-link.active {
+  color: #67e8f9 !important;
+  background: rgba(6, 182, 212, 0.14);
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+/* Vista: oculta por defecto, se muestra con el modificador .is-visible
+   (mismo patrón que Lobby / Modo Mando). */
+.monitor-view {
+  display: none;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.monitor-view.is-visible {
+  display: flex;
+}
+
+/* Fila superior: nombre del vehículo + badge de ID */
+.monitor-vehicle-head {
+  flex-shrink: 0;
+}
+
+.monitor-vehicle-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  color: #67e8f9;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.28);
+  flex-shrink: 0;
+}
+
+.monitor-vehicle-badge {
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+/* Tarjeta destacada del último movimiento */
+.monitor-last-movement {
+  flex-shrink: 0;
+}
+
+.monitor-last-command {
+  display: block;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #67e8f9;
+  font-family: var(--font-mono);
+  word-break: break-word;
+}
+
+.monitor-last-meta {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.monitor-last-facts {
+  margin-bottom: 0;
+}
+
+.monitor-last-facts dt {
+  color: #94a3b8;
+}
+
+.monitor-last-facts dd {
+  margin-bottom: 0;
+  color: #f1f5f9;
+}
+
+/* Tabla de historial: contenedor scrollable para no desbordar en móvil */
+.monitor-table-responsive {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+}
+
+.monitor-table {
+  width: 100%;
+  margin-bottom: 0;
+  font-size: 0.78rem;
+  /* En móvil la tabla se envuelve en scroll horizontal (nunca desborda) */
+  min-width: 420px;
+}
+
+.monitor-table th,
+.monitor-table td {
+  padding: 0.5rem 0.6rem;
+  vertical-align: middle;
+}
+
+.monitor-table thead th {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.monitor-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.monitor-table tbody tr:last-child .monitor-movimiento-cell {
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.monitor-table tbody tr:first-child .monitor-movimiento-cell {
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.monitor-movimiento-cell {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* Estado vacío / cargando de la tabla de historial */
+.monitor-empty-state {
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  background: rgba(8, 13, 25, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE: ajustes del módulo de Monitoreo por capacidad y orientación
+   -------------------------------------------------------------------------- */
+@media (max-width: 575.98px) {
+  .monitor-last-command {
+    font-size: 1.6rem;
+  }
+
+  .monitor-vehicle-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+    border-radius: 10px;
   }
 }
