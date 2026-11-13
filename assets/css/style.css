@@ -1158,7 +1158,7 @@ body {
 
 /* Lobby: vista inicial (movil) - oculto en PC */
 .lobby-view {
-  display: none;
+  display: none !important;
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
@@ -1167,18 +1167,18 @@ body {
 }
 
 .lobby-view.is-visible {
-  display: flex;
+  display: flex !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .lobby-view {
-    display: none;
+    display: none !important;
   }
 }
 
 /* Modo Mando: vista fullscreen del controlador */
 .mando-view {
-  display: none;
+  display: none !important;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
@@ -1186,7 +1186,7 @@ body {
 }
 
 .mando-view.is-visible {
-  display: flex;
+  display: flex !important;
 }
 
 /* Layout de 3 columnas del Modo Mando: Joystick (30%) / D-Pad (30%) / Centro (40%) */
@@ -1928,14 +1928,14 @@ a:focus-visible,
 /* Vista: oculta por defecto, se muestra con el modificador .is-visible
    (mismo patrón que Lobby / Modo Mando). */
 .monitor-view {
-  display: none;
+  display: none !important;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 .monitor-view.is-visible {
-  display: flex;
+  display: flex !important;
 }
 
 /* Fila superior: nombre del vehículo + badge de ID */

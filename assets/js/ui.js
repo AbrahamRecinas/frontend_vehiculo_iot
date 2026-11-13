@@ -236,47 +236,50 @@ const UI = {
   },
 
   /**
-   * FASE 1: alterna entre el Lobby (vista inicial movil) y el Modo Mando.
-   * En PC (>= 768px) el Lobby nunca se muestra: arranca directamente en el Modo Mando.
+   * Control centralizado y atómico de vistas (Lobby, Mando, Monitoreo).
+   * Garantiza exclusión mutua total: exactamente UNA sola vista puede estar visible.
+   * viewName: 'lobby' | 'mando' | 'monitor'
    */
-  setMandoMode: (isActive) => {
-    const mando = document.getElementById('mandoView');
-    const lobby = document.getElementById('lobbyView');
-
-    if (mando) mando.classList.toggle('is-visible', Boolean(isActive));
-    if (lobby) lobby.classList.toggle('is-visible', !isActive);
-
-    // Marca global para condicionar textos largos vs LEDs minimales (solo movil)
-    document.body.classList.toggle('mando-mode', Boolean(isActive));
-
-    // FASE UX: dirección explícita del layout de control mientras esté activo
-    // (mantiene la fila gamepad en cualquier dispositivo; se limpia al salir)
-    document.body.classList.toggle('mando-control', Boolean(isActive));
-
-    return isActive;
-  },
-
-  /**
-   * FASE MONITOREO: alterna la Vista de Monitoreo dentro del mismo panel de control.
-   * Mantiene el Modo Mando (Lobby/Joystick) como vista "Control" subyacente.
-   * @param {boolean} isActive
-   */
-  setMonitorView: (isActive) => {
+  setView: (viewName) => {
     const monitor = document.getElementById('monitorView');
     const mando   = document.getElementById('mandoView');
     const lobby   = document.getElementById('lobbyView');
 
-    if (isActive) {
-      // Ocultar TODAS las vistas hermanas para que monitoreo las reemplace
-      if (mando) mando.classList.remove('is-visible');
-      if (lobby) lobby.classList.remove('is-visible');
-      document.body.classList.remove('mando-mode', 'mando-control');
-      if (monitor) monitor.classList.add('is-visible');
-    } else {
-      // Solo ocultar monitoreo; el llamador decide qué vista restaurar
-      if (monitor) monitor.classList.remove('is-visible');
+    const showMonitor = viewName === 'monitor';
+    const showMando   = viewName === 'mando';
+    const showLobby   = viewName === 'lobby';
+
+    if (monitor) {
+      monitor.classList.toggle('is-visible', showMonitor);
+      monitor.hidden = !showMonitor;
     }
-    return Boolean(isActive);
+    if (mando) {
+      mando.classList.toggle('is-visible', showMando);
+      mando.hidden = !showMando;
+    }
+    if (lobby) {
+      lobby.classList.toggle('is-visible', showLobby);
+      lobby.hidden = !showLobby;
+    }
+
+    document.body.classList.toggle('mando-mode', showMando);
+    document.body.classList.toggle('mando-control', showMando);
+
+    return viewName;
+  },
+
+  /**
+   * FASE 1: alterna entre el Lobby (vista inicial movil) y el Modo Mando.
+   */
+  setMandoMode: (isActive) => {
+    return UI.setView(isActive ? 'mando' : 'lobby');
+  },
+
+  /**
+   * FASE MONITOREO: activa la Vista de Monitoreo o restaura la vista de control.
+   */
+  setMonitorView: (isActive) => {
+    return UI.setView(isActive ? 'monitor' : 'lobby');
   },
 
   /**

@@ -9,7 +9,7 @@ import { CONFIG } from './config.js';
 import { api } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js';
+import { UI } from './ui.js?v=2.1';
 
 // ---------------------------------------------------------------------------
 // Referencias del DOM y controlador del joystick
@@ -20,6 +20,8 @@ let joystickController = null;
 let mandoActivo = false;
 // Modo de Control preferido por el usuario (se restaura al volver de Monitoreo)
 let modoControlPreferido = false;
+// Vista activa actual ('control' | 'monitor') para evitar colisiones entre eventos
+let vistaActual = 'control';
 
 const getEl = (id) => document.getElementById(id);
 
@@ -754,17 +756,18 @@ function bindViewNavigation() {
 }
 
 async function entrarAMonitor() {
-  // Ocultar mando/lobby y mostrar monitoreo (sin salir de fullscreen ni desbloquear orientación)
-  UI.setMonitorView(true);
+  vistaActual = 'monitor';
+  // Ocultar mando y lobby de forma atómica y mostrar únicamente telemetría
+  UI.setView('monitor');
   actualizarNavPills('monitor');
   await cargarPanelMonitoreo();
 }
 
 function salirDeMonitor() {
-  UI.setMonitorView(false);
+  vistaActual = 'control';
   actualizarNavPills('control');
-  // Restaurar la vista de control previa (mando o lobby)
-  UI.setMandoMode(modoControlPreferido);
+  // Restaurar la vista de control previa (mando si estaba activo, o lobby en móvil)
+  UI.setView(modoControlPreferido ? 'mando' : 'lobby');
 }
 
 function mapWssState(wsState, detail = '') {
@@ -965,10 +968,11 @@ async function entrarAModoMando() {
   // Cambio de vista inmediato: no depende de que fullscreen u orientación se resuelvan
   mandoActivo = true;
   modoControlPreferido = true;
+  vistaActual = 'control';
   STATE.activeController = null;
   window.activeController = null;
   UI.setControllerLock(null);
-  UI.setMandoMode(true);
+  UI.setView('mando');
 
   // Pantalla completa y orientación se solicitan sin bloquear la vista
   const docEl = document.documentElement;
@@ -1006,7 +1010,11 @@ function salirDeModoMando() {
   window.activeController = null;
   UI.setControllerLock(null);
   mandoActivo = false;
-  UI.setMandoMode(false);
+  modoControlPreferido = false;
+  // Solo volver al lobby si no estamos activamente en monitoreo
+  if (vistaActual !== 'monitor') {
+    UI.setView('lobby');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,17 +1029,18 @@ async function boot() {
   if (esPC) {
     mandoActivo = true;
     modoControlPreferido = true;
-    UI.setMandoMode(true);
+    UI.setView('mando');
   } else {
     mandoActivo = false;
     modoControlPreferido = false;
-    UI.setMandoMode(false);
+    UI.setView('lobby');
   }
 
   // Si el navegador sale de pantalla completa (gesto del sistema o tecla Esc),
   // en móvil se regresa al lobby para evitar ver el mando recortado
   document.addEventListener('fullscreenchange', () => {
     if (document.fullscreenElement || esPC) return;
+    if (vistaActual === 'monitor') return; // Nunca sacar de monitoreo por salida de fullscreen
     if (!document.body.classList.contains('mando-control')) return;
     salirDeModoMando();
   });
