@@ -16,7 +16,6 @@ Aplicación web **Mobile First** (HTML5 semántico + CSS3 + Bootstrap 5 + Vanill
 
 - **Base URL:** `https://grua-abraham.duckdns.org`
 - **WSS:** `wss://grua-abraham.duckdns.org/ws/vehiculo/1`
-- **Docs (Swagger):** `https://grua-abraham.duckdns.org/docs`
 - **Vehículo:** `#1`
 
 ### Endpoints de acción

@@ -190,6 +190,13 @@ class ApiService {
   }
 
   /**
+   * Verifica Amazon RDS: GET /api/vehiculos/ responde 200 solo si la BD está accesible.
+   */
+  async verificarRds() {
+    return this.request('/api/vehiculos/', { method: 'GET' });
+  }
+
+  /**
    * Comprueba la disponibilidad del servidor AWS realizando un GET a /docs.
    * @returns {Promise<{ ok: boolean, status: number, latencyMs: number, error?: string }>}
    */

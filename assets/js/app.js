@@ -6,10 +6,11 @@
  */
 
 import { CONFIG } from './config.js';
-import { api } from './api.js';
+import { api } from './api.js?v=2.4';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=2.1';
+import { UI } from './ui.js?v=2.5';
+import { initAdmin, solicitarAcceso, alEntrarAdmin } from './admin.js?v=2.5';
 
 // ---------------------------------------------------------------------------
 // Referencias del DOM y controlador del joystick
@@ -724,15 +725,11 @@ async function cargarPanelMonitoreo() {
 // NAVEGACIÓN PRINCIPAL: VISTA DE CONTROL <-> VISTA DE MONITOREO
 // ---------------------------------------------------------------------------
 function actualizarNavPills(vistaActiva) {
-  const btnControl = document.getElementById('navBtnControl');
-  const btnMonitor = document.getElementById('navBtnMonitor');
-  if (btnControl && btnMonitor) {
-    const esMonitor = vistaActiva === 'monitor';
-    btnControl.classList.toggle('active', !esMonitor);
-    btnControl.setAttribute('aria-selected', String(!esMonitor));
-    btnMonitor.classList.toggle('active', esMonitor);
-    btnMonitor.setAttribute('aria-selected', String(esMonitor));
-  }
+  document.querySelectorAll('.app-nav [data-view-switch]').forEach((btn) => {
+    const activa = btn.dataset.viewSwitch === vistaActiva;
+    btn.classList.toggle('active', activa);
+    btn.setAttribute('aria-selected', String(activa));
+  });
 }
 
 function bindViewNavigation() {
@@ -741,6 +738,8 @@ function bindViewNavigation() {
       const vista = btn.dataset.viewSwitch;
       if (vista === 'monitor') {
         entrarAMonitor();
+      } else if (vista === 'admin') {
+        entrarAAdmin();
       } else {
         salirDeMonitor();
       }
@@ -768,6 +767,15 @@ function salirDeMonitor() {
   actualizarNavPills('control');
   // Restaurar la vista de control previa (mando si estaba activo, o lobby en móvil)
   UI.setView(modoControlPreferido ? 'mando' : 'lobby');
+}
+
+async function entrarAAdmin() {
+  const autorizado = await solicitarAcceso();
+  if (!autorizado) return;
+  vistaActual = 'admin';
+  actualizarNavPills('admin');
+  UI.setView('admin');
+  await alEntrarAdmin();
 }
 
 function mapWssState(wsState, detail = '') {
@@ -865,6 +873,9 @@ function bindWebSocketEvents() {
     const mov = aMovimientoDemo(payload);
 
     // 1. Añadir el paso inmediatamente a la cronología de movimientos de la demo
+    if (!UI.demoTimelineIsLive()) {
+      UI.demoTimelineStart({ name: 'Rutina en curso' });
+    }
     UI.demoTimelineAddStep(cmdId, {
       name: mov.comando || payload?.comando || payload?.nombre_comando,
       cmdId: cmdId,
@@ -891,9 +902,9 @@ function bindWebSocketEvents() {
     STATE.lastSentCommand = cmdId;
     syncDiagnostics();
 
-    // Solo añade a la cronología si no proviene de un evento MOVIMIENTO_DEMO ya procesado
+    // Solo añade a la cronología durante una rutina y si no proviene de un evento MOVIMIENTO_DEMO ya procesado
     const ev = String(payload?.evento || payload?.tipo || '').toUpperCase();
-    if (ev !== 'MOVIMIENTO_DEMO' && ev !== 'DEMO_MOVIMIENTO') {
+    if (STATE.demoActive && ev !== 'MOVIMIENTO_DEMO' && ev !== 'DEMO_MOVIMIENTO') {
       UI.demoTimelineAddStep(cmdId, {
         name: CONFIG.COMMAND_META[cmdId]?.label || `Comando ${cmdId}`,
         cmdId: cmdId,
@@ -921,7 +932,8 @@ function bindWebSocketEvents() {
 // POLLING DE SALUD DE LA API
 // ---------------------------------------------------------------------------
 async function actualizarSaludApi({ showToast = false } = {}) {
-  const health = await api.comprobarSaludApi();
+  const [health, rdsRes] = await Promise.all([api.comprobarSaludApi(), api.verificarRds()]);
+  UI.setRdsStatus(rdsRes);
   const status = health.ok ? 'online' : 'offline';
 
   UI.setConnectivity({
@@ -933,7 +945,6 @@ async function actualizarSaludApi({ showToast = false } = {}) {
       httpStatus: health.status,
       error: health.error,
     },
-    rds: { state: 'unverified', detail: 'Sin verificar' },
   });
 
   syncDiagnostics({
@@ -1011,8 +1022,8 @@ function salirDeModoMando() {
   UI.setControllerLock(null);
   mandoActivo = false;
   modoControlPreferido = false;
-  // Solo volver al lobby si no estamos activamente en monitoreo
-  if (vistaActual !== 'monitor') {
+  // Solo volver al lobby si no estamos activamente en monitoreo o administración
+  if (vistaActual !== 'monitor' && vistaActual !== 'admin') {
     UI.setView('lobby');
   }
 }
@@ -1248,6 +1259,7 @@ async function boot() {
   bindWebSocketEvents();
   initJoystick();
   bindViewNavigation();
+  initAdmin();
   wsService.connect();
 
   // Carga inicial del catálogo de demos (informativo) en paralelo al polling de salud

@@ -11,7 +11,6 @@ export const CONFIG = Object.freeze({
   // URLs provistas y verificadas
   BASE_URL: 'https://grua-abraham.duckdns.org',
   WSS_URL: 'wss://grua-abraham.duckdns.org/ws/vehiculo/1',
-  DOCS_URL: 'https://grua-abraham.duckdns.org/docs',
 
   // Ruta de comprobación de la API (acordada con el backend en /docs)
   HEALTH_PATH: '/docs',

@@ -13,6 +13,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org; object-src 'none'; base-uri 'self'; form-action 'self'"
+  />
 
   <link rel="icon" type="image/svg+xml" href="./assets/icons/favicon.svg" />
   <link rel="manifest" href="./manifest.webmanifest" />
@@ -32,7 +36,7 @@
   />
 
   <!-- Estilos propios de la consola de control IoT -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=2.1" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=2.3" />
 </head>
 <body>
   <!-- Contenedor principal de la aplicación -->
@@ -97,6 +101,20 @@
               >
                 <i class="bi bi-activity" aria-hidden="true"></i>
                 <span>Vista de Monitoreo</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                type="button"
+                class="nav-link app-nav-link"
+                id="navBtnAdmin"
+                data-view-switch="admin"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminView"
+              >
+                <i class="bi bi-gear" aria-hidden="true"></i>
+                <span>Administración</span>
               </button>
             </li>
           </ul>
@@ -195,14 +213,6 @@
           <button type="button" id="btnRunDiag" class="btn btn-sm btn-info">
             Comprobar Enlace Ahora
           </button>
-          <a
-            href="https://grua-abraham.duckdns.org/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-sm btn-outline-secondary"
-          >
-            Ver Swagger API ↗
-          </a>
         </div>
       </div>
     </aside>
@@ -292,6 +302,17 @@
               <span>Entrar al modo mando</span>
             </button>
           </div>
+          <nav class="lobby-nav" aria-label="Otras vistas de la aplicación">
+            <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="monitor">
+              <i class="bi bi-activity" aria-hidden="true"></i>
+              <span>Monitoreo</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="admin">
+              <i class="bi bi-gear" aria-hidden="true"></i>
+              <span>Administración</span>
+            </button>
+          </nav>
+
           <p class="lobby-footnote">Al entrar se activa pantalla completa y orientación horizontal.</p>
         </div>
       </section>
@@ -654,7 +675,340 @@
           </div>
         </div>
       </section>
+
+      <!-- VISTA DE ADMINISTRACIÓN (oculta por defecto; acceso protegido por contraseña visual) -->
+      <section id="adminView" class="admin-view" aria-label="Panel de administración">
+        <div class="container-fluid px-2 py-2">
+
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-2">
+            <div class="card-body p-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div class="d-flex align-items-center gap-2">
+                <span class="monitor-vehicle-icon" aria-hidden="true"><i class="bi bi-gear-fill"></i></span>
+                <div>
+                  <h2 class="h6 mb-0 text-white fw-bold">Administración</h2>
+                  <small class="text-secondary">Vehículos, comandos, demos y pasos de demo</small>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <label for="adminVehiculoSelect" class="small text-secondary mb-0 text-nowrap">Vehículo:</label>
+                <select id="adminVehiculoSelect" class="form-select form-select-sm admin-select" aria-label="Vehículo activo para administrar"></select>
+              </div>
+            </div>
+          </div>
+
+          <ul class="nav nav-tabs admin-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="adminTabVehiculos" data-bs-toggle="tab" data-bs-target="#adminPaneVehiculos" type="button" role="tab" aria-controls="adminPaneVehiculos" aria-selected="true">
+                <i class="bi bi-cpu me-1" aria-hidden="true"></i>Vehículos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabComandos" data-bs-toggle="tab" data-bs-target="#adminPaneComandos" type="button" role="tab" aria-controls="adminPaneComandos" aria-selected="false">
+                <i class="bi bi-terminal me-1" aria-hidden="true"></i>Comandos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabDemos" data-bs-toggle="tab" data-bs-target="#adminPaneDemos" type="button" role="tab" aria-controls="adminPaneDemos" aria-selected="false">
+                <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Demos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabPasos" data-bs-toggle="tab" data-bs-target="#adminPanePasos" type="button" role="tab" aria-controls="adminPanePasos" aria-selected="false">
+                <i class="bi bi-list-ol me-1" aria-hidden="true"></i>Pasos de Demo
+              </button>
+            </li>
+          </ul>
+
+          <div class="tab-content card bg-body-tertiary border-secondary-subtle border-top-0 shadow-sm">
+            <!-- SECCIÓN: VEHÍCULOS -->
+            <div class="tab-pane fade show active p-2" id="adminPaneVehiculos" role="tabpanel" aria-labelledby="adminTabVehiculos" tabindex="0">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Registros de vehículos</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="vehiculo">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de vehículos">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center">ID</th>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Modelo</th>
+                      <th scope="col">Microcontrolador</th>
+                      <th scope="col" class="text-center">Estado</th>
+                      <th scope="col" class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminVehiculosBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- SECCIÓN: COMANDOS -->
+            <div class="tab-pane fade p-2" id="adminPaneComandos" role="tabpanel" aria-labelledby="adminTabComandos" tabindex="0">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Comandos del vehículo seleccionado</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="comando">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de comandos">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center">ID</th>
+                      <th scope="col" class="text-center">Código</th>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Descripción</th>
+                      <th scope="col" class="text-center">Estado</th>
+                      <th scope="col" class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminComandosBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- SECCIÓN: DEMOS -->
+            <div class="tab-pane fade p-2" id="adminPaneDemos" role="tabpanel" aria-labelledby="adminTabDemos" tabindex="0">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Demos del vehículo seleccionado</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="demo">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de demos">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center">ID</th>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Descripción</th>
+                      <th scope="col" class="text-center">Estado</th>
+                      <th scope="col" class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminDemosBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- SECCIÓN: PASOS DE DEMO -->
+            <div class="tab-pane fade p-2" id="adminPanePasos" role="tabpanel" aria-labelledby="adminTabPasos" tabindex="0">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                  <label for="adminDemoSelect" class="small text-secondary mb-0 text-nowrap">Demo:</label>
+                  <select id="adminDemoSelect" class="form-select form-select-sm admin-select" aria-label="Demo cuyos pasos se administran"></select>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAdminNuevoPaso" data-accion="nuevo" data-tipo="paso" disabled>
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de pasos de demo">
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-center">Orden</th>
+                      <th scope="col">Comando</th>
+                      <th scope="col" class="text-center">Duración</th>
+                      <th scope="col" class="text-center">Pausa</th>
+                      <th scope="col" class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminPasosBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <!-- MODALES DE ADMINISTRACIÓN -->
+
+    <!-- Contraseña visual de acceso a Administración -->
+    <div class="modal fade" id="modalAdminPassword" tabindex="-1" aria-labelledby="modalAdminPasswordTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <form class="modal-content" id="formAdminPassword" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalAdminPasswordTitulo">Acceso a Administración</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <label for="adminPasswordInput" class="form-label small text-secondary">Contraseña</label>
+            <input type="password" class="form-control" id="adminPasswordInput" name="password" autocomplete="off" required />
+            <div class="invalid-feedback" id="adminPasswordError" hidden>Contraseña incorrecta.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Entrar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Vehículo: crear / editar -->
+    <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-labelledby="modalVehiculoTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="formVehiculo" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalVehiculoTitulo">Nuevo vehículo</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="vehiculoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="vehiculoNombre" name="nombre" maxlength="100" required />
+            </div>
+            <div class="mb-2">
+              <label for="vehiculoModelo" class="form-label small">Modelo <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="vehiculoModelo" name="modelo" maxlength="50" required />
+            </div>
+            <div class="mb-2">
+              <label for="vehiculoMicro" class="form-label small">Microcontrolador</label>
+              <input type="text" class="form-control form-control-sm" id="vehiculoMicro" name="microcontrolador" maxlength="50" />
+            </div>
+            <div class="mb-2">
+              <label for="vehiculoDescripcion" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="vehiculoDescripcion" name="descripcion" rows="2"></textarea>
+            </div>
+            <div class="form-check form-switch" id="wrapActivoVehiculo">
+              <input class="form-check-input" type="checkbox" id="vehiculoActivo" name="activo" />
+              <label class="form-check-label small" for="vehiculoActivo">Activo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Comando: crear / editar -->
+    <div class="modal fade" id="modalComando" tabindex="-1" aria-labelledby="modalComandoTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="formComando" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo comando</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="comandoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="comandoNombre" name="nombre" maxlength="100" required />
+            </div>
+            <div class="mb-2">
+              <label for="comandoCodigo" class="form-label small">Código <span class="text-danger">*</span></label>
+              <input type="number" class="form-control form-control-sm" id="comandoCodigo" name="codigo" min="1" step="1" required />
+            </div>
+            <div class="mb-2">
+              <label for="comandoDescripcion" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="comandoDescripcion" name="descripcion" rows="2"></textarea>
+            </div>
+            <div class="form-check form-switch" id="wrapActivoComando">
+              <input class="form-check-input" type="checkbox" id="comandoActivo" name="activo" />
+              <label class="form-check-label small" for="comandoActivo">Activo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Demo: crear / editar -->
+    <div class="modal fade" id="modalDemo" tabindex="-1" aria-labelledby="modalDemoTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="formDemo" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalDemoTitulo">Nueva demo</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="demoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="demoNombre" name="nombre" maxlength="100" required />
+            </div>
+            <div class="mb-2">
+              <label for="demoDescripcion" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="demoDescripcion" name="descripcion" rows="3"></textarea>
+            </div>
+            <div class="form-check form-switch" id="wrapActivoDemo">
+              <input class="form-check-input" type="checkbox" id="demoActivo" name="activo" />
+              <label class="form-check-label small" for="demoActivo">Activo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Paso de demo: crear / editar -->
+    <div class="modal fade" id="modalPaso" tabindex="-1" aria-labelledby="modalPasoTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="formPaso" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalPasoTitulo">Nuevo paso</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="pasoComando" class="form-label small">Comando <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="pasoComando" name="id_comando" required></select>
+            </div>
+            <div class="row g-2">
+              <div class="col-4">
+                <label for="pasoOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="pasoOrden" name="orden" min="1" step="1" required />
+              </div>
+              <div class="col-4">
+                <label for="pasoDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="pasoDuracion" name="duracion_ms" min="100" step="1" required />
+              </div>
+              <div class="col-4">
+                <label for="pasoPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="pasoPausa" name="pausa_ms" min="0" step="1" required />
+              </div>
+            </div>
+            <div class="form-text small">Orden ≥ 1 · Duración ≥ 100 ms · Pausa ≥ 0 ms (0 = siguiente paso inmediato).</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Confirmación de borrado (para cualquier acción Eliminar) -->
+    <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarTitulo" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6 text-danger" id="modalConfirmarTitulo">
+              <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Confirmar eliminación
+            </h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body small" id="confirmarTexto"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarAccion">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- FOOTER RESPONSIVO -->
     <footer class="app-footer py-2 px-3 bg-black border-top border-secondary-subtle text-center text-secondary small">
@@ -683,6 +1037,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal (Vanilla JS ES6 Modules) -->
-  <script type="module" src="./assets/js/app.js?v=2.1"></script>
+  <script type="module" src="./assets/js/app.js?v=2.5"></script>
 </body>
 </html>

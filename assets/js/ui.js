@@ -105,7 +105,7 @@ const UI = {
     const current = UI.connectivityState;
     const wss = params?.wss ? { ...current.wss, ...params.wss } : current.wss;
     const aws = params?.aws ? { ...current.aws, ...params.aws } : current.aws;
-    const rds = { state: 'unverified', detail: 'Sin verificar', ...(params?.rds || {}) };
+    const rds = params?.rds ? { ...current.rds, ...params.rds } : current.rds;
     UI.connectivityState = { wss, aws, rds };
 
     if (UI.elements.pillWss) {
@@ -125,12 +125,12 @@ const UI = {
       }
     }
 
-    // Amazon RDS: estado honesto y sin endpoint directo disponible en esta fase.
+    // Amazon RDS: se actualiza solo desde la vista de Administración (GET /api/vehiculos/)
     if (UI.elements.pillRds) {
-      UI.elements.pillRds.className = 'status-pill status-pill--unverified';
-      UI.elements.pillRds.title = 'Estado de Amazon RDS (Sin verificar - sin endpoint dedicado)';
-      UI.applyLedClass(UI.elements.pillRds, 'unverified');
-      if (UI.elements.descRds) UI.elements.descRds.textContent = 'Sin verificar';
+      UI.elements.pillRds.className = 'status-pill status-pill--' + String(rds?.state || 'unverified');
+      UI.elements.pillRds.title = `Amazon RDS: ${rds?.detail || 'Sin verificar'}`;
+      UI.applyLedClass(UI.elements.pillRds, rds?.state);
+      if (UI.elements.descRds) UI.elements.descRds.textContent = rds?.detail || 'Sin verificar';
     }
 
     // Sincronizar los LEDs minimales del Modo Mando (FASE 1)
@@ -141,18 +141,29 @@ const UI = {
   },
 
   /**
+   * Actualiza el semáforo de Amazon RDS a partir de la respuesta de GET /api/vehiculos/.
+   * 200 → Disponible (verde) · cualquier otro resultado → No disponible (rojo).
+   */
+  setRdsStatus: (res) => {
+    if (res?.ok && res.status === 200) {
+      return UI.setConnectivity({ rds: { state: 'online', detail: 'Disponible' } });
+    }
+    return UI.setConnectivity({ rds: { state: 'offline', detail: 'No disponible' } });
+  },
+
+  /**
    * Replica el estado de conectividad en el panel de entrada (lobby) móvil.
    */
   syncLobby: (states = {}) => {
     const details = {
       wss: states.wss?.detail || '--',
       aws: states.aws?.detail || '--',
-      rds: 'Sin verificar',
+      rds: states.rds?.detail || 'Sin verificar',
     };
 
     document.querySelectorAll('[data-lobby-led]').forEach((led) => {
       const key = led.dataset.lobbyLed;
-      UI.applyLedClass(led, key === 'rds' ? 'unverified' : states[key]?.state);
+      UI.applyLedClass(led, states[key]?.state);
     });
 
     document.querySelectorAll('[data-lobby-detail]').forEach((el) => {
@@ -238,20 +249,26 @@ const UI = {
   /**
    * Control centralizado y atómico de vistas (Lobby, Mando, Monitoreo).
    * Garantiza exclusión mutua total: exactamente UNA sola vista puede estar visible.
-   * viewName: 'lobby' | 'mando' | 'monitor'
+   * viewName: 'lobby' | 'mando' | 'monitor' | 'admin'
    */
   setView: (viewName) => {
     const monitor = document.getElementById('monitorView');
+    const admin   = document.getElementById('adminView');
     const mando   = document.getElementById('mandoView');
     const lobby   = document.getElementById('lobbyView');
 
     const showMonitor = viewName === 'monitor';
+    const showAdmin   = viewName === 'admin';
     const showMando   = viewName === 'mando';
     const showLobby   = viewName === 'lobby';
 
     if (monitor) {
       monitor.classList.toggle('is-visible', showMonitor);
       monitor.hidden = !showMonitor;
+    }
+    if (admin) {
+      admin.classList.toggle('is-visible', showAdmin);
+      admin.hidden = !showAdmin;
     }
     if (mando) {
       mando.classList.toggle('is-visible', showMando);
@@ -264,6 +281,7 @@ const UI = {
 
     document.body.classList.toggle('mando-mode', showMando);
     document.body.classList.toggle('mando-control', showMando);
+    document.body.classList.toggle('app-view-control', showLobby || showMando);
 
     return viewName;
   },
@@ -346,12 +364,19 @@ const UI = {
     const toastEl = document.createElement('div');
     toastEl.className = `toast align-items-center border-0 text-bg-${type} shadow-sm`;
     toastEl.setAttribute('role', 'alert');
-    toastEl.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body small text-white fw-semibold">${message}</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
-      </div>
-    `;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'd-flex';
+    const body = document.createElement('div');
+    body.className = 'toast-body small text-white fw-semibold';
+    body.textContent = String(message);
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-close btn-close-white me-2 m-auto';
+    closeBtn.dataset.bsDismiss = 'toast';
+    closeBtn.setAttribute('aria-label', 'Cerrar');
+    wrapper.append(body, closeBtn);
+    toastEl.appendChild(wrapper);
 
     const bootstrapToast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4500 });
     bootstrapToast.show();
@@ -502,6 +527,10 @@ const UI = {
     panel.classList.add('is-live');
   },
 
+  demoTimelineIsLive: () => {
+    return Boolean(document.getElementById('demoTimeline')?.classList.contains('is-live'));
+  },
+
   /**
    * Añade un paso recibido por WSS a la cronología de la rutina.
    * Acepta un cmdId numérico o un objeto de opciones { name, cmdId, orden, duracionMs, timestamp }.
@@ -512,11 +541,8 @@ const UI = {
     const empty = document.getElementById('demoTimelineEmpty');
     if (!panel || !list) return;
 
-    // Asegura que el panel esté en estado activo
-    if (!panel.classList.contains('is-live')) {
-      panel.classList.remove('is-finished');
-      panel.classList.add('is-live');
-    }
+    // Solo se registran pasos dentro de una rutina iniciada (demoTimelineStart)
+    if (!panel.classList.contains('is-live')) return;
 
     const isObj = cmdIdOrInfo !== null && typeof cmdIdOrInfo === 'object';
     const opts = isObj ? { ...cmdIdOrInfo, ...extraOptions } : extraOptions;

@@ -757,6 +757,30 @@ body {
   color: #64748b;
 }
 
+/* Accesos a otras vistas desde el lobby (sustituyen al menú del encabezado en móvil) */
+.lobby-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.lobby-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 42px;
+  border-radius: 14px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.lobby-nav-btn.active {
+  color: #67e8f9;
+  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.14);
+}
+
 /* Módulo de rutinas autónomas (Demos) */
 .demo-card {
   position: relative;
@@ -1016,7 +1040,8 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 150px;
+  /* Visible: 3 pasos completos; el resto se desplaza dentro de la cronología */
+  max-height: 6.2rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1367,6 +1392,7 @@ a:focus-visible,
    -------------------------------------------------------------------------- */
 .app-wrapper {
   background: transparent;
+  min-height: 100dvh;
 }
 
 .main-content {
@@ -1511,6 +1537,19 @@ a:focus-visible,
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
   .card-header {
     display: none;
+  }
+
+  /* La barra compacta del modo mando conserva los LEDs y la salida al ocultar el encabezado */
+  .mando-status-bar {
+    display: flex;
+  }
+}
+
+/* Móvil táctil: en Control el encabezado se oculta; Monitoreo y Administración lo muestran */
+@media (hover: none) and (pointer: coarse) {
+  body.app-view-control .app-header,
+  body.app-view-control #diagPanel {
+    display: none !important;
   }
 }
 
@@ -1923,6 +1962,27 @@ a:focus-visible,
   color: #67e8f9 !important;
   background: rgba(6, 182, 212, 0.14);
   border-color: rgba(6, 182, 212, 0.4);
+}
+
+/* Vista de Administración: oculta por defecto, mismo patrón que Monitoreo */
+.admin-view {
+  display: none !important;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.admin-view.is-visible {
+  display: flex !important;
+}
+
+.admin-select {
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.admin-tabs .nav-link {
+  font-size: 0.85rem;
 }
 
 /* Vista: oculta por defecto, se muestra con el modificador .is-visible
