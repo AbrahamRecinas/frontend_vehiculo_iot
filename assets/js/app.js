@@ -9,8 +9,8 @@ import { CONFIG } from './config.js';
 import { api } from './api.js?v=2.4';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=2.5';
-import { initAdmin, solicitarAcceso, alEntrarAdmin } from './admin.js?v=2.5';
+import { UI } from './ui.js?v=2.6';
+import { initAdmin, solicitarAcceso, alEntrarAdmin } from './admin.js?v=2.6';
 
 // ---------------------------------------------------------------------------
 // Referencias del DOM y controlador del joystick
@@ -599,6 +599,7 @@ function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registra
     tr.append(tdNumero, tdMovimiento, tdFecha, tdHora);
     tbody.appendChild(tr);
   });
+  UI.etiquetarCeldas(tbody);
 }
 
 /**
@@ -671,6 +672,7 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
     tr.append(tdNumero, tdNombre, tdDesc, tdEstado);
     tbody.appendChild(tr);
   });
+  UI.etiquetarCeldas(tbody);
 }
 
 /** Carga inicial del panel de Monitoreo: GET estado + GET historial + GET comandos (REST). */

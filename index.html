@@ -37,6 +37,7 @@
 
   <!-- Estilos propios de la consola de control IoT -->
   <link rel="stylesheet" href="./assets/css/style.css?v=2.3" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=2" />
 </head>
 <body>
   <!-- Contenedor principal de la aplicación -->
@@ -234,6 +235,11 @@
             <span class="lobby-vehicle-state" data-lobby="vehicleState">Detenido</span>
           </header>
 
+          <div class="lobby-status">
+            <div class="lobby-hero">
+              <span class="lobby-hero-label">Estado del vehículo</span>
+              <strong class="lobby-hero-state" data-lobby="vehicleState">Detenido</strong>
+            </div>
           <div class="lobby-channels" role="list" aria-label="Estado de canales">
             <div class="lobby-channel" role="listitem">
               <span class="status-led led-amber" data-lobby-led="wss" aria-hidden="true"></span>
@@ -276,6 +282,7 @@
               <dd data-lobby="demoCount">--</dd>
             </div>
           </dl>
+          </div>
 
           <div class="lobby-endpoints">
             <div>
@@ -301,7 +308,6 @@
               <i class="bi bi-controller" aria-hidden="true"></i>
               <span>Entrar al modo mando</span>
             </button>
-          </div>
           <nav class="lobby-nav" aria-label="Otras vistas de la aplicación">
             <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="monitor">
               <i class="bi bi-activity" aria-hidden="true"></i>
@@ -312,6 +318,7 @@
               <span>Administración</span>
             </button>
           </nav>
+          </div>
 
           <p class="lobby-footnote">Al entrar se activa pantalla completa y orientación horizontal.</p>
         </div>
@@ -850,7 +857,7 @@
 
     <!-- Vehículo: crear / editar -->
     <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-labelledby="modalVehiculoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <form class="modal-content" id="formVehiculo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalVehiculoTitulo">Nuevo vehículo</h2>
@@ -889,7 +896,7 @@
 
     <!-- Comando: crear / editar -->
     <div class="modal fade" id="modalComando" tabindex="-1" aria-labelledby="modalComandoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <form class="modal-content" id="formComando" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo comando</h2>
@@ -924,7 +931,7 @@
 
     <!-- Demo: crear / editar -->
     <div class="modal fade" id="modalDemo" tabindex="-1" aria-labelledby="modalDemoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <form class="modal-content" id="formDemo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalDemoTitulo">Nueva demo</h2>
@@ -955,7 +962,7 @@
 
     <!-- Paso de demo: crear / editar -->
     <div class="modal fade" id="modalPaso" tabindex="-1" aria-labelledby="modalPasoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <form class="modal-content" id="formPaso" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalPasoTitulo">Nuevo paso</h2>
@@ -1037,6 +1044,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal (Vanilla JS ES6 Modules) -->
-  <script type="module" src="./assets/js/app.js?v=2.5"></script>
+  <script type="module" src="./assets/js/app.js?v=2.6"></script>
 </body>
 </html>

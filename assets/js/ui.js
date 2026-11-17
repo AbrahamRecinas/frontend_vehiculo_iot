@@ -527,6 +527,23 @@ const UI = {
     panel.classList.add('is-live');
   },
 
+  /**
+   * Copia el encabezado de cada columna a data-label en sus celdas,
+   * para que en móvil las tablas se muestren como tarjetas con etiquetas.
+   */
+  etiquetarCeldas: (tbody) => {
+    if (!tbody) return;
+    const encabezados = Array.from(tbody.closest('table')?.tHead?.rows[0]?.cells || [])
+      .map((th) => th.textContent.trim());
+    tbody.querySelectorAll('tr').forEach((tr) => {
+      Array.from(tr.cells).forEach((td, i) => {
+        if (td.colSpan > 1) return;
+        const texto = encabezados[i] || '';
+        td.dataset.label = texto === 'Acciones' ? '' : texto;
+      });
+    });
+  },
+
   demoTimelineIsLive: () => {
     return Boolean(document.getElementById('demoTimeline')?.classList.contains('is-live'));
   },

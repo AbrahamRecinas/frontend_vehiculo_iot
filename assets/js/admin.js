@@ -8,7 +8,7 @@
 
 import { CONFIG } from './config.js';
 import { api } from './api.js?v=2.4';
-import { UI } from './ui.js?v=2.5';
+import { UI } from './ui.js?v=2.6';
 
 const ADMIN_PASSWORD = 'admin123';
 const ADMIN_SESSION_KEY = 'adminDesbloqueado';
@@ -167,6 +167,7 @@ function pintarMensaje(tipo, texto, tono = 'secondary') {
   td.textContent = texto;
   tr.appendChild(td);
   tbody.appendChild(tr);
+  UI.etiquetarCeldas(tbody);
 }
 
 function pintarTabla(tipo, items, filaFn) {
@@ -177,6 +178,7 @@ function pintarTabla(tipo, items, filaFn) {
     return;
   }
   items.forEach((item) => tbody.appendChild(filaFn(item)));
+  UI.etiquetarCeldas(tbody);
 }
 
 function filaVehiculo(v) {

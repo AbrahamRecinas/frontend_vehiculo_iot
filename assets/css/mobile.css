@@ -1,0 +1,586 @@
+/* ==========================================================================
+   MOBILE-FIRST · Lobby (panel de control), Monitoreo y Administración
+   Base = teléfono (sin media query). Tablet y PC se ajustan con min-width.
+   Se carga después de style.css; no afecta al modo mando.
+   ========================================================================== */
+
+/* ---------- 1. Base táctil y tipografía ---------- */
+button,
+a,
+.nav-link {
+  touch-action: manipulation;
+}
+
+/* 16px en campos: evita el zoom automático de iOS al enfocar */
+.form-control,
+.form-select {
+  font-size: 1rem;
+}
+
+/* ---------- 2. Lobby: panel de control en una sola pantalla (sin scroll) ---------- */
+body.app-view-control .main-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.app-view-control .app-footer {
+  padding: 0.35rem 0.75rem calc(0.35rem + var(--safe-bottom));
+  font-size: 0.66rem;
+}
+
+.lobby-view.is-visible {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.6rem 0.75rem;
+}
+
+.lobby-shell {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: 100%;
+  gap: 0.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.lobby-shell > * {
+  min-width: 0;
+}
+
+/* Tarjeta de estado: estado grande arriba, canales y métricas debajo */
+.lobby-status {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(8, 13, 25, 0.94));
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Cabecera compacta: vehículo y estado en una línea */
+.lobby-header {
+  align-items: center;
+}
+
+.lobby-header .brand-lockup > div {
+  min-width: 0;
+}
+
+.lobby-kicker {
+  display: none;
+}
+
+.lobby-title {
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* El estado se muestra en la tarjeta central; el chip de la cabecera sobra en móvil */
+.lobby-vehicle-state {
+  display: none;
+}
+
+.lobby-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.9rem 0.5rem 0.7rem;
+  text-align: center;
+}
+
+.lobby-hero-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.lobby-hero-state {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: #67e8f9;
+}
+
+/* Estado de canales: tres chips iguales (WebSocket, AWS, RDS) */
+.lobby-channels {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.lobby-channel {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.5rem 0.55rem;
+  min-width: 0;
+}
+
+.lobby-channel .status-led {
+  width: 9px;
+  height: 9px;
+}
+
+.lobby-channel-text {
+  width: 100%;
+  min-width: 0;
+}
+
+.lobby-channel-name,
+.lobby-channel-detail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lobby-channel-name {
+  font-size: 0.56rem;
+  letter-spacing: 0.04em;
+}
+
+.lobby-channel-detail {
+  font-size: 0.64rem;
+}
+
+/* Métricas en una fila de cuatro */
+.lobby-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.lobby-metrics > div {
+  min-width: 0;
+  padding: 0.45rem 0.4rem;
+}
+
+.lobby-metrics dt {
+  font-size: 0.5rem;
+  line-height: 1.15;
+  letter-spacing: 0.03em;
+}
+
+.lobby-metrics dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+/* Endpoints y nota: se consultan en Monitoreo y Diagnóstico, no en el lobby móvil */
+.lobby-endpoints,
+.lobby-footnote {
+  display: none;
+}
+
+/* Acciones: CTA a todo el ancho y tres accesos en fila */
+.lobby-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.lobby-view .lobby-enter-btn {
+  order: -1;
+  grid-column: 1 / -1;
+  min-height: 56px;
+  border-radius: 16px;
+  font-size: 0.95rem;
+}
+
+.lobby-view .lobby-check-btn,
+.lobby-view .lobby-nav-btn {
+  flex-direction: column;
+  min-height: 60px;
+  padding: 0.4rem 0.3rem;
+  gap: 0.2rem;
+  border-radius: 14px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.lobby-view .lobby-check-btn i,
+.lobby-view .lobby-nav-btn i {
+  font-size: 1.05rem;
+}
+
+/* El contenedor de navegación no añade caja: sus botones son celdas de .lobby-actions */
+.lobby-nav {
+  display: contents;
+}
+
+/* ---------- 3. Cabecera de vistas (menú desplazable en móvil) ---------- */
+.app-nav .app-nav-pills {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.25rem;
+}
+
+.app-nav .app-nav-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.app-nav .app-nav-pills .nav-item {
+  flex-shrink: 0;
+}
+
+.app-nav .app-nav-link {
+  white-space: nowrap;
+  min-height: 40px;
+}
+
+/* ---------- 4. Monitoreo ---------- */
+.monitor-view .container-fluid,
+.admin-view .container-fluid {
+  padding: 0.75rem 0.75rem calc(1rem + var(--safe-bottom));
+}
+
+.monitor-view .card {
+  margin-bottom: 0.75rem;
+}
+
+.monitor-view .card-header {
+  padding: 0.65rem 0.85rem !important;
+}
+
+.monitor-view .card-body {
+  padding: 0.6rem !important;
+}
+
+.monitor-view .btn {
+  min-height: 44px;
+}
+
+.monitor-vehicle-head {
+  flex-wrap: wrap;
+}
+
+.monitor-vehicle-head h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.monitor-last-command {
+  font-size: 1.9rem;
+}
+
+.monitor-last-movement .card-body {
+  padding: 0.9rem !important;
+}
+
+/* ---------- 5. Tablas como tarjetas (móvil) ---------- */
+.monitor-table-responsive {
+  overflow: visible;
+}
+
+.monitor-table {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: transparent;
+  min-width: 0 !important;
+  font-size: 0.85rem;
+  background: transparent;
+}
+
+.monitor-table thead {
+  display: none;
+}
+
+.monitor-table,
+.monitor-table tbody,
+.monitor-table tr,
+.monitor-table td {
+  display: block;
+  width: 100%;
+}
+
+.monitor-table tbody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.monitor-table tr {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  background: rgba(8, 13, 25, 0.6);
+}
+
+.monitor-table tr:has(> td[colspan]) {
+  border-style: dashed;
+  background: transparent;
+}
+
+.monitor-table td {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.3rem 0 !important;
+  border: 0 !important;
+  text-align: right;
+}
+
+.monitor-table td::before {
+  content: attr(data-label);
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.monitor-table td[colspan] {
+  justify-content: center;
+  text-align: center !important;
+}
+
+/* Movimiento: icono y nombre juntos a la derecha, como el resto de valores */
+.monitor-table td.monitor-movimiento-cell {
+  justify-content: flex-end;
+}
+
+/* Historial: fecha y hora comparten fila para que cada movimiento ocupe menos alto */
+#monitorHistorialTable tbody tr {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem 0.75rem;
+}
+
+#monitorHistorialTable td:nth-child(1) {
+  justify-content: flex-start;
+}
+
+#monitorHistorialTable td:nth-child(2)::before {
+  content: none;
+}
+
+.monitor-table td[colspan]::before,
+.monitor-table td[data-label=""]::before {
+  content: none;
+}
+
+/* Acciones de administración: botones grandes al pie de la tarjeta */
+.monitor-table td[data-label=""]:not([colspan]) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: 0.5rem !important;
+}
+
+.monitor-table td[data-label=""]:not([colspan]) .btn {
+  flex: 1 1 auto;
+}
+
+/* ---------- 6. Administración ---------- */
+.admin-view .card-body {
+  flex-wrap: wrap;
+}
+
+.admin-view .card-body > .d-flex:last-child {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+
+.admin-select {
+  flex: 1 1 100%;
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.admin-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tabs .nav-item {
+  flex-shrink: 0;
+}
+
+.admin-tabs .nav-link {
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.admin-view .tab-pane {
+  padding: 0.6rem !important;
+}
+
+.admin-view .tab-pane > .d-flex {
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 0.5rem;
+}
+
+.admin-view .tab-pane > .d-flex > .d-flex {
+  flex-wrap: wrap;
+}
+
+.admin-view .btn {
+  min-height: 44px;
+}
+
+.admin-view button[data-accion="nuevo"] {
+  width: 100%;
+  min-height: 46px;
+  font-weight: 700;
+}
+
+/* ---------- 7. Tablet y PC: se restauran las tablas y botones compactos ---------- */
+@media (min-width: 768px) {
+  .monitor-view .container-fluid,
+  .admin-view .container-fluid {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .monitor-view .btn,
+  .admin-view .btn {
+    min-height: 0;
+  }
+
+  .monitor-table-responsive {
+    overflow-x: auto;
+  }
+
+  .monitor-table {
+    display: table;
+    width: 100%;
+    font-size: 0.82rem;
+  }
+
+  .monitor-table tbody,
+  .monitor-table tr,
+  .monitor-table td {
+    width: auto;
+  }
+
+  .monitor-table th:first-child,
+  .monitor-table td:first-child {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .monitor-table thead {
+    display: table-header-group;
+  }
+
+  .monitor-table tbody {
+    display: table-row-group;
+    gap: 0;
+  }
+
+  .monitor-table tr {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .monitor-table td {
+    display: table-cell;
+    padding: 0.5rem 0.6rem !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14) !important;
+    text-align: inherit;
+  }
+
+  .monitor-table td::before {
+    content: none;
+  }
+
+  .monitor-table td[data-label=""]:not([colspan]) {
+    justify-content: initial;
+    padding-top: 0.5rem !important;
+  }
+
+  .monitor-table td[data-label=""]:not([colspan]) .btn {
+    flex: initial;
+  }
+
+  .monitor-table tr:has(> td[colspan]) {
+    background: none;
+  }
+
+  #monitorHistorialTable tbody tr {
+    display: table-row;
+  }
+
+  #monitorHistorialTable td:nth-child(1) {
+    justify-content: initial;
+  }
+
+  #monitorHistorialTable td:nth-child(2)::before {
+    content: none;
+  }
+
+  .admin-view .tab-pane > .d-flex {
+    flex-direction: row;
+    align-items: center !important;
+  }
+
+  .admin-view button[data-accion="nuevo"] {
+    width: auto;
+    min-height: 0;
+  }
+
+  .admin-select {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 200px;
+    max-width: 320px;
+  }
+
+  .admin-view .card-body > .d-flex:last-child {
+    flex: 0 0 auto;
+  }
+
+  .admin-tabs .nav-link {
+    min-height: 0;
+    font-size: 0.85rem;
+  }
+}
+
+/* ---------- 8. Modales de administración: pantalla completa en móvil ---------- */
+@media (max-width: 575.98px) {
+  .modal-fullscreen-sm-down .modal-body {
+    padding-bottom: 1.25rem;
+  }
+
+  .modal-fullscreen-sm-down .modal-footer {
+    padding-bottom: calc(0.75rem + var(--safe-bottom));
+  }
+
+  .modal-fullscreen-sm-down .modal-footer .btn {
+    flex: 1 1 0;
+    min-height: 46px;
+  }
+}
