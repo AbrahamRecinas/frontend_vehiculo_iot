@@ -2122,3 +2122,62 @@ a:focus-visible,
     border-radius: 10px;
   }
 }
+
+
+/* --------------------------------------------------------------------------
+   FASE 4.3: AUTH, CATÁLOGO PÚBLICO, MIS VEHÍCULOS Y DASHBOARD ADMIN
+   -------------------------------------------------------------------------- */
+.auth-view,
+.guest-view,
+.user-vehicles-view {
+  display: none;
+}
+
+.auth-view.is-visible,
+.guest-view.is-visible,
+.user-vehicles-view.is-visible {
+  display: block;
+}
+
+.auth-card {
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(8, 13, 25, 0.96));
+}
+
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 76px;
+}
+
+.kpi-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.kpi-value {
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+.admin-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tabs .nav-item {
+  flex-shrink: 0;
+}
+
+.timed-cmd-btn {
+  min-height: 38px;
+  font-weight: 600;
+}

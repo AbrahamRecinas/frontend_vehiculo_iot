@@ -1,45 +1,130 @@
 /**
  * app.js
- * Orquestador principal de la aplicación de control IoT.
- * Coordina WebSocket (WSS), API REST (FastAPI/AWS), joystick, UI y estado.
+ * Orquestador principal de la aplicación IoT (4.1 Control + 4.2 Monitoreo + 4.3 Auth/RBAC/Admin).
+ * Coordina Auth JWT, WebSocket único (WSS), API REST, Joystick, UI y Administración.
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
 import { CONFIG } from './config.js';
-import { api } from './api.js?v=2.4';
+import { auth } from './auth.js';
+import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=2.6';
-import { initAdmin, solicitarAcceso, alEntrarAdmin } from './admin.js?v=2.6';
+import { UI } from './ui.js';
+import { initAdmin, alEntrarAdmin } from './admin.js';
 
-// ---------------------------------------------------------------------------
-// Referencias del DOM y controlador del joystick
-// ---------------------------------------------------------------------------
 let joystickController = null;
-
-// Estado del Modo Mando (control) usado por la navegación para volver a la vista previa
 let mandoActivo = false;
-// Modo de Control preferido por el usuario (se restaura al volver de Monitoreo)
 let modoControlPreferido = false;
-// Vista activa actual ('control' | 'monitor') para evitar colisiones entre eventos
-let vistaActual = 'control';
+let vistaActual = 'auth';
 
 const getEl = (id) => document.getElementById(id);
+const MONITOREO_MAX_REGISTROS = 10;
 
+const STATE = {
+  vehicleId: CONFIG.VEHICLE_ID,
+  vehicleInfo: null,
+  comandosVehiculo: [],
+  fisicoToComandoId: new Map(),
+  lastSentCommand: CONFIG.COMMANDS.DETENER,
+  movementInFlight: null,
+  movementSequence: 0,
+  demos: [],
+  apagarArmadoHasta: 0,
+  demoActive: false,
+  busyCommands: new Set(),
+  activeController: null,
+  monitorHistorial: [],
+  misVehiculos: [],
+};
+
+window.activeController = null;
+
+const MOVIMIENTO_FISICO_IDS = [
+  CONFIG.COMMANDS.AVANZAR,
+  CONFIG.COMMANDS.RETROCEDER,
+  CONFIG.COMMANDS.DIAGONAL_DERECHA,
+  CONFIG.COMMANDS.DIAGONAL_IZQUIERDA,
+];
+
+// ---------------------------------------------------------------------------
+// RESOLUCIÓN DINÁMICA: codigo_fisico (hardware 1..14) -> id_comando real de la unidad
+// ---------------------------------------------------------------------------
+function reconstruirMapaComandos(comandos = []) {
+  STATE.comandosVehiculo = Array.isArray(comandos) ? comandos : [];
+  const mapa = new Map();
+  // Priorizar comandos base (duracion_ms === null) activos
+  STATE.comandosVehiculo.forEach((c) => {
+    const activo = c.activo === 1 || c.activo === true;
+    const cf = Number(c.codigo_fisico ?? c.codigo);
+    const idCmd = Number(c.id_comando);
+    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
+    if (!activo || !Number.isInteger(cf) || !Number.isInteger(idCmd)) return;
+    if (!mapa.has(cf) || esBase) {
+      mapa.set(cf, idCmd);
+    }
+  });
+  STATE.fisicoToComandoId = mapa;
+  renderMovimientosTemporizadosControl();
+}
+
+function resolverIdComandoDesdeFisico(codigoFisico) {
+  const cf = Number(codigoFisico);
+  if (STATE.fisicoToComandoId.has(cf)) {
+    return STATE.fisicoToComandoId.get(cf);
+  }
+  return cf;
+}
+
+function renderMovimientosTemporizadosControl() {
+  const card = getEl('timedCommandsCard');
+  const grid = getEl('timedCommandsGrid');
+  if (!card || !grid) return;
+
+  const temporizados = STATE.comandosVehiculo.filter(
+    (c) => (c.activo === 1 || c.activo === true) && c.duracion_ms !== null && Number(c.duracion_ms) > 0
+  );
+
+  grid.textContent = '';
+  if (!temporizados.length) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  temporizados.forEach((c) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-info timed-cmd-btn';
+    const meta = CONFIG.COMMAND_META[Number(c.codigo_fisico)] || null;
+    if (meta?.icon) {
+      const i = document.createElement('i');
+      i.className = `bi ${meta.icon} me-1`;
+      i.setAttribute('aria-hidden', 'true');
+      btn.appendChild(i);
+    }
+    btn.appendChild(document.createTextNode(`${c.nombre} `));
+    const badge = document.createElement('span');
+    badge.className = 'badge text-bg-dark border border-info-subtle ms-1 font-monospace';
+    badge.textContent = `${(Number(c.duracion_ms) / 1000).toFixed(1)}s`;
+    btn.appendChild(badge);
+    btn.addEventListener('click', () => ejecutarComandoPorId(c.id_comando, c));
+    grid.appendChild(btn);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// JOYSTICK
+// ---------------------------------------------------------------------------
 function initJoystick() {
   joystickController = new JoystickController(
     getEl('joystickTrack'),
     getEl('joystickKnob'),
     {
-      onDirection: (cmdId) => handleMovimiento(cmdId),
-      onRelease: () => {
-        detenerVehiculo();
-      },
-      onVisualChange: (info) => {
-        actualizarGuiaVisual(info);
-      },
+      onDirection: (codigoFisico) => handleMovimiento(codigoFisico),
+      onRelease: () => detenerVehiculo(),
+      onVisualChange: (info) => actualizarGuiaVisual(info),
       onLockChange: (controller) => {
-        // FASE 4: exclusión mutua — sincroniza el controlador activo (STATE + window)
         STATE.activeController = controller;
         window.activeController = controller;
         UI.setControllerLock(controller);
@@ -65,59 +150,58 @@ function actualizarGuiaVisual(info) {
 }
 
 // ---------------------------------------------------------------------------
-// ESTADO INTERNO DE LA APLICACIÓN
-// ---------------------------------------------------------------------------
-// Nota: movimientoInFlight se reasigna dinámicamente, por lo que no se congela.
-const STATE = {
-  vehicleId: CONFIG.VEHICLE_ID,
-  lastSentCommand: CONFIG.COMMANDS.DETENER,
-  movementInFlight: null, // Promise del último movimiento
-  movementSequence: 0, // Ignora respuestas visuales de movimientos obsoletos
-  demos: [], // Catálogo cargado desde GET /demos (nombre y descripción de la cronología)
-  apagarArmadoHasta: 0, // Ventana de confirmación del botón Apagar (timestamp ms)
-  demoActive: false,
-  busyCommands: new Set(),
-  activeController: null, // 'joystick' | 'dpad' | null (FASE 4: exclusión mutua)
-  monitorHistorial: [], // Últimos movimientos individuales persistidos (máx. 10) del panel de Monitoreo
-};
-
-// Controlador activo global (expuesto en window para exclusión mutua Joystick <-> D-Pad)
-window.activeController = null; // 'joystick' | 'dpad' | null
-
-// IDs de movimiento de tracción / diagonal gestionados como movimiento continuo
-const MOVIMIENTO_IDS = [
-  CONFIG.COMMANDS.AVANZAR,
-  CONFIG.COMMANDS.RETROCEDER,
-  CONFIG.COMMANDS.DIAGONAL_DERECHA,
-  CONFIG.COMMANDS.DIAGONAL_IZQUIERDA,
-];
-
-// ---------------------------------------------------------------------------
 // GESTIÓN DE COMANDOS DE MOVIMIENTO / DEMO
 // ---------------------------------------------------------------------------
-async function handleMovimiento(idComando) {
-  const cmdId = Number(idComando);
-  const isSafetyStop = cmdId === CONFIG.COMMANDS.DETENER;
+async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
+  const cmdId = Number(idComandoReal);
+  const codigoFisico = Number(cmdObj?.codigo_fisico ?? cmdObj?.codigo ?? cmdId);
 
-  if (isSafetyStop) {
+  if (codigoFisico === CONFIG.COMMANDS.DETENER) {
     await detenerVehiculo();
-    return;
+    return true;
   }
 
-  const isMovementCmd = MOVIMIENTO_IDS.includes(cmdId);
+  if (STATE.busyCommands.has(cmdId)) return true;
+  STATE.busyCommands.add(cmdId);
+  const res = await api.enviarMovimiento(cmdId);
+  STATE.busyCommands.delete(cmdId);
 
-  if (STATE.busyCommands.has(cmdId)) {
-    return true; // Ya hay un envío idéntico en vuelo: no es un fallo
+  if (res.ok) {
+    STATE.lastSentCommand = codigoFisico;
+    const label = cmdObj?.nombre || CONFIG.COMMAND_META[codigoFisico]?.label || `CMD ${cmdId}`;
+    const sufijo = cmdObj?.duracion_ms ? ` (${(Number(cmdObj.duracion_ms) / 1000).toFixed(1)}s)` : '';
+    UI.setCommandState(cmdId, `VEHÍCULO · ${label.toUpperCase()}${sufijo}`);
+    UI.setPulseState('active-moving');
+    return true;
+  }
+
+  UI.showToast(formatApiError(res, `No se pudo enviar el comando ${cmdId}`), 'danger');
+  if (res.status !== 403 && res.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+    await detenerVehiculo();
+  }
+  return false;
+}
+
+async function handleMovimiento(codigoFisicoInput) {
+  const codigoFisico = Number(codigoFisicoInput);
+  if (codigoFisico === CONFIG.COMMANDS.DETENER) {
+    await detenerVehiculo();
+    return true;
+  }
+
+  const idComandoReal = resolverIdComandoDesdeFisico(codigoFisico);
+  const isMovementCmd = MOVIMIENTO_FISICO_IDS.includes(codigoFisico);
+
+  if (STATE.busyCommands.has(idComandoReal)) {
+    return true;
   }
 
   const sequence = ++STATE.movementSequence;
-  STATE.busyCommands.add(cmdId);
+  STATE.busyCommands.add(idComandoReal);
 
-  // Con lógica de Toggle: el arrastre del joystick envía UNO SOLO y el
-  // lanzamiento envía el paro global (12). Este método solo gestiona el flujo.
   let res;
   if (isMovementCmd) {
-    const request = api.enviarMovimiento(cmdId);
+    const request = api.enviarMovimiento(idComandoReal);
     STATE.movementInFlight = request;
     try {
       res = await request;
@@ -127,79 +211,69 @@ async function handleMovimiento(idComando) {
       if (STATE.movementInFlight === request) STATE.movementInFlight = null;
     }
   } else {
-    res = await api.enviarMovimiento(cmdId);
+    res = await api.enviarMovimiento(idComandoReal);
   }
 
-  STATE.busyCommands.delete(cmdId);
+  STATE.busyCommands.delete(idComandoReal);
 
-  // Una respuesta antigua no debe sobrescribir el comando más reciente ni el paro.
-  if (isMovementCmd && sequence !== STATE.movementSequence) return true; // Respuesta superada por otro comando
+  if (isMovementCmd && sequence !== STATE.movementSequence) return true;
 
   if (res.ok) {
-    STATE.lastSentCommand = cmdId;
-
-    if (cmdId !== CONFIG.COMMANDS.DEMO_FABRICA) {
-      const commandLabel = CONFIG.COMMAND_META[cmdId]?.label || `CMD ${cmdId}`;
-      UI.setCommandState(cmdId, `VEHÍCULO · ${commandLabel.toUpperCase()}`);
+    STATE.lastSentCommand = codigoFisico;
+    if (codigoFisico !== CONFIG.COMMANDS.DEMO_FABRICA) {
+      const commandLabel = CONFIG.COMMAND_META[codigoFisico]?.label || `CMD ${codigoFisico}`;
+      UI.setCommandState(idComandoReal, `VEHÍCULO · ${commandLabel.toUpperCase()}`);
     }
-
-    UI.setPulseState(
-      cmdId === CONFIG.COMMANDS.DEMO_FABRICA ? 'active-demo' : 'active-moving'
-    );
+    UI.setPulseState(codigoFisico === CONFIG.COMMANDS.DEMO_FABRICA ? 'active-demo' : 'active-moving');
     return true;
   }
 
-  UI.showToast(`No se pudo enviar el comando ${cmdId}: ${res.error}`, 'danger');
-  if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+  UI.showToast(formatApiError(res, `No se pudo enviar el comando ${codigoFisico}`), 'danger');
+  if (res.status !== 403 && res.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
     await detenerVehiculo();
   }
   return false;
 }
 
-/**
- * Detención del vehículo con serialización ante el movimiento en vuelo.
- * Al soltar el joystick manda obligatoriamente el POST con el ID 12.
- */
 async function detenerVehiculo() {
-  // Invalida respuestas visuales antiguas antes de serializar el paro.
   STATE.movementSequence += 1;
 
-  // Esperar a que finalice el movimiento en curso (máx 5s) para no enviar
-  // el paro antes que el arranque (race condition crítico con lógica toggle).
   if (STATE.movementInFlight) {
     try {
       await STATE.movementInFlight;
     } catch (_) {
-      // Ignorar error previo; igualmente se procede al paro
+      // continuar al paro obligatorio
     }
   }
 
-  await enviarParo(CONFIG.COMMANDS.DETENER);
+  const idDetener = resolverIdComandoDesdeFisico(CONFIG.COMMANDS.DETENER);
+  await enviarParo(idDetener);
 }
 
-async function enviarParo(comandoId) {
-  const res = await api.enviarMovimiento(comandoId, { keepalive: true, timeoutMs: 4000 });
-
+async function enviarParo(idComandoDetener) {
+  const res = await api.enviarMovimiento(idComandoDetener, { keepalive: true, timeoutMs: 4000 });
   if (res.ok) {
-    STATE.lastSentCommand = Number(comandoId);
-    UI.setCommandState(comandoId, 'VEHÍCULO DETENIDO');
+    STATE.lastSentCommand = CONFIG.COMMANDS.DETENER;
+    UI.setCommandState(idComandoDetener, 'VEHÍCULO DETENIDO');
     UI.setPulseState('active-stopped');
-
     return true;
   }
 
-  // Reintento único para paro de emergencia (comando idempotente por diseño)
+  if (res.status === 401 || res.status === 403) {
+    return false;
+  }
+
   return new Promise((resolve) => {
     setTimeout(async () => {
-      const retryRes = await api.enviarMovimiento(comandoId, { keepalive: true, timeoutMs: 4000 });
+      const retryRes = await api.enviarMovimiento(idComandoDetener, {
+        keepalive: true,
+        timeoutMs: 4000,
+      });
       resolve(retryRes.ok);
     }, 600);
   });
 }
 
-// ---------------------------------------------------------------------------
-// DEMO: INICIAR Y CANCELAR
-// ---------------------------------------------------------------------------
 function armarBotonApagar(btn, armado) {
   btn.classList.toggle('is-armed', armado);
   const label = btn.querySelector('.action-name');
@@ -207,75 +281,64 @@ function armarBotonApagar(btn, armado) {
 }
 
 async function iniciarDemo() {
-  const select = document.getElementById('demoSelect');
+  const select = getEl('demoSelect');
   const idDemo = select ? Number(select.value) : NaN;
-
   if (!idDemo) {
     UI.showToast('Selecciona primero una demo disponible', 'warning');
     return;
   }
 
-  const demo = STATE.demos.find((d) => String(d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid) === String(idDemo));
+  const demo = STATE.demos.find((d) => String(d?.id_demo ?? d?.id) === String(idDemo));
   UI.demoTimelineStart({
-    name: demo?.nombre || demo?.name || `Rutina #${idDemo}`,
-    description: demo?.descripcion ? `Secuencia de referencia: ${demo.descripcion}` : '',
+    name: demo?.nombre || `Rutina #${idDemo}`,
+    description: demo?.descripcion ? `Secuencia: ${demo.descripcion}` : '',
   });
 
   UI.setActionButtonBusy('btnIniciarDemo', true);
   const res = await api.iniciarDemo(idDemo);
-
   UI.setActionButtonBusy('btnIniciarDemo', false);
 
   if (res.ok) {
     STATE.demoActive = true;
-    STATE.lastSentCommand = Number(idDemo);
     UI.setDemoStatus(true);
-    UI.setCommandState(Number(idDemo), `EJECUTANDO DEMO (${idDemo})`);
+    UI.setCommandState(idDemo, `EJECUTANDO DEMO (${idDemo})`);
     UI.setPulseState('active-demo');
     UI.showToast(`Demo #${idDemo} iniciada correctamente`, 'warning');
   } else {
     UI.setDemoStatus(false);
-    UI.showToast(`Error al iniciar demo: ${res.error}`, 'danger');
+    UI.showToast(formatApiError(res, 'Error al iniciar demo'), 'danger');
     UI.demoTimelineEnd('La rutina no pudo iniciarse', 'error');
-    await detenerVehiculo();
+    if (res.status !== 403 && res.status !== 401) {
+      await detenerVehiculo();
+    }
   }
 }
 
 async function cancelarDemo() {
   UI.setActionButtonBusy('btnCancelarDemo', true);
   const res = await api.cancelarDemo();
-
   UI.setActionButtonBusy('btnCancelarDemo', false);
 
+  const idDetener = resolverIdComandoDesdeFisico(CONFIG.COMMANDS.DETENER);
   if (res.ok) {
     STATE.demoActive = false;
     UI.setDemoStatus(false);
-    UI.setCommandState(CONFIG.COMMANDS.DETENER, 'VEHÍCULO DETENIDO');
+    UI.setCommandState(idDetener, 'VEHÍCULO DETENIDO');
     UI.setPulseState('active-stopped');
-    UI.showToast('Demo Fábrica cancelada', 'info');
+    UI.showToast('Demo cancelada y hardware detenido', 'info');
     UI.demoTimelineEnd('Rutina cancelada desde la app', 'info');
-
-    // Seguridad adicional: parar emergencia tras cancelar demo
-    await enviarParo(12);
+    await enviarParo(idDetener);
   } else {
-    UI.showToast(`Error al cancelar demo: ${res.error}`, 'danger');
-    // El paro de seguridad se envía igualmente aunque falle la cancelación
-    await enviarParo(12);
+    UI.showToast(formatApiError(res, 'Error al cancelar demo'), 'danger');
+    if (res.status !== 403 && res.status !== 401) {
+      await enviarParo(idDetener);
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
-// FASE MONITOREO: CARGA INICIAL (REST) + EVENTOS WSS EN TIEMPO REAL
-// Contratos:
-//  - GET  /api/vehiculos/{id}/estado      -> estado actual del vehículo
-//  - GET  /api/vehiculos/{id}/historial   -> últimos movimientos individuales persistidos
-//  - GET  /api/vehiculos/{id}/comandos    -> catálogo de comandos soportados por el vehículo
-//  - WSS  {"evento":"ESTADO_INICIAL",...}   -> estado actual (actualiza tarjeta, no tabla)
-//  - WSS  {"evento":"MOVIMIENTO_DEMO",...}  -> demo en curso (actualiza tarjeta, NO tabla)
-//  - WSS  {"tipo":"MOVIMIENTO_INDIVIDUAL",...} -> movimiento persistido (tarjeta + tabla)
+// MONITOREO (4.2 conservado intacto: máx. 10 individuales persistidos)
 // ---------------------------------------------------------------------------
-const MONITOREO_MAX_REGISTROS = 10;
-
 function extraerFechaHora(timestamp) {
   const iso = String(timestamp || '').replace(' ', 'T');
   const fecha = iso.length >= 10 ? iso.slice(0, 10) : '';
@@ -283,48 +346,53 @@ function extraerFechaHora(timestamp) {
   return { fecha, hora };
 }
 
-/**
- * Normaliza un movimiento desde cualquier fuente (historial REST / WSS).
- * @param {{ idRegistro?: number|null, idComando?: number|null, comando?: string|null, fecha?: string, hora?: string, timestamp?: string }} fuente
- * @returns {{ idRegistro: number|null, idComando: number|null, comando: string, fecha: string, hora: string, timestamp: string|null }}
- */
-function crearMovimiento({ idRegistro = null, idComando = null, comando = null, fecha = '', hora = '', timestamp = null } = {}) {
-  const nIdRegistro = (idRegistro === null || idRegistro === undefined) ? null : Number(idRegistro);
-  const nIdComando = (idComando === null || idComando === undefined) ? null : Number(idComando);
-  const meta = Number.isInteger(nIdComando) ? CONFIG.COMMAND_META?.[nIdComando] : null;
-  const nComando = String(
-    comando ||
-    (meta?.label ? meta.label : (nIdComando ? `CMD ${nIdComando}` : (nIdRegistro ? `Registro #${nIdRegistro}` : 'Movimiento')))
+function crearMovimiento({
+  idRegistro = null,
+  idComando = null,
+  codigoFisico = null,
+  comando = null,
+  duracionMs = null,
+  fecha = '',
+  hora = '',
+  timestamp = null,
+} = {}) {
+  const nIdRegistro = idRegistro === null || idRegistro === undefined ? null : Number(idRegistro);
+  const nIdComando = idComando === null || idComando === undefined ? null : Number(idComando);
+  const nFisico = codigoFisico !== null && codigoFisico !== undefined ? Number(codigoFisico) : nIdComando;
+  const meta = Number.isInteger(nFisico) ? CONFIG.COMMAND_META?.[nFisico] : null;
+  const baseLabel = String(
+    comando || (meta?.label ? meta.label : nIdComando ? `CMD ${nIdComando}` : 'Movimiento')
   );
+  const nDur = duracionMs !== null && duracionMs !== undefined && Number(duracionMs) > 0 ? Number(duracionMs) : null;
+  const nComando = nDur ? `${baseLabel} (${(nDur / 1000).toFixed(1)}s)` : baseLabel;
   const { fecha: parsedFecha, hora: parsedHora } = extraerFechaHora(timestamp);
-  const nFecha = String(fecha || parsedFecha);
-  const nHora = String(hora || parsedHora);
 
   return {
     idRegistro: nIdRegistro,
     idComando: nIdComando,
+    codigoFisico: Number.isInteger(nFisico) ? nFisico : null,
     comando: nComando,
-    fecha: nFecha,
-    hora: nHora,
+    duracionMs: nDur,
+    fecha: String(fecha || parsedFecha),
+    hora: String(hora || parsedHora),
     timestamp: timestamp || null,
   };
 }
 
-/** Convierte la respuesta GET /historial a la lista de movimientos (máx. 10). */
 function aHistorial(data) {
   const entries = data?.historial;
   if (!Array.isArray(entries)) return [];
   return entries.slice(0, MONITOREO_MAX_REGISTROS).map((entry) => {
     const rawTimestamp = entry?.fecha_hora || entry?.timestamp || null;
     const { fecha, hora } = extraerFechaHora(rawTimestamp);
+    const codigoFisico = entry?.codigo_fisico ?? entry?.codigo ?? entry?.id_comando ?? null;
     const idComando = entry?.codigo ?? entry?.id_comando ?? null;
-    const nId = idComando !== null && idComando !== undefined ? Number(idComando) : null;
-    const comandoNombre = entry?.comando ?? entry?.nombre_comando ?? (nId ? CONFIG.COMMAND_META?.[nId]?.label : null);
-
     return crearMovimiento({
       idRegistro: entry?.id_historial ?? entry?.id_registro ?? null,
-      idComando: Number.isInteger(nId) ? nId : null,
-      comando: comandoNombre,
+      idComando: idComando !== null ? Number(idComando) : null,
+      codigoFisico: codigoFisico !== null ? Number(codigoFisico) : null,
+      comando: entry?.comando ?? entry?.nombre_comando ?? null,
+      duracionMs: entry?.duracion_ms ?? null,
       fecha: entry?.fecha || fecha,
       hora: entry?.hora || hora,
       timestamp: rawTimestamp,
@@ -332,197 +400,103 @@ function aHistorial(data) {
   });
 }
 
-/** Normaliza el payload del evento WSS {"evento":"ESTADO_INICIAL", ...} o GET /estado. */
 function aEstadoInicial(payload = {}) {
   const estadoObj = Array.isArray(payload?.estado)
     ? payload.estado[0]
-    : (payload?.estado || (Array.isArray(payload) ? payload[0] : payload) || {});
+    : payload?.estado || (Array.isArray(payload) ? payload[0] : payload) || {};
 
-  const idComando = estadoObj?.id_comando ?? estadoObj?.codigo;
-  const nIdComando = idComando !== null && idComando !== undefined ? Number(idComando) : null;
-  const comando = String(
-    estadoObj?.comando ||
-    estadoObj?.nombre ||
-    (Number.isInteger(nIdComando) ? (CONFIG.COMMAND_META?.[nIdComando]?.label || `CMD ${nIdComando}`) : 'Desconocido')
-  );
+  const codigoFisico = estadoObj?.codigo_fisico ?? estadoObj?.codigo ?? estadoObj?.id_comando ?? null;
+  const idComando = estadoObj?.id_comando ?? estadoObj?.codigo ?? null;
   const rawTimestamp = payload?.timestamp || estadoObj?.fecha_actualizacion || estadoObj?.fecha_hora || null;
   const { fecha, hora } = extraerFechaHora(rawTimestamp);
 
   return crearMovimiento({
-    idRegistro: estadoObj?.id_historial ?? estadoObj?.id_registro ?? null,
-    idComando: Number.isInteger(nIdComando) ? nIdComando : null,
-    comando,
+    idRegistro: estadoObj?.id_historial ?? null,
+    idComando: idComando !== null ? Number(idComando) : null,
+    codigoFisico: codigoFisico !== null ? Number(codigoFisico) : null,
+    comando: estadoObj?.comando || estadoObj?.nombre || null,
+    duracionMs: estadoObj?.duracion_ms ?? null,
     fecha: estadoObj?.fecha || fecha,
     hora: estadoObj?.hora || hora,
     timestamp: rawTimestamp,
   });
 }
 
-/** Normaliza el payload WSS {"tipo":"MOVIMIENTO_INDIVIDUAL", ...} -> SÍ persiste en tabla. */
 function aMovimientoIndividual(payload = {}) {
-  const idComando = payload?.id_comando ?? payload?.codigo;
-  const nIdComando = idComando !== null && idComando !== undefined ? Number(idComando) : null;
-  const comando = String(
-    payload?.comando ||
-    (Number.isInteger(nIdComando) ? (CONFIG.COMMAND_META?.[nIdComando]?.label || `CMD ${nIdComando}`) : payload?.nombre_comando || 'Movimiento')
-  );
+  const codigoFisico = payload?.codigo_fisico ?? payload?.codigo ?? payload?.id_comando ?? null;
+  const idComando = payload?.id_comando ?? payload?.codigo ?? null;
   const rawTimestamp = payload?.timestamp || payload?.fecha_hora || null;
   const { fecha, hora } = extraerFechaHora(rawTimestamp);
 
   return crearMovimiento({
-    idRegistro: payload?.id_historial ?? payload?.id_registro ?? null,
-    idComando: Number.isInteger(nIdComando) ? nIdComando : null,
-    comando,
+    idRegistro: payload?.id_historial ?? null,
+    idComando: idComando !== null ? Number(idComando) : null,
+    codigoFisico: codigoFisico !== null ? Number(codigoFisico) : null,
+    comando: payload?.comando || payload?.nombre_comando || null,
+    duracionMs: payload?.duracion_ms ?? null,
     fecha: payload?.fecha || fecha,
     hora: payload?.hora || hora,
     timestamp: rawTimestamp,
   });
 }
 
-// Mapeo semántico de nombres textuales de comandos a sus identificadores oficiales
-const COMMAND_NAME_ALIASES = Object.freeze({
-  'AVANZAR': 1,
-  'ADELANTE': 1,
-  'FORWARD': 1,
-  'RETROCEDER': 2,
-  'ATRAS': 2,
-  'ATRÁS': 2,
-  'BACKWARD': 2,
-  'GIRAR_DERECHA': 3,
-  'GIRAR DERECHA': 3,
-  'DERECHA': 3,
-  'RIGHT': 3,
-  'GIRAR_IZQUIERDA': 4,
-  'GIRAR IZQUIERDA': 4,
-  'IZQUIERDA': 4,
-  'LEFT': 4,
-  'SUBIR_EXCAVADORA': 5,
-  'SUBIR EXCAVADORA': 5,
-  'ALZAR_PALA': 5,
-  'ALZAR PALA': 5,
-  'PALA_ARRIBA': 5,
-  'BAJAR_EXCAVADORA': 6,
-  'BAJAR EXCAVADORA': 6,
-  'BAJAR_PALA': 6,
-  'BAJAR PALA': 6,
-  'PALA_ABAJO': 6,
-  'AVANZAR_DERECHA': 7,
-  'AVANZAR DERECHA': 7,
-  'DIAGONAL_DERECHA': 7,
-  'DIAGONAL DERECHA': 7,
-  'AVANZAR_IZQUIERDA': 8,
-  'AVANZAR IZQUIERDA': 8,
-  'DIAGONAL_IZQUIERDA': 8,
-  'DIAGONAL IZQUIERDA': 8,
-  'LUCES': 9,
-  'LUZ': 9,
-  'LIGHTS': 9,
-  'SONIDO': 10,
-  'CLAXON': 10,
-  'HORN': 10,
-  'SOUND': 10,
-  'DEMO_FABRICA': 11,
-  'DEMO FABRICA': 11,
-  'DEMO': 11,
-  'DETENER': 12,
-  'PARO': 12,
-  'STOP': 12,
-  'ENCENDER': 13,
-  'START': 13,
-  'APAGAR': 14,
-  'OFF': 14,
-});
-
-/**
- * Resuelve el ID numérico de un comando desde cualquier estructura de payload
- * (soporta id_comando, codigo, cmdId, o resolución por nombre textual).
- */
-function resolverIdComando(payload) {
-  if (typeof payload === 'number') return Number.isInteger(payload) ? payload : null;
-  if (!payload || typeof payload !== 'object') return null;
-
-  const directId = payload?.id_comando ?? payload?.codigo ?? payload?.idComando ?? payload?.cmdId;
-  if (directId !== undefined && directId !== null && directId !== '') {
-    const num = Number(directId);
-    if (Number.isInteger(num)) return num;
-  }
-
-  const raw = String(payload?.comando || payload?.nombre || payload?.nombre_comando || '').trim().toUpperCase();
-  if (raw && COMMAND_NAME_ALIASES[raw]) {
-    return COMMAND_NAME_ALIASES[raw];
-  }
-
-  return null;
-}
-
-/** Normaliza el payload WSS {"evento":"MOVIMIENTO_DEMO", ...} -> NO persiste en tabla. */
 function aMovimientoDemo(payload = {}) {
   const rawTimestamp = payload?.timestamp || payload?.fecha_hora || null;
   const { fecha, hora } = extraerFechaHora(rawTimestamp);
-  const idComando = resolverIdComando(payload);
-  const meta = idComando ? CONFIG.COMMAND_META?.[idComando] : null;
-  const comando = String(payload?.comando || payload?.nombre_comando || meta?.label || 'Demo');
+  const codigoFisico = payload?.codigo_fisico ?? payload?.codigo ?? payload?.id_comando ?? null;
   return crearMovimiento({
-    idComando: Number.isInteger(idComando) ? idComando : null,
-    comando,
+    idComando: payload?.id_comando !== undefined ? Number(payload.id_comando) : null,
+    codigoFisico: codigoFisico !== null ? Number(codigoFisico) : null,
+    comando: payload?.comando || payload?.nombre_comando || 'Demo',
+    duracionMs: payload?.duracion_ms ?? null,
     fecha,
     hora,
     timestamp: rawTimestamp,
   });
 }
 
-/**
- * Renderiza la tarjeta destacada del último movimiento.
- * - mov === null  -> Estado visual "Cargando"
- * - sin idComando -> Estado visual "Sin movimientos"
- */
 function renderUltimoMovimiento(mov) {
-  const commandEl = document.getElementById('monitorLastCommand');
-  const metaEl = document.getElementById('monitorLastMeta');
-  const fechaEl = document.getElementById('monitorLastFecha');
-  const horaEl = document.getElementById('monitorLastHora');
-  const statusEl = document.getElementById('monitorLastMovementStatus');
-
+  const commandEl = getEl('monitorLastCommand');
+  const metaEl = getEl('monitorLastMeta');
+  const fechaEl = getEl('monitorLastFecha');
+  const horaEl = getEl('monitorLastHora');
+  const statusEl = getEl('monitorLastMovementStatus');
   if (!commandEl || !metaEl || !fechaEl || !horaEl || !statusEl) return;
 
-  const paint = (comando, metaText, fecha, hora, statusText, statusTone, idComando) => {
-    if (commandEl) {
-      commandEl.textContent = '';
-      const cmdMeta = idComando ? CONFIG.COMMAND_META?.[idComando] : null;
-      if (cmdMeta?.icon) {
-        const ico = document.createElement('i');
-        ico.className = `bi ${cmdMeta.icon} me-1`;
-        commandEl.appendChild(ico);
-      }
-      commandEl.appendChild(document.createTextNode(comando));
+  const paint = (comando, metaText, fecha, hora, statusText, statusTone, codigoFisico) => {
+    commandEl.textContent = '';
+    const cmdMeta = codigoFisico ? CONFIG.COMMAND_META?.[codigoFisico] : null;
+    if (cmdMeta?.icon) {
+      const ico = document.createElement('i');
+      ico.className = `bi ${cmdMeta.icon} me-1`;
+      commandEl.appendChild(ico);
     }
-    if (metaEl) metaEl.textContent = metaText;
-    if (fechaEl) fechaEl.textContent = fecha;
-    if (horaEl) horaEl.textContent = hora;
-    if (statusEl) {
-      statusEl.textContent = statusText;
-      statusEl.className = 'badge ' + statusTone;
-    }
+    commandEl.appendChild(document.createTextNode(comando));
+    metaEl.textContent = metaText;
+    fechaEl.textContent = fecha;
+    horaEl.textContent = hora;
+    statusEl.textContent = statusText;
+    statusEl.className = 'badge ' + statusTone;
   };
 
   if (!mov) {
-    // Estado visual: "Cargando"
-    paint('—', 'Consultando último movimiento…', '—', '—', 'Cargando', 'text-bg-secondary');
+    paint('—', 'Consultando último movimiento…', '—', '—', 'Cargando', 'text-bg-secondary', null);
     return;
   }
 
-  const esSinMovimientos = !mov.idComando && !mov.idRegistro;
-  const esDetenido = mov.idComando === CONFIG.COMMANDS.DETENER || String(mov.comando).toLowerCase().includes('detener');
-
+  const esSinMovimientos = !mov.idComando && !mov.idRegistro && !mov.codigoFisico;
   if (esSinMovimientos) {
-    // Estado visual: "Sin movimientos"
-    paint('—', 'Sin movimientos registrados para el vehículo.', '—', '—', 'Sin movimientos', 'text-bg-secondary');
+    paint('—', 'Sin movimientos registrados para el vehículo.', '—', '—', 'Sin movimientos', 'text-bg-secondary', null);
     return;
   }
+
+  const esDetenido =
+    mov.codigoFisico === CONFIG.COMMANDS.DETENER ||
+    String(mov.comando).toLowerCase().includes('detener');
 
   const metaText = mov.fecha
     ? `Último movimiento: ${mov.comando} · ${mov.fecha} ${mov.hora || ''}`.trim()
-    : `Último movimiento: ${mov.comando} · CMD ${mov.idComando}`;
+    : `Último movimiento: ${mov.comando}`;
 
   paint(
     mov.comando,
@@ -531,23 +505,17 @@ function renderUltimoMovimiento(mov) {
     mov.hora || '—',
     esDetenido ? 'Vehículo Detenido' : 'Último Movimiento Registrado',
     esDetenido ? 'text-bg-danger' : 'text-bg-success',
-    mov.idComando
+    mov.codigoFisico
   );
 }
 
-/**
- * Renderiza la tabla semántica de los últimos movimientos (máx. 10).
- * Columnas: #, Movimiento, Fecha, Hora.
- */
 function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registrados para el vehículo.') {
-  const tbody = document.getElementById('monitorHistorialBody');
-  const empty = document.getElementById('monitorHistorialEmpty');
-  const countBadge = document.getElementById('monitorHistorialCount');
-
+  const tbody = getEl('monitorHistorialBody');
+  const empty = getEl('monitorHistorialEmpty');
+  const countBadge = getEl('monitorHistorialCount');
   if (!tbody) return;
 
   const movs = Array.isArray(movimientos) ? movimientos.slice(0, MONITOREO_MAX_REGISTROS) : [];
-
   tbody.textContent = '';
 
   if (movs.length === 0) {
@@ -570,7 +538,6 @@ function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registra
 
   movs.forEach((mov, index) => {
     const tr = document.createElement('tr');
-
     const tdNumero = document.createElement('td');
     tdNumero.className = 'text-center';
     const badge = document.createElement('span');
@@ -580,7 +547,7 @@ function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registra
 
     const tdMovimiento = document.createElement('td');
     tdMovimiento.className = 'monitor-movimiento-cell';
-    const meta = mov.idComando ? CONFIG.COMMAND_META?.[mov.idComando] : null;
+    const meta = mov.codigoFisico ? CONFIG.COMMAND_META?.[mov.codigoFisico] : null;
     if (meta?.icon) {
       const ico = document.createElement('i');
       ico.className = `bi ${meta.icon} me-1`;
@@ -602,21 +569,15 @@ function renderHistorial(movimientos = [], emptyText = 'Sin movimientos registra
   UI.etiquetarCeldas(tbody);
 }
 
-/**
- * Renderiza el catálogo de comandos soportados por el vehículo desde GET /comandos.
- */
 function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponibles.') {
-  const tbody = document.getElementById('monitorComandosBody');
-  const empty = document.getElementById('monitorComandosEmpty');
-  const countBadge = document.getElementById('monitorComandosCount');
-
+  const tbody = getEl('monitorComandosBody');
+  const empty = getEl('monitorComandosEmpty');
+  const countBadge = getEl('monitorComandosCount');
   if (!tbody) return;
 
   tbody.textContent = '';
-
-  const lista = Array.isArray(comandos) ? comandos : [];
-
-  if (lista.length === 0) {
+  const list = Array.isArray(comandos) ? comandos : [];
+  if (list.length === 0) {
     if (empty) {
       empty.hidden = false;
       let msgEl = empty.querySelector('.monitor-empty-text');
@@ -632,11 +593,10 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
   }
 
   if (empty) empty.hidden = true;
-  if (countBadge) countBadge.textContent = `${lista.length} comandos`;
+  if (countBadge) countBadge.textContent = `${list.length} comandos`;
 
-  lista.forEach((cmd) => {
+  list.forEach((cmd) => {
     const tr = document.createElement('tr');
-
     const tdNumero = document.createElement('td');
     tdNumero.className = 'text-center';
     const badge = document.createElement('span');
@@ -647,13 +607,15 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
 
     const tdNombre = document.createElement('td');
     tdNombre.className = 'monitor-movimiento-cell';
-    const meta = codigo ? CONFIG.COMMAND_META?.[codigo] : null;
+    const cf = cmd?.codigo_fisico ?? codigo;
+    const meta = cf ? CONFIG.COMMAND_META?.[cf] : null;
     if (meta?.icon) {
       const ico = document.createElement('i');
       ico.className = `bi ${meta.icon} me-1`;
       tdNombre.appendChild(ico);
     }
-    tdNombre.appendChild(document.createTextNode(cmd?.nombre || '—'));
+    const durTag = cmd?.duracion_ms ? ` (${(Number(cmd.duracion_ms) / 1000).toFixed(1)}s)` : '';
+    tdNombre.appendChild(document.createTextNode(`${cmd?.nombre || '—'}${durTag}`));
 
     const tdDesc = document.createElement('td');
     tdDesc.className = 'text-secondary small';
@@ -675,56 +637,273 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
   UI.etiquetarCeldas(tbody);
 }
 
-/** Carga inicial del panel de Monitoreo: GET estado + GET historial + GET comandos (REST). */
 async function cargarPanelMonitoreo() {
-  // Estado visual inicial: "Cargando"
   renderUltimoMovimiento(null);
   renderHistorial([], 'Consultando historial de movimientos…');
   renderComandosCatalogo([], 'Consultando catálogo de comandos…');
 
-  try {
-    const [estadoRes, historialRes, comandosRes] = await Promise.all([
-      api.obtenerEstado(),
-      api.obtenerHistorial(),
-      api.obtenerComandos(),
-    ]);
+  const [estadoRes, historialRes, comandosRes] = await Promise.all([
+    api.obtenerEstado(),
+    api.obtenerHistorial(),
+    api.obtenerComandos(),
+  ]);
 
-    // 1. Catálogo de comandos soportados por el vehículo
-    const comandos = Array.isArray(comandosRes?.data) ? comandosRes.data : [];
-    renderComandosCatalogo(comandos);
+  if (!estadoRes.ok && estadoRes.status === 403) {
+    const msg = formatApiError(estadoRes, 'Sin autorización para monitorear esta unidad.');
+    UI.showToast(msg, 'warning');
+    renderUltimoMovimiento({ idComando: null, comando: 'Acceso restringido' });
+    renderHistorial([], msg);
+    renderComandosCatalogo([], msg);
+    return;
+  }
 
-    // 2. Historial de movimientos persistidos
-    const historial = aHistorial(historialRes?.data);
+  const comandos = Array.isArray(comandosRes?.data) ? comandosRes.data : [];
+  reconstruirMapaComandos(comandos);
+  renderComandosCatalogo(comandos);
+
+  if (historialRes.ok) {
+    const historial = aHistorial(historialRes.data);
     STATE.monitorHistorial = historial;
     renderHistorial(historial);
-
-    // 3. Tarjeta destacada de último movimiento
-    let ultimo = null;
-    if (historial.length > 0) {
-      ultimo = historial[0];
-    } else if (estadoRes?.ok) {
+    let ultimo = historial.length > 0 ? historial[0] : null;
+    if (!ultimo && estadoRes.ok) {
       ultimo = aEstadoInicial({ estado: estadoRes.data, timestamp: null });
     }
-
     renderUltimoMovimiento(ultimo);
-  } catch (err) {
-    // Ante cualquier fallo de carga se muestra el estado honesto (nunca queda en "Cargando")
-    console.error('[MONITOREO] Error al cargar panel de monitoreo:', err);
-    renderUltimoMovimiento({
-      idRegistro: null,
-      idComando: null,
-      comando: 'Sin movimientos registrados',
-      fecha: '',
-      hora: '',
-      timestamp: null,
-    });
-    renderHistorial([], 'Sin movimientos disponibles por el momento.');
-    renderComandosCatalogo([], 'No fue posible cargar el catálogo de comandos.');
+  } else {
+    STATE.monitorHistorial = [];
+    renderHistorial([], formatApiError(historialRes, 'Historial no disponible.'));
+    renderUltimoMovimiento(estadoRes.ok ? aEstadoInicial({ estado: estadoRes.data }) : { idComando: null });
   }
 }
 
 // ---------------------------------------------------------------------------
-// NAVEGACIÓN PRINCIPAL: VISTA DE CONTROL <-> VISTA DE MONITOREO
+// CATÁLOGO PÚBLICO (preview en Fase 3; sesión exclusiva completa en Fase 4)
+// ---------------------------------------------------------------------------
+async function cargarCatalogoPublico() {
+  const modelosWrap = getEl('guestModelosGrid');
+  const exhibWrap = getEl('guestExhibicionGrid');
+  if (modelosWrap) modelosWrap.textContent = 'Cargando catálogo público de modelos…';
+  if (exhibWrap) exhibWrap.textContent = 'Consultando disponibilidad en exhibición…';
+
+  const [modRes, exhRes] = await Promise.all([
+    api.obtenerCatalogoPublicoModelos(),
+    api.obtenerCatalogoPublicoExhibicion(),
+  ]);
+
+  if (modelosWrap) {
+    modelosWrap.textContent = '';
+    const modelos = modRes.ok && Array.isArray(modRes.data) ? modRes.data : [];
+    if (!modelos.length) {
+      const p = document.createElement('p');
+      p.className = 'text-secondary small mb-0';
+      p.textContent = modRes.ok ? 'Sin modelos publicados por el momento.' : formatApiError(modRes);
+      modelosWrap.appendChild(p);
+    } else {
+      modelos.forEach((m) => {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6';
+        const card = document.createElement('div');
+        card.className = 'card bg-dark border-secondary-subtle h-100';
+        const body = document.createElement('div');
+        body.className = 'card-body p-3';
+        const head = document.createElement('div');
+        head.className = 'd-flex justify-content-between align-items-start gap-2 mb-1';
+        const h3 = document.createElement('h3');
+        h3.className = 'h6 text-white mb-0';
+        h3.textContent = m.nombre_comercial || m.codigo_modelo;
+        const code = document.createElement('span');
+        code.className = 'badge text-bg-dark border border-secondary font-monospace';
+        code.textContent = m.codigo_modelo;
+        head.append(h3, code);
+        const desc = document.createElement('p');
+        desc.className = 'small text-secondary mb-2';
+        desc.textContent = m.descripcion || 'Modelo IoT de catálogo oficial.';
+        const caps = document.createElement('div');
+        caps.className = 'small text-info';
+        caps.textContent = `Capacidades físicas activas: ${(m.capacidades || []).length}`;
+        body.append(head, desc, caps);
+        card.appendChild(body);
+        col.appendChild(card);
+        modelosWrap.appendChild(col);
+      });
+    }
+  }
+
+  if (exhibWrap) {
+    exhibWrap.textContent = '';
+    const unidades = exhRes.ok && Array.isArray(exhRes.data) ? exhRes.data : [];
+    if (!unidades.length) {
+      const p = document.createElement('p');
+      p.className = 'text-secondary small mb-0';
+      p.textContent = exhRes.ok
+        ? 'No hay unidades en exhibición disponibles en este momento.'
+        : formatApiError(exhRes);
+      exhibWrap.appendChild(p);
+    } else {
+      unidades.forEach((u) => {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6';
+        const card = document.createElement('div');
+        card.className = 'card bg-dark border-secondary-subtle h-100';
+        const body = document.createElement('div');
+        body.className = 'card-body p-3 d-flex flex-column gap-2';
+        const top = document.createElement('div');
+        top.className = 'd-flex justify-content-between align-items-center';
+        const title = document.createElement('strong');
+        title.className = 'text-white';
+        title.textContent = `${u.nombre} (#${u.id_vehiculo})`;
+        const badge = document.createElement('span');
+        badge.className = u.disponible_ahora
+          ? 'badge bg-success-subtle text-success border border-success-subtle'
+          : 'badge bg-warning-subtle text-warning border border-warning-subtle';
+        badge.textContent = u.disponible_ahora
+          ? 'Disponible'
+          : `Ocupada (${u.segundos_ocupacion}s)`;
+        top.append(title, badge);
+        const sub = document.createElement('small');
+        sub.className = 'text-secondary';
+        sub.textContent = u.nombre_comercial || u.modelo || 'Unidad de exhibición';
+        body.append(top, sub);
+        card.appendChild(body);
+        col.appendChild(card);
+        exhibWrap.appendChild(col);
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MIS VEHÍCULOS (rol USUARIO — base en Fase 3, soporte/temporizados/editor en Fase 4)
+// ---------------------------------------------------------------------------
+async function cargarMisVehiculos() {
+  const wrap = getEl('userVehiclesGrid');
+  if (wrap) wrap.textContent = 'Cargando tus unidades…';
+  const res = await api.obtenerVehiculos();
+  if (!res.ok) {
+    STATE.misVehiculos = [];
+    if (wrap) {
+      wrap.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'text-danger small mb-0';
+      p.textContent = formatApiError(res);
+      wrap.appendChild(p);
+    }
+    return [];
+  }
+
+  STATE.misVehiculos = Array.isArray(res.data) ? res.data : [];
+  if (wrap) {
+    wrap.textContent = '';
+    if (!STATE.misVehiculos.length) {
+      const p = document.createElement('p');
+      p.className = 'text-secondary small mb-0';
+      p.textContent = 'Aún no tienes vehículos asignados a tu cuenta.';
+      wrap.appendChild(p);
+    } else {
+      STATE.misVehiculos.forEach((v) => {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6';
+        const card = document.createElement('div');
+        card.className = `card bg-dark border-${v.id_vehiculo === STATE.vehicleId ? 'info' : 'secondary-subtle'} h-100`;
+        const body = document.createElement('div');
+        body.className = 'card-body p-3 d-flex flex-column gap-2';
+
+        const top = document.createElement('div');
+        top.className = 'd-flex justify-content-between align-items-center';
+        const h3 = document.createElement('h3');
+        h3.className = 'h6 text-white mb-0';
+        h3.textContent = `${v.nombre} (#${v.id_vehiculo})`;
+        const estado = document.createElement('span');
+        estado.className = 'badge bg-info-subtle text-info border border-info-subtle';
+        estado.textContent = v.estado_comercial || 'PROPIO';
+        top.append(h3, estado);
+
+        const meta = document.createElement('div');
+        meta.className = 'small text-secondary';
+        meta.textContent = `${v.nombre_comercial || v.modelo || 'Grúa RC IoT'}${v.numero_serie ? ` · Serie: ${v.numero_serie}` : ''}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'd-flex gap-2 mt-auto pt-1';
+
+        const btnCtrl = document.createElement('button');
+        btnCtrl.type = 'button';
+        btnCtrl.className = 'btn btn-sm btn-primary flex-fill';
+        btnCtrl.textContent = 'Controlar';
+        btnCtrl.addEventListener('click', async () => {
+          await seleccionarVehiculoActivo(v);
+          salirDeMonitor();
+        });
+
+        const btnMon = document.createElement('button');
+        btnMon.type = 'button';
+        btnMon.className = 'btn btn-sm btn-outline-info flex-fill';
+        btnMon.textContent = 'Monitoreo';
+        btnMon.addEventListener('click', async () => {
+          await seleccionarVehiculoActivo(v);
+          await entrarAMonitor();
+        });
+
+        actions.append(btnCtrl, btnMon);
+        body.append(top, meta, actions);
+        card.appendChild(body);
+        col.appendChild(card);
+        wrap.appendChild(col);
+      });
+    }
+  }
+  return STATE.misVehiculos;
+}
+
+// ---------------------------------------------------------------------------
+// SELECCIÓN DE UNIDAD ACTIVA (sin duplicar WebSockets)
+// ---------------------------------------------------------------------------
+async function seleccionarVehiculoActivo(vehiculo) {
+  if (!vehiculo || !vehiculo.id_vehiculo) return false;
+  const nuevoId = Number(vehiculo.id_vehiculo);
+  STATE.vehicleId = nuevoId;
+  STATE.vehicleInfo = vehiculo;
+  api.setVehicleId(nuevoId);
+
+  UI.updateVehicleContext({
+    id: nuevoId,
+    nombre: vehiculo.nombre || '',
+    estadoComercial: vehiculo.estado_comercial || '',
+  });
+
+  // Conectar (o reutilizar si ya es la misma unidad) un único canal WSS
+  wsService.connect(nuevoId);
+  syncDiagnostics();
+
+  const [cmdRes] = await Promise.all([api.obtenerComandos(nuevoId), cargarCatalogoDemos()]);
+  if (cmdRes.ok) {
+    reconstruirMapaComandos(cmdRes.data);
+  } else {
+    reconstruirMapaComandos([]);
+  }
+  return true;
+}
+
+async function cargarCatalogoDemos() {
+  if (!auth.isAuthenticated() || auth.getRole() === 'INVITADO') {
+    STATE.demos = [];
+    UI.renderDemos([]);
+    UI.renderDemoSelect([]);
+    return;
+  }
+  const res = await api.obtenerDemos(STATE.vehicleId);
+  if (res.ok) {
+    const demos = Array.isArray(res.data) ? res.data : res.data?.demos || [];
+    STATE.demos = demos;
+    UI.renderDemos(demos);
+    UI.renderDemoSelect(demos);
+  } else {
+    UI.renderDemoError(formatApiError(res));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NAVEGACIÓN POR VISTAS Y ROLES
 // ---------------------------------------------------------------------------
 function actualizarNavPills(vistaActiva) {
   document.querySelectorAll('.app-nav [data-view-switch]').forEach((btn) => {
@@ -734,59 +913,208 @@ function actualizarNavPills(vistaActiva) {
   });
 }
 
-function bindViewNavigation() {
-  document.querySelectorAll('[data-view-switch]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const vista = btn.dataset.viewSwitch;
-      if (vista === 'monitor') {
-        entrarAMonitor();
-      } else if (vista === 'admin') {
-        entrarAAdmin();
-      } else {
-        salirDeMonitor();
-      }
-    });
-  });
+async function entrarAVista(vista) {
+  const rol = auth.getRole();
 
-  const btnRefresh = document.getElementById('btnRefreshMonitor');
-  if (btnRefresh) {
-    btnRefresh.addEventListener('click', () => {
-      cargarPanelMonitoreo();
-    });
+  if (vista === 'auth') {
+    vistaActual = 'auth';
+    actualizarNavPills('auth');
+    UI.setView('auth');
+    return;
   }
+
+  if (vista === 'guest') {
+    vistaActual = 'guest';
+    actualizarNavPills('guest');
+    UI.setView('guest');
+    await cargarCatalogoPublico();
+    return;
+  }
+
+  if (!auth.isAuthenticated()) {
+    UI.showToast('Inicia sesión para acceder a este módulo.', 'warning');
+    return entrarAVista('auth');
+  }
+
+  if (vista === 'admin') {
+    if (rol !== 'ADMIN') {
+      UI.showToast('Acceso denegado: módulo exclusivo de Administrador (403).', 'danger');
+      return;
+    }
+    vistaActual = 'admin';
+    actualizarNavPills('admin');
+    UI.setView('admin');
+    await alEntrarAdmin();
+    return;
+  }
+
+  if (vista === 'user-vehicles') {
+    if (rol !== 'USUARIO') {
+      UI.showToast('Esta vista corresponde al perfil de Comprador.', 'warning');
+      return;
+    }
+    vistaActual = 'user-vehicles';
+    actualizarNavPills('user-vehicles');
+    UI.setView('user-vehicles');
+    await cargarMisVehiculos();
+    return;
+  }
+
+  if (vista === 'monitor') {
+    if (rol === 'INVITADO') {
+      UI.showToast('El rol Invitado no tiene acceso al historial de Monitoreo (403).', 'warning');
+      return;
+    }
+    return entrarAMonitor();
+  }
+
+  // vista === 'control'
+  salirDeMonitor();
 }
 
 async function entrarAMonitor() {
   vistaActual = 'monitor';
-  // Ocultar mando y lobby de forma atómica y mostrar únicamente telemetría
   UI.setView('monitor');
   actualizarNavPills('monitor');
+  wsService.connect(STATE.vehicleId);
   await cargarPanelMonitoreo();
 }
 
 function salirDeMonitor() {
   vistaActual = 'control';
   actualizarNavPills('control');
-  // Restaurar la vista de control previa (mando si estaba activo, o lobby en móvil)
+  wsService.connect(STATE.vehicleId);
   UI.setView(modoControlPreferido ? 'mando' : 'lobby');
 }
 
-async function entrarAAdmin() {
-  const autorizado = await solicitarAcceso();
-  if (!autorizado) return;
-  vistaActual = 'admin';
-  actualizarNavPills('admin');
-  UI.setView('admin');
-  await alEntrarAdmin();
+function bindViewNavigation() {
+  document.querySelectorAll('[data-view-switch]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      entrarAVista(btn.dataset.viewSwitch);
+    });
+  });
+
+  getEl('btnRefreshMonitor')?.addEventListener('click', () => cargarPanelMonitoreo());
+  getEl('btnRefreshGuestCatalog')?.addEventListener('click', () => cargarCatalogoPublico());
+  getEl('btnRefreshMisVehiculos')?.addEventListener('click', () => cargarMisVehiculos());
 }
 
+// ---------------------------------------------------------------------------
+// AUTENTICACIÓN: LOGIN / LOGOUT / REACCIÓN AL CAMBIO DE SESIÓN
+// ---------------------------------------------------------------------------
+async function aplicarEstadoAutenticacion(session, reason = 'boot') {
+  const user = session?.usuario || null;
+  UI.syncAuthUi(user);
+
+  if (!user) {
+    wsService.disconnect('En espera de sesión');
+    STATE.misVehiculos = [];
+    STATE.comandosVehiculo = [];
+    STATE.fisicoToComandoId.clear();
+    if (reason === 'expired') {
+      UI.showToast('Tu sesión expiró o fue revocada. Inicia sesión nuevamente.', 'warning');
+    }
+    if (vistaActual !== 'guest') {
+      await entrarAVista('auth');
+    }
+    return;
+  }
+
+  if (reason === 'refresh') {
+    // Re-sincronizar WSS si hace falta sin cambiar de vista
+    if (STATE.vehicleId) wsService.connect(STATE.vehicleId);
+    return;
+  }
+
+  if (user.rol === 'ADMIN') {
+    const resVeh = await api.obtenerVehiculos();
+    const vehs = resVeh.ok && Array.isArray(resVeh.data) ? resVeh.data : [];
+    const operable =
+      vehs.find((v) => v.activo && (v.estado_comercial === 'EXHIBICION' || v.estado_comercial === 'DISPONIBLE')) ||
+      vehs[0];
+    if (operable) {
+      await seleccionarVehiculoActivo(operable);
+    }
+    await entrarAVista('admin');
+    return;
+  }
+
+  if (user.rol === 'USUARIO') {
+    const mis = await cargarMisVehiculos();
+    if (mis.length > 0) {
+      await seleccionarVehiculoActivo(mis[0]);
+    } else {
+      wsService.disconnect('Sin unidades asignadas');
+    }
+    await entrarAVista('user-vehicles');
+    return;
+  }
+
+  if (user.rol === 'INVITADO') {
+    const idVeh = session?.sesionInvitado?.id_vehiculo;
+    if (idVeh) {
+      const r = await api.obtenerVehiculo(idVeh);
+      await seleccionarVehiculoActivo(r.ok ? r.data : { id_vehiculo: idVeh, nombre: `Exhibición #${idVeh}` });
+    }
+    await entrarAVista('control');
+  }
+}
+
+function bindAuthEvents() {
+  const formLogin = getEl('formLogin');
+  const loginError = getEl('loginErrorBox');
+
+  formLogin?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const correo = String(formLogin.elements.correo.value || '').trim();
+    const password = String(formLogin.elements.password.value || '');
+    if (loginError) loginError.hidden = true;
+
+    if (!correo || !password) {
+      if (loginError) {
+        loginError.textContent = 'Ingresa tu correo y contraseña.';
+        loginError.hidden = false;
+      }
+      return;
+    }
+
+    const btn = formLogin.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    const res = await auth.login(correo, password);
+    if (btn) btn.disabled = false;
+
+    if (!res.ok) {
+      if (loginError) {
+        loginError.textContent = res.error || 'Credenciales inválidas.';
+        loginError.hidden = false;
+      }
+      return;
+    }
+
+    formLogin.reset();
+    UI.showToast(`Bienvenido, ${res.data?.usuario?.nombre || correo}`, 'success');
+  });
+
+  getEl('btnHeaderLogout')?.addEventListener('click', async () => {
+    await auth.logout();
+    UI.showToast('Sesión cerrada correctamente.', 'info');
+  });
+
+  getEl('btnHeaderLogin')?.addEventListener('click', () => entrarAVista('auth'));
+  getEl('btnGoGuestCatalog')?.addEventListener('click', () => entrarAVista('guest'));
+  getEl('btnBackToLogin')?.addEventListener('click', () => entrarAVista('auth'));
+
+  auth.onChange((session, reason) => {
+    aplicarEstadoAutenticacion(session, reason);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// WEBSOCKET: EVENTOS EN TIEMPO REAL
+// ---------------------------------------------------------------------------
 function mapWssState(wsState, detail = '') {
-  if (wsState === 'open') {
-    return { state: 'online', detail: detail || 'En línea · Operativo' };
-  }
-  if (wsState === 'connecting') {
-    return { state: 'connecting', detail: detail || 'Conectando...' };
-  }
+  if (wsState === 'open') return { state: 'online', detail: detail || 'En línea · Operativo' };
+  if (wsState === 'connecting') return { state: 'connecting', detail: detail || 'Conectando...' };
   return { state: 'offline', detail: detail || 'Sin conexión' };
 }
 
@@ -794,37 +1122,44 @@ function syncDiagnostics(extra = {}) {
   const metrics = wsService.getMetrics();
   UI.updateDiagnostics({
     restUrl: CONFIG.BASE_URL,
-    wssUrl: CONFIG.WSS_URL,
+    wssUrl: metrics.wssUrl || CONFIG.buildDisplayWssUrl(STATE.vehicleId),
     wsReconnects: metrics.attempts,
     lastWsMessage: metrics.lastMessage,
     ...extra,
   });
 }
 
-// ---------------------------------------------------------------------------
-// WSS: EVENTOS
-// ---------------------------------------------------------------------------
 function bindWebSocketEvents() {
   wsService.on('statusChange', ({ state, detail }) => {
     if (state === 'open') {
       UI.setWssOnline(detail || 'En línea · Operativo');
     } else {
-      UI.setConnectivity({
-        wss: mapWssState(state, detail),
-      });
+      UI.setConnectivity({ wss: mapWssState(state, detail) });
     }
     syncDiagnostics();
 
-    // Fail-safe: si el canal WSS se cae mientras hay un movimiento en curso, frenar por REST
-    if ((state === 'closed' || state === 'error') && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
-      const lastWasMovement = Object.values(CONFIG.COMMANDS).includes(STATE.lastSentCommand) && STATE.lastSentCommand < CONFIG.COMMANDS.DEMO_FABRICA;
+    if (
+      auth.isAuthenticated() &&
+      (state === 'closed' || state === 'error') &&
+      STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER
+    ) {
+      const lastWasMovement =
+        Object.values(CONFIG.COMMANDS).includes(STATE.lastSentCommand) &&
+        STATE.lastSentCommand < CONFIG.COMMANDS.DEMO_FABRICA;
       if (lastWasMovement) {
         detenerVehiculo();
       }
     }
 
-    // Sincronizar badge del estado del joystick
     UI.setJoystickState(state === 'open' ? 'Conectado' : state === 'connecting' ? 'Conectando' : 'Offline');
+  });
+
+  wsService.on('authError', ({ code, reason }) => {
+    if (code === 4403) {
+      UI.showToast(`Canal WSS denegado (403): ${reason}`, 'warning');
+    } else if (code === 4401 && auth.isAuthenticated()) {
+      UI.showToast(`Sesión WSS cerrada: ${reason}`, 'warning');
+    }
   });
 
   wsService.on('fin_demo', (payload) => {
@@ -833,140 +1168,126 @@ function bindWebSocketEvents() {
     UI.setCommandState(CONFIG.COMMANDS.DETENER, 'VEHÍCULO DETENIDO');
     UI.setPulseState('active-stopped');
     syncDiagnostics();
-    UI.showToast(`Demo finalizada por el vehículo (${payload?.timestamp || 'evento'})`, 'info');
-    UI.demoTimelineEnd('Rutina finalizada por el vehículo', 'success');
+    UI.showToast(`Demo finalizada (${payload?.timestamp || 'evento'})`, 'info');
+    UI.demoTimelineEnd('Rutina finalizada', 'success');
   });
 
-  // FASE MONITOREO: estado inicial entregado por WSS (no es un movimiento persistido)
   wsService.on('estado_inicial', (payload) => {
     const mov = aEstadoInicial(payload);
     renderUltimoMovimiento(mov);
     syncDiagnostics();
   });
 
-  // FASE MONITOREO: movimiento individual persistido -> SÍ entra a la tabla de historial
   wsService.on('movimiento_individual', (payload) => {
     const mov = aMovimientoIndividual(payload);
-
-    // Evitar duplicar el mismo registro exacto si ya existe por idRegistro o timestamp idéntico
     const duplicado = STATE.monitorHistorial.some(
       (m) =>
         (mov.idRegistro && m.idRegistro === mov.idRegistro) ||
         (mov.timestamp && m.timestamp && m.timestamp === mov.timestamp)
     );
-
     if (!duplicado) {
       STATE.monitorHistorial.unshift(mov);
       STATE.monitorHistorial = STATE.monitorHistorial.slice(0, MONITOREO_MAX_REGISTROS);
       renderHistorial(STATE.monitorHistorial);
     }
-
-    // Actualiza la tarjeta destacada del último movimiento en tiempo real
     renderUltimoMovimiento(mov);
     syncDiagnostics();
   });
 
-  // Evento de movimiento emitido durante la ejecución de una DEMO
   wsService.on('movimiento_demo', (payload) => {
     STATE.demoActive = true;
     UI.setDemoStatus(true);
 
-    const cmdId = resolverIdComando(payload);
     const mov = aMovimientoDemo(payload);
+    const cf = mov.codigoFisico;
 
-    // 1. Añadir el paso inmediatamente a la cronología de movimientos de la demo
     if (!UI.demoTimelineIsLive()) {
       UI.demoTimelineStart({ name: 'Rutina en curso' });
     }
-    UI.demoTimelineAddStep(cmdId, {
-      name: mov.comando || payload?.comando || payload?.nombre_comando,
-      cmdId: cmdId,
+    UI.demoTimelineAddStep(cf, {
+      name: mov.comando,
+      cmdId: cf,
       orden: payload?.orden,
       duracionMs: payload?.duracion_ms,
-      timestamp: payload?.timestamp || payload?.fecha_hora,
+      timestamp: payload?.timestamp,
     });
 
-    // 2. Actualizar el indicador de comando activo y pulso visual
-    if (cmdId) {
-      STATE.lastSentCommand = cmdId;
-      const label = CONFIG.COMMAND_META[cmdId]?.label || mov.comando || `CMD ${cmdId}`;
-      UI.setCommandState(cmdId, `DEMO · ${label.toUpperCase()}`);
+    if (cf) {
+      STATE.lastSentCommand = cf;
+      UI.setCommandState(payload?.id_comando ?? cf, `DEMO · ${mov.comando.toUpperCase()}`);
       UI.setPulseState('active-demo');
     }
 
-    // 3. Actualizar la tarjeta destacada en el panel de Monitoreo
     renderUltimoMovimiento(mov);
     syncDiagnostics();
   });
 
-  wsService.on('command_echo', (idComando, payload) => {
-    const cmdId = Number(idComando);
-    STATE.lastSentCommand = cmdId;
+  wsService.on('command_echo', (codigoFisico, payload) => {
+    const cf = Number(codigoFisico);
+    STATE.lastSentCommand = cf;
     syncDiagnostics();
 
-    // Solo añade a la cronología durante una rutina y si no proviene de un evento MOVIMIENTO_DEMO ya procesado
     const ev = String(payload?.evento || payload?.tipo || '').toUpperCase();
     if (STATE.demoActive && ev !== 'MOVIMIENTO_DEMO' && ev !== 'DEMO_MOVIMIENTO') {
-      UI.demoTimelineAddStep(cmdId, {
-        name: CONFIG.COMMAND_META[cmdId]?.label || `Comando ${cmdId}`,
-        cmdId: cmdId,
+      UI.demoTimelineAddStep(cf, {
+        name: payload?.comando || CONFIG.COMMAND_META[cf]?.label || `Comando ${cf}`,
+        cmdId: cf,
       });
     }
 
-    if (cmdId === CONFIG.COMMANDS.DETENER) {
-      UI.setCommandState(cmdId, 'VEHÍCULO DETENIDO');
+    if (cf === CONFIG.COMMANDS.DETENER) {
+      UI.setCommandState(payload?.id_comando ?? cf, 'VEHÍCULO DETENIDO');
       UI.setPulseState('active-stopped');
       return;
     }
 
-    const label = CONFIG.COMMAND_META[cmdId]?.label || `CMD ${cmdId}`;
-    UI.setCommandState(cmdId, `VEHÍCULO · ${label.toUpperCase()}`);
-    UI.setPulseState(cmdId === CONFIG.COMMANDS.DEMO_FABRICA ? 'active-demo' : 'active-moving');
+    const label = payload?.comando || CONFIG.COMMAND_META[cf]?.label || `CMD ${cf}`;
+    UI.setCommandState(payload?.id_comando ?? cf, `VEHÍCULO · ${label.toUpperCase()}`);
+    UI.setPulseState(cf === CONFIG.COMMANDS.DEMO_FABRICA ? 'active-demo' : 'active-moving');
   });
 
-  wsService.on('message', (payload) => {
-    syncDiagnostics();
-    console.debug('[WS] Telemetría:', payload);
-  });
+  wsService.on('message', () => syncDiagnostics());
 }
 
 // ---------------------------------------------------------------------------
-// POLLING DE SALUD DE LA API
+// POLLING DE SALUD INDEPENDIENTE: API AWS + AMAZON RDS (GET /api/health)
 // ---------------------------------------------------------------------------
 async function actualizarSaludApi({ showToast = false } = {}) {
-  const [health, rdsRes] = await Promise.all([api.comprobarSaludApi(), api.verificarRds()]);
-  UI.setRdsStatus(rdsRes);
-  const status = health.ok ? 'online' : 'offline';
+  const { aws, rds } = await api.comprobarSaludCompleta();
+  UI.setRdsStatus(rds);
+  const status = aws.ok ? 'online' : 'offline';
 
   UI.setConnectivity({
     wss: mapWssState(wsService.getState(), UI.connectivityState?.wss?.detail),
     aws: {
       state: status,
-      detail: status === 'online' ? `Operativo · ${health.latencyMs} ms` : `No alcanzable: ${health.error || 'Desconocido'}`,
-      latencyMs: health.latencyMs,
-      httpStatus: health.status,
-      error: health.error,
+      detail:
+        status === 'online'
+          ? `Operativo · ${aws.latencyMs} ms`
+          : `No alcanzable: ${aws.error || 'Desconocido'}`,
+      latencyMs: aws.latencyMs,
+      httpStatus: aws.status,
+      error: aws.error,
     },
   });
 
   syncDiagnostics({
-    latencyMs: health.latencyMs,
-    httpStatus: health.status ? `HTTP ${health.status}` : (health.error || 'Sin respuesta'),
+    latencyMs: aws.latencyMs,
+    httpStatus: aws.status ? `HTTP ${aws.status}` : aws.error || 'Sin respuesta',
   });
 
   if (showToast) {
     UI.showToast(
-      `Enlace AWS: ${health.ok ? `OK · ${health.latencyMs} ms` : `Fallo (${health.error || 'sin respuesta'})`}`,
-      health.ok ? 'success' : 'danger'
+      `API: ${aws.ok ? `OK (${aws.latencyMs} ms)` : 'Fallo'} · RDS: ${rds.ok ? 'Disponible' : 'No disponible'}`,
+      aws.ok && rds.ok ? 'success' : 'warning'
     );
   }
 
-  return health;
+  return { aws, rds };
 }
 
 async function iniciarSaludPolling() {
   await actualizarSaludApi();
-
   setInterval(async () => {
     if (document.visibilityState === 'visible') {
       await actualizarSaludApi();
@@ -975,10 +1296,9 @@ async function iniciarSaludPolling() {
 }
 
 // ---------------------------------------------------------------------------
-// FASE 1: FLUJO LOBBY <-> MODO MANDO
+// LOBBY <-> MODO MANDO (conservado intacto)
 // ---------------------------------------------------------------------------
 async function entrarAModoMando() {
-  // Cambio de vista inmediato: no depende de que fullscreen u orientación se resuelvan
   mandoActivo = true;
   modoControlPreferido = true;
   vistaActual = 'control';
@@ -987,14 +1307,13 @@ async function entrarAModoMando() {
   UI.setControllerLock(null);
   UI.setView('mando');
 
-  // Pantalla completa y orientación se solicitan sin bloquear la vista
   const docEl = document.documentElement;
   const lockLandscape = () => {
     try {
       if (screen.orientation && typeof screen.orientation.lock === 'function') {
         screen.orientation.lock('landscape').catch(() => {});
       }
-    } catch (_) { /* Orientación lock no soportada (ej. iOS Safari) */ }
+    } catch (_) {}
   };
 
   try {
@@ -1003,7 +1322,7 @@ async function entrarAModoMando() {
     } else {
       lockLandscape();
     }
-  } catch (_) { /* Fullscreen no disponible o denegado por el usuario */ }
+  } catch (_) {}
 }
 
 function salirDeModoMando() {
@@ -1011,54 +1330,43 @@ function salirDeModoMando() {
     if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
       document.exitFullscreen().catch(() => {});
     }
-  } catch (_) { /* noop */ }
+  } catch (_) {}
 
   try {
     if (screen.orientation && typeof screen.orientation.unlock === 'function') {
       screen.orientation.unlock();
     }
-  } catch (_) { /* noop */ }
+  } catch (_) {}
 
   STATE.activeController = null;
   window.activeController = null;
   UI.setControllerLock(null);
   mandoActivo = false;
   modoControlPreferido = false;
-  // Solo volver al lobby si no estamos activamente en monitoreo o administración
-  if (vistaActual !== 'monitor' && vistaActual !== 'admin') {
+  if (vistaActual === 'control') {
     UI.setView('lobby');
   }
 }
 
 // ---------------------------------------------------------------------------
-// INICIALIZACIÓN GLOBAL
+// ARRANQUE GLOBAL
 // ---------------------------------------------------------------------------
 async function boot() {
   UI.init();
 
-  // FASE 1: Lobby en dispositivos táctiles; Modo Mando directo solo con ratón/trackpad.
-  // No se usa el ancho del viewport: un móvil en horizontal también puede superar 768px.
   const esPC = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  if (esPC) {
-    mandoActivo = true;
-    modoControlPreferido = true;
-    UI.setView('mando');
-  } else {
-    mandoActivo = false;
-    modoControlPreferido = false;
-    UI.setView('lobby');
-  }
+  mandoActivo = esPC;
+  modoControlPreferido = esPC;
 
-  // Si el navegador sale de pantalla completa (gesto del sistema o tecla Esc),
-  // en móvil se regresa al lobby para evitar ver el mando recortado
   document.addEventListener('fullscreenchange', () => {
     if (document.fullscreenElement || esPC) return;
-    if (vistaActual === 'monitor') return; // Nunca sacar de monitoreo por salida de fullscreen
+    if (vistaActual !== 'control') return;
     if (!document.body.classList.contains('mando-control')) return;
     salirDeModoMando();
   });
 
-  getEl('btnEmergencyStop').addEventListener('click', async (e) => {
+  // Botón de paro de emergencia DETENER (prioridad absoluta)
+  getEl('btnEmergencyStop')?.addEventListener('click', async (e) => {
     e.preventDefault();
     if (joystickController) joystickController.forceRelease();
     STATE.activeController = null;
@@ -1066,31 +1374,21 @@ async function boot() {
     UI.setControllerLock(null);
     UI.setStopButtonState(true);
 
-    // Si hay una rutina autónoma en curso, DETENER también la cancela en el backend
     if (STATE.demoActive) {
       UI.showToast('Cancelando rutina autónoma y deteniendo...', 'warning');
       await cancelarDemo();
     } else {
-      UI.showToast('Enviando paro de emergencia (CMD 12)...', 'warning');
+      UI.showToast('Enviando paro de emergencia (DETENER 12)...', 'warning');
       await detenerVehiculo();
     }
     UI.setStopButtonState(false);
   });
 
-  getEl('btnEnterMando').addEventListener('click', async () => {
-    await entrarAModoMando();
-  });
-
-  getEl('btnLobbyCheck').addEventListener('click', async () => {
-    await actualizarSaludApi({ showToast: true });
-  });
-
-  getEl('btnExitMando').addEventListener('click', () => {
-    salirDeModoMando();
-  });
-
-  getEl('btnIniciarDemo').addEventListener('click', iniciarDemo);
-  getEl('btnCancelarDemo').addEventListener('click', cancelarDemo);
+  getEl('btnEnterMando')?.addEventListener('click', entrarAModoMando);
+  getEl('btnLobbyCheck')?.addEventListener('click', () => actualizarSaludApi({ showToast: true }));
+  getEl('btnExitMando')?.addEventListener('click', salirDeModoMando);
+  getEl('btnIniciarDemo')?.addEventListener('click', iniciarDemo);
+  getEl('btnCancelarDemo')?.addEventListener('click', cancelarDemo);
 
   const diagPanel = getEl('diagPanel');
   const btnToggleDiag = getEl('btnToggleDiag');
@@ -1104,140 +1402,105 @@ async function boot() {
     });
   }
 
-  getEl('btnRunDiag').addEventListener('click', async () => {
+  getEl('btnRunDiag')?.addEventListener('click', async () => {
     UI.showToast('Ejecutando diagnóstico de enlace...', 'info');
     await actualizarSaludApi({ showToast: true });
   });
-
-  getEl('btnCloseDiag').addEventListener('click', () => {
+  getEl('btnCloseDiag')?.addEventListener('click', () => {
     bootstrap.Collapse.getOrCreateInstance(getEl('diagPanel')).hide();
   });
-
-  getEl('btnToggleDiag').addEventListener('click', () => {
+  getEl('btnToggleDiag')?.addEventListener('click', () => {
     syncDiagnostics();
     bootstrap.Collapse.getOrCreateInstance(getEl('diagPanel')).toggle();
   });
 
-  // Comando de acción disparado sobre un botón (click o cruceta D-Pad)
+  // Botones de acción por data-cmd (conservando cableado D-Pad 3/4 intacto)
   const ejecutarComandoBoton = async (btn) => {
-      const cmdId = Number(btn.dataset.cmd);
+    const codigoFisico = Number(btn.dataset.cmd);
 
-      if (cmdId === CONFIG.COMMANDS.DEMO_FABRICA) {
-        await iniciarDemo();
-        return;
-      }
+    if (codigoFisico === CONFIG.COMMANDS.DEMO_FABRICA) {
+      await iniciarDemo();
+      return;
+    }
+    if (codigoFisico === CONFIG.COMMANDS.DETENER) {
+      await detenerVehiculo();
+      return;
+    }
+    if (MOVIMIENTO_FISICO_IDS.includes(codigoFisico)) {
+      await handleMovimiento(codigoFisico);
+      return;
+    }
 
-      if (cmdId === CONFIG.COMMANDS.DETENER) {
-        await detenerVehiculo();
-        return;
-      }
-
-      if (MOVIMIENTO_IDS.includes(cmdId)) {
-        await handleMovimiento(cmdId);
-        return;
-      }
-
-      // Comandos de pulso (9, 10, 13, 14): solo envían el fetch al presionarse, sin iluminación
-      if (
-        cmdId === CONFIG.COMMANDS.LUCES ||
-        cmdId === CONFIG.COMMANDS.SONIDO ||
-        cmdId === CONFIG.COMMANDS.ENCENDER ||
-        cmdId === CONFIG.COMMANDS.APAGAR
-      ) {
-        // Confirmación dentro de la app (sin diálogos nativos que saquen de pantalla completa):
-        // el primer toque arma Apagar y el segundo, dentro de 3 s, lo envía
-        if (cmdId === CONFIG.COMMANDS.APAGAR) {
-          const now = Date.now();
-          if (now > STATE.apagarArmadoHasta) {
-            STATE.apagarArmadoHasta = now + 3000;
-            armarBotonApagar(btn, true);
-            UI.showToast('Pulsa Apagar otra vez en 3 s para confirmar', 'warning');
-            setTimeout(() => {
-              if (STATE.apagarArmadoHasta && Date.now() >= STATE.apagarArmadoHasta) {
-                STATE.apagarArmadoHasta = 0;
-                armarBotonApagar(btn, false);
-              }
-            }, 3000);
-            return;
-          }
-          STATE.apagarArmadoHasta = 0;
-          armarBotonApagar(btn, false);
+    if (
+      codigoFisico === CONFIG.COMMANDS.LUCES ||
+      codigoFisico === CONFIG.COMMANDS.SONIDO ||
+      codigoFisico === CONFIG.COMMANDS.ENCENDER ||
+      codigoFisico === CONFIG.COMMANDS.APAGAR
+    ) {
+      if (codigoFisico === CONFIG.COMMANDS.APAGAR) {
+        const now = Date.now();
+        if (now > STATE.apagarArmadoHasta) {
+          STATE.apagarArmadoHasta = now + 3000;
+          armarBotonApagar(btn, true);
+          UI.showToast('Pulsa Apagar otra vez en 3 s para confirmar', 'warning');
+          setTimeout(() => {
+            if (STATE.apagarArmadoHasta && Date.now() >= STATE.apagarArmadoHasta) {
+              STATE.apagarArmadoHasta = 0;
+              armarBotonApagar(btn, false);
+            }
+          }, 3000);
+          return;
         }
-        if (STATE.busyCommands.has(cmdId)) return;
-        STATE.busyCommands.add(cmdId);
-
-        const resPulse = await api.enviarMovimiento(cmdId);
-        STATE.busyCommands.delete(cmdId);
-
-        if (!resPulse.ok) {
-          UI.showToast(`Fallo envío comando ${cmdId}: ${resPulse.error}`, 'danger');
-          if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
-            await detenerVehiculo();
-          }
-        }
-        return;
+        STATE.apagarArmadoHasta = 0;
+        armarBotonApagar(btn, false);
       }
-
-      // Mecanismos de la cruceta (3, 4, 5, 6): envían al presionar; el DETENER llega al soltar
-      if (cmdId === CONFIG.COMMANDS.ALZAR_PALA || cmdId === CONFIG.COMMANDS.BAJAR_PALA ||
-          cmdId === CONFIG.COMMANDS.GIRAR_DERECHA || cmdId === CONFIG.COMMANDS.GIRAR_IZQUIERDA) {
-        await handleMovimiento(cmdId);
-        return;
-      }
-
-      // Comandos auxiliares restantes con debounce de seguridad
-      if (STATE.busyCommands.has(cmdId)) return;
-      STATE.busyCommands.add(cmdId);
-
-      const res = await api.enviarMovimiento(cmdId);
-      STATE.busyCommands.delete(cmdId);
-
-      UI.setActionButtonActive(btn.id, false); // Reset visual tras confirmación
-
-      if (res.ok) {
-        UI.setActionButtonActive(btn.id, true); // Estado optimista de acción completada
-        setTimeout(() => UI.setActionButtonActive(btn.id, false), 1800); // Revertir flash visual
-      } else {
-        UI.showToast(`Fallo envío comando ${cmdId}: ${res.error}`, 'danger');
-        if (STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+      const idCmd = resolverIdComandoDesdeFisico(codigoFisico);
+      if (STATE.busyCommands.has(idCmd)) return;
+      STATE.busyCommands.add(idCmd);
+      const resPulse = await api.enviarMovimiento(idCmd);
+      STATE.busyCommands.delete(idCmd);
+      if (!resPulse.ok) {
+        UI.showToast(formatApiError(resPulse, `Fallo envío comando ${codigoFisico}`), 'danger');
+        if (resPulse.status !== 403 && resPulse.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
           await detenerVehiculo();
         }
       }
+      return;
+    }
+
+    if (
+      codigoFisico === CONFIG.COMMANDS.ALZAR_PALA ||
+      codigoFisico === CONFIG.COMMANDS.BAJAR_PALA ||
+      codigoFisico === CONFIG.COMMANDS.GIRAR_DERECHA ||
+      codigoFisico === CONFIG.COMMANDS.GIRAR_IZQUIERDA
+    ) {
+      await handleMovimiento(codigoFisico);
+    }
   };
 
-  // Botones de acción secundaria por data-cmd
   document.querySelectorAll('[data-cmd]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
-      // La cruceta D-Pad gestiona su propio ciclo via pointer events (press = accion, release = DETENER)
-      const dpadGrid = document.getElementById('dpadGrid');
+      const dpadGrid = getEl('dpadGrid');
       if (dpadGrid && dpadGrid.contains(btn)) return;
-      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
-      if (dpadGrid && STATE.activeController === 'joystick') {
-        return;
-      }
+      if (dpadGrid && STATE.activeController === 'joystick') return;
       await ejecutarComandoBoton(btn);
     });
   });
 
-  // FASE 2/4: eventos táctiles de la Cruceta D-Pad (grid de 4 botones)
-  const dpadGrid = document.getElementById('dpadGrid');
+  const dpadGrid = getEl('dpadGrid');
   if (dpadGrid) {
     dpadGrid.addEventListener('pointerdown', async (e) => {
-      // FASE 4: exclusión mutua — el joystick tiene prioridad sobre la cruceta D-Pad
       if (STATE.activeController === 'joystick') return;
-      const target = e.target;
-      const btn = target && typeof target.closest === 'function' ? target.closest('[data-cmd]') : null;
+      const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-cmd]') : null;
       if (!btn) return;
       STATE.activeController = 'dpad';
       window.activeController = 'dpad';
-      UI.setControllerLock(STATE.activeController);
-      // FASE 3/4: ejecutar el mecanismo (pala/rotacion) al presionar (sin toggle; el release envia DETENER)
+      UI.setControllerLock('dpad');
       await ejecutarComandoBoton(btn);
     });
 
     const handleDpadRelease = () => {
-      // FASE 4: al soltar la cruceta se envía inmediatamente el DETENER (CMD 12)
       if (STATE.activeController !== 'dpad') return;
       STATE.activeController = null;
       window.activeController = null;
@@ -1252,38 +1515,30 @@ async function boot() {
     window.addEventListener('blur', handleDpadRelease);
   }
 
-  // Año dinámico en el footer
   if (getEl('currentYear')) {
     getEl('currentYear').textContent = String(new Date().getFullYear());
   }
 
-  // Arrancar servicios
   bindWebSocketEvents();
   initJoystick();
   bindViewNavigation();
-  initAdmin();
-  wsService.connect();
+  bindAuthEvents();
+  initAdmin({
+    onOperarVehiculo: async (vehiculo) => {
+      await seleccionarVehiculoActivo(vehiculo);
+      salirDeMonitor();
+    },
+  });
 
-  // Carga inicial del catálogo de demos (informativo) en paralelo al polling de salud
-  const demoLoadPromise = cargarCatalogoDemos();
-  await iniciarSaludPolling();
-  await demoLoadPromise;
+  // 1. Verificar salud independiente API AWS + RDS inmediatamente
+  const healthPromise = iniciarSaludPolling();
+
+  // 2. Verificar sesión JWT existente (o mostrar Login)
+  const valida = await auth.verifySession();
+  await aplicarEstadoAutenticacion(valida ? auth.session : null, 'boot');
+  await healthPromise;
 }
 
-async function cargarCatalogoDemos() {
-  const res = await api.obtenerDemos();
-
-  if (res.ok) {
-    const demos = res.data?.demos || res.data || [];
-    STATE.demos = Array.isArray(demos) ? demos : [];
-    UI.renderDemos(demos);
-    UI.renderDemoSelect(demos);
-  } else {
-    UI.renderDemoError();
-  }
-}
-
-// Punto de entrada: inicialización bajo flag para debug
 if (document.getElementById('mainContent')) {
   boot().catch((err) => {
     console.error('[BOOT] Error crítico en inicialización:', err);

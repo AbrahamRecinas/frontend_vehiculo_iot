@@ -584,3 +584,16 @@ body.app-view-control .app-footer {
     min-height: 46px;
   }
 }
+
+
+/* ---------- 9. Fase 4.3 Mobile First (Auth, Guest, Mis Vehículos, KPIs) ---------- */
+.guest-view .container-fluid,
+.user-vehicles-view .container-fluid {
+  padding: 0.75rem 0.75rem calc(1rem + var(--safe-bottom));
+}
+
+.auth-view .btn,
+.guest-view .btn,
+.user-vehicles-view .btn {
+  min-height: 44px;
+}

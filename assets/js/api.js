@@ -1,11 +1,26 @@
 /**
  * api.js
- * Cliente HTTP REST para comunicación con la API FastAPI en AWS.
- * Implementa Fetch API, async/await, AbortController y taxonomía de errores.
+ * Cliente HTTP REST modular para FastAPI + JWT + refresh transparente en 401.
+ * Incluye verificación independiente de API AWS y Amazon RDS vía GET /api/health.
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
 import { CONFIG } from './config.js';
+import { auth } from './auth.js';
+
+export function formatApiError(res, fallback = 'Error en la comunicación con el servidor') {
+  const detail = res?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail.trim();
+  if (Array.isArray(detail) && detail.length) {
+    return detail
+      .map((d) => {
+        const loc = Array.isArray(d?.loc) ? d.loc.slice(1).join('.') : '';
+        return loc ? `${loc}: ${d.msg}` : d?.msg || 'Dato inválido';
+      })
+      .join('; ');
+  }
+  return res?.error || fallback;
+}
 
 class ApiService {
   constructor() {
@@ -13,28 +28,49 @@ class ApiService {
     this.vehicleId = CONFIG.VEHICLE_ID;
   }
 
+  setVehicleId(id) {
+    const num = Number(id);
+    if (Number.isInteger(num) && num > 0) {
+      this.vehicleId = num;
+    }
+  }
+
+  getVehicleId() {
+    return this.vehicleId;
+  }
+
   /**
-   * Envoltorio genérico de fetch con AbortController, timeout y diagnóstico.
-   * @param {string} endpoint - Ruta relativa al BASE_URL
-   * @param {RequestInit} [options={}] - Opciones de fetch estándar
-   * @param {number} [timeoutMs=CONFIG.TIMING.REST_TIMEOUT_MS] - Tiempo límite
-   * @returns {Promise<{ ok: boolean, status: number, data: any, latencyMs: number, error?: string }>}
+   * Envoltorio central de fetch con Bearer JWT, refresh automático en 401 y timeout.
    */
-  async request(endpoint, options = {}, timeoutMs = CONFIG.TIMING.REST_TIMEOUT_MS) {
+  async request(
+    endpoint,
+    options = {},
+    timeoutMs = CONFIG.TIMING.REST_TIMEOUT_MS,
+    { skipAuth = false, _isRetry = false } = {}
+  ) {
     const url = `${this.baseUrl}${endpoint}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const headers = {
+      Accept: 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    };
+
+    if (!skipAuth) {
+      const token = auth.getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    }
 
     const startTime = performance.now();
     try {
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          ...(options.headers || {}),
-        },
+        headers,
       });
 
       const latencyMs = Math.round(performance.now() - startTime);
@@ -42,27 +78,39 @@ class ApiService {
       let data = null;
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
-        try {
-          data = await response.json();
-        } catch (_) {
-          data = null;
-        }
+        data = await response.json().catch(() => null);
       } else {
-        // En caso de /docs o respuestas de texto
-        try {
-          data = await response.text();
-        } catch (_) {
-          data = null;
+        data = await response.text().catch(() => null);
+      }
+
+      // Renovación transparente ante 401 si existe refresh_token
+      if (response.status === 401 && !skipAuth && !_isRetry) {
+        if (auth.getRefreshToken()) {
+          const refreshed = await auth.refresh();
+          if (refreshed) {
+            clearTimeout(timeoutId);
+            return this.request(endpoint, options, timeoutMs, {
+              skipAuth,
+              _isRetry: true,
+            });
+          }
+        }
+        if (auth.isAuthenticated()) {
+          auth.clearSession('expired');
         }
       }
 
       if (!response.ok) {
+        const detail =
+          typeof data?.detail === 'string'
+            ? data.detail
+            : `Error HTTP ${response.status}: ${response.statusText || 'Error en servidor'}`;
         return {
           ok: false,
           status: response.status,
           data,
           latencyMs,
-          error: `Error HTTP ${response.status}: ${response.statusText || 'Error en servidor'}`,
+          error: detail,
         };
       }
 
@@ -75,7 +123,6 @@ class ApiService {
     } catch (err) {
       const latencyMs = Math.round(performance.now() - startTime);
       let errorMsg = 'Error de conexión desconocido';
-
       if (err.name === 'AbortError') {
         errorMsg = `Tiempo de espera agotado (${timeoutMs} ms)`;
       } else if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
@@ -96,147 +143,116 @@ class ApiService {
     }
   }
 
-  /**
-   * Envía un comando de acción / movimiento.
-   * POST /api/vehiculos/{id}/movimiento -> {"id_comando": X}
-   * @param {number} idComando
-   * @param {{ keepalive?: boolean, timeoutMs?: number }} [opts={}]
-   */
-  async enviarMovimiento(idComando, opts = {}) {
-    const endpoint = CONFIG.ENDPOINTS.MOVIMIENTO(this.vehicleId);
-    const body = JSON.stringify({ id_comando: Number(idComando) });
-
-    const fetchOptions = {
-      method: 'POST',
-      body,
-    };
-
-    if (opts.keepalive) {
-      fetchOptions.keepalive = true;
-    }
-
-    const timeout = opts.timeoutMs || (idComando === CONFIG.COMMANDS.DETENER ? 4000 : CONFIG.TIMING.MOVEMENT_TIMEOUT_MS);
-    return this.request(endpoint, fetchOptions, timeout);
+  get(endpoint, opts = {}) {
+    return this.request(endpoint, { method: 'GET' }, opts.timeoutMs, opts);
   }
 
-  /**
-   * Inicia una rutina de demostración específica.
-   * POST /api/vehiculos/{id_vehiculo}/demo
-   * Body: { "id_demo": X }
-   */
-  async iniciarDemo(idDemoSeleccionada) {
-    const endpoint = CONFIG.ENDPOINTS.DEMO_INICIAR(this.vehicleId);
+  post(endpoint, body = null, opts = {}) {
+    return this.request(
+      endpoint,
+      {
+        method: 'POST',
+        ...(body !== null && body !== undefined ? { body: JSON.stringify(body) } : {}),
+        ...(opts.keepalive ? { keepalive: true } : {}),
+      },
+      opts.timeoutMs,
+      opts
+    );
+  }
 
-    return this.request(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_demo: parseInt(idDemoSeleccionada) }),
+  // ---------------------------------------------------------------------------
+  // Salud independiente: API AWS + Amazon RDS (público)
+  // ---------------------------------------------------------------------------
+  async comprobarSaludCompleta() {
+    const res = await this.request(
+      CONFIG.ENDPOINTS.HEALTH,
+      { method: 'GET', cache: 'no-store' },
+      6000,
+      { skipAuth: true }
+    );
+
+    const apiOnline = res.ok && res.data?.api === 'online';
+    const rdsData = res.data?.rds || null;
+    const rdsOnline = Boolean(apiOnline && rdsData?.status === 'online');
+
+    return {
+      aws: {
+        ok: apiOnline,
+        status: res.status,
+        latencyMs: res.latencyMs,
+        error: apiOnline ? undefined : res.error || `HTTP ${res.status}`,
+      },
+      rds: {
+        ok: rdsOnline,
+        status: rdsOnline ? 200 : res.status,
+        latencyMs: rdsData?.latency_ms ?? null,
+        detail: rdsOnline
+          ? `Disponible${Number.isFinite(rdsData?.latency_ms) ? ` · ${rdsData.latency_ms} ms` : ''}`
+          : apiOnline
+            ? 'No disponible'
+            : 'Sin conexión API',
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Control y Monitoreo (dinámico por vehicleId activo)
+  // ---------------------------------------------------------------------------
+  enviarMovimiento(idComando, opts = {}) {
+    const vid = opts.vehicleId ?? this.vehicleId;
+    const timeout =
+      opts.timeoutMs ||
+      (Number(idComando) === CONFIG.COMMANDS.DETENER ? 4000 : CONFIG.TIMING.MOVEMENT_TIMEOUT_MS);
+    return this.post(
+      CONFIG.ENDPOINTS.MOVIMIENTO(vid),
+      { id_comando: Number(idComando) },
+      { keepalive: opts.keepalive, timeoutMs: timeout }
+    );
+  }
+
+  iniciarDemo(idDemoSeleccionada, vehicleId = this.vehicleId) {
+    return this.post(CONFIG.ENDPOINTS.DEMO_INICIAR(vehicleId), {
+      id_demo: parseInt(idDemoSeleccionada, 10),
     });
   }
 
-  /**
-   * Cancela la rutina de demostración en ejecución.
-   * POST /api/vehiculos/{id}/demo/cancelar
-   */
-  async cancelarDemo() {
-    const endpoint = CONFIG.ENDPOINTS.CANCELAR_DEMO(this.vehicleId);
-    return this.request(endpoint, { method: 'POST' });
+  cancelarDemo(vehicleId = this.vehicleId) {
+    return this.post(CONFIG.ENDPOINTS.CANCELAR_DEMO(vehicleId));
   }
 
-  /**
-   * Consulta el catálogo de comandos soportados por el vehículo.
-   * GET /api/vehiculos/{id}/comandos
-   */
-  async obtenerComandos() {
-    const endpoint = CONFIG.ENDPOINTS.COMANDOS(this.vehicleId);
-    return this.request(endpoint, { method: 'GET' });
+  obtenerVehiculos(query = '') {
+    return this.get(`${CONFIG.ENDPOINTS.VEHICULOS}${query}`);
   }
 
-  /**
-   * Consulta el catálogo de rutinas de demostración disponibles.
-   * GET /api/vehiculos/{id}/demos
-   */
-  async obtenerDemos() {
-    const endpoint = CONFIG.ENDPOINTS.DEMOS(this.vehicleId);
-    console.log("Iniciando petición GET a Demos...");
-    const res = await this.request(endpoint, { method: 'GET' });
-    console.log("Respuesta recibida:", res.data);
-
-    if (!res.ok) {
-      // Diagnóstico del fallo: se detiene el spinner en el UI y se registra el error exacto
-      console.error(`[API] Error en GET ${endpoint}: HTTP ${res.status} - ${res.error}`);
-    }
-
-    return res;
+  obtenerVehiculo(vehicleId = this.vehicleId) {
+    return this.get(CONFIG.ENDPOINTS.VEHICULO(vehicleId));
   }
 
-  /**
-   * Consulta el estado actual del vehículo (último comando / estado operativo).
-   * GET /api/vehiculos/{id}/estado
-   */
-  async obtenerEstado() {
-    const endpoint = CONFIG.ENDPOINTS.ESTADO(this.vehicleId);
-    return this.request(endpoint, { method: 'GET' });
+  obtenerComandos(vehicleId = this.vehicleId) {
+    return this.get(CONFIG.ENDPOINTS.COMANDOS(vehicleId));
   }
 
-  /**
-   * Consulta el historial de movimientos individuales persistidos (máximo 10).
-   * GET /api/vehiculos/{id}/historial
-   */
-  async obtenerHistorial() {
-    const endpoint = CONFIG.ENDPOINTS.HISTORIAL(this.vehicleId);
-    const res = await this.request(endpoint, { method: 'GET' });
-    return res;
+  obtenerDemos(vehicleId = this.vehicleId) {
+    return this.get(CONFIG.ENDPOINTS.DEMOS(vehicleId));
   }
 
-  /**
-   * Verifica Amazon RDS: GET /api/vehiculos/ responde 200 solo si la BD está accesible.
-   */
-  async verificarRds() {
-    return this.request('/api/vehiculos/', { method: 'GET' });
+  obtenerEstado(vehicleId = this.vehicleId) {
+    return this.get(CONFIG.ENDPOINTS.ESTADO(vehicleId));
   }
 
-  /**
-   * Comprueba la disponibilidad del servidor AWS realizando un GET a /docs.
-   * @returns {Promise<{ ok: boolean, status: number, latencyMs: number, error?: string }>}
-   */
-  async comprobarSaludApi() {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const startTime = performance.now();
+  obtenerHistorial(vehicleId = this.vehicleId) {
+    return this.get(CONFIG.ENDPOINTS.HISTORIAL(vehicleId));
+  }
 
-    try {
-      const response = await fetch(`${this.baseUrl}${CONFIG.HEALTH_PATH}`, {
-        method: 'GET',
-        cache: 'no-store',
-        signal: controller.signal,
-      });
+  // ---------------------------------------------------------------------------
+  // Catálogo público e Invitados
+  // ---------------------------------------------------------------------------
+  obtenerCatalogoPublicoModelos() {
+    return this.get(CONFIG.ENDPOINTS.PUBLIC_MODELOS, { skipAuth: true });
+  }
 
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        latencyMs,
-        error: response.ok ? undefined : `HTTP ${response.status}`,
-      };
-    } catch (err) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      let errorMsg = 'Inalcanzable';
-      if (err.name === 'AbortError') {
-        errorMsg = 'Timeout (>6s)';
-      } else if (err instanceof TypeError) {
-        errorMsg = 'Bloqueo CORS / Red';
-      }
-      return {
-        ok: false,
-        status: 0,
-        latencyMs,
-        error: errorMsg,
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  obtenerCatalogoPublicoExhibicion() {
+    return this.get(CONFIG.ENDPOINTS.PUBLIC_EXHIBICION, { skipAuth: true });
   }
 }
 
