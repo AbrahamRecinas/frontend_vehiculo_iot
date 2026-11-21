@@ -122,8 +122,15 @@ const UI = {
     const rol = user?.rol || null;
     const isAuth = Boolean(rol);
 
-    if (UI.elements.headerUserWrap) UI.elements.headerUserWrap.hidden = !isAuth;
-    if (UI.elements.btnHeaderLogin) UI.elements.btnHeaderLogin.hidden = isAuth;
+    if (UI.elements.headerUserWrap) {
+      UI.elements.headerUserWrap.classList.toggle('d-flex', isAuth);
+      UI.elements.headerUserWrap.classList.toggle('d-none', !isAuth);
+      UI.elements.headerUserWrap.hidden = !isAuth;
+    }
+    if (UI.elements.btnHeaderLogin) {
+      UI.elements.btnHeaderLogin.classList.toggle('d-none', isAuth);
+      UI.elements.btnHeaderLogin.hidden = isAuth;
+    }
 
     if (isAuth) {
       if (UI.elements.headerUserRole) {
@@ -133,6 +140,9 @@ const UI = {
       if (UI.elements.headerUserName) {
         UI.elements.headerUserName.textContent = user.nombre || user.correo || '';
       }
+    } else {
+      if (UI.elements.headerUserRole) UI.elements.headerUserRole.textContent = '';
+      if (UI.elements.headerUserName) UI.elements.headerUserName.textContent = '';
     }
 
     // Mostrar únicamente los ítems de navegación permitidos para el rol activo

@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.3" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.1" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.1" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -53,16 +53,16 @@
               <h1 class="h6 mb-0 text-white fw-bold tracking-wide text-truncate">Grúa RC IoT</h1>
               <span class="badge bg-info-subtle text-info border border-info-subtle d-none d-md-inline-block" id="envBadge">AWS</span>
             </div>
-            <span class="badge text-bg-primary vehicle-badge" id="vehicleBadge">Vehículo #1</span>
+            <span class="badge text-bg-primary vehicle-badge" id="vehicleBadge">Sin unidad</span>
           </div>
         </div>
 
         <div class="d-flex align-items-center gap-2">
-          <!-- Usuario autenticado + Logout -->
-          <div class="d-flex align-items-center gap-2" id="headerUserWrap" hidden>
-            <span class="badge text-bg-secondary" id="headerUserRole">Rol</span>
+          <!-- Usuario autenticado + Logout (d-none inicial para evitar conflicto con Bootstrap d-flex !important) -->
+          <div class="d-none align-items-center gap-2" id="headerUserWrap" hidden>
+            <span class="badge text-bg-secondary" id="headerUserRole"></span>
             <span class="small text-light d-none d-md-inline text-truncate" style="max-width: 150px;" id="headerUserName"></span>
-            <button type="button" id="btnHeaderLogout" class="btn btn-outline-danger btn-sm" title="Cerrar sesión">
+            <button type="button" id="btnHeaderLogout" data-action="logout" class="btn btn-outline-danger btn-sm" title="Cerrar sesión">
               <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
               <span class="d-none d-sm-inline ms-1">Salir</span>
             </button>
@@ -384,6 +384,10 @@
               <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="admin" data-roles="ADMIN">
                 <i class="bi bi-gear" aria-hidden="true"></i>
                 <span>Admin</span>
+              </button>
+              <button type="button" class="btn btn-outline-danger lobby-nav-btn" id="btnLobbyLogout" data-action="logout" data-roles="ADMIN,USUARIO,INVITADO">
+                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                <span>Salir</span>
               </button>
             </nav>
           </div>
@@ -1497,6 +1501,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3"></script>
+  <script type="module" src="./assets/js/app.js?v=4.3.1"></script>
 </body>
 </html>

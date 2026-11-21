@@ -22,7 +22,7 @@ const getEl = (id) => document.getElementById(id);
 const MONITOREO_MAX_REGISTROS = 10;
 
 const STATE = {
-  vehicleId: CONFIG.VEHICLE_ID,
+  vehicleId: null,
   vehicleInfo: null,
   comandosVehiculo: [],
   fisicoToComandoId: new Map(),
@@ -973,6 +973,10 @@ async function entrarAVista(vista) {
 }
 
 async function entrarAMonitor() {
+  if (!STATE.vehicleId) {
+    UI.showToast('No tienes una unidad seleccionada o asignada todavía.', 'warning');
+    return entrarAVista(auth.getRole() === 'ADMIN' ? 'admin' : 'user-vehicles');
+  }
   vistaActual = 'monitor';
   UI.setView('monitor');
   actualizarNavPills('monitor');
@@ -981,6 +985,11 @@ async function entrarAMonitor() {
 }
 
 function salirDeMonitor() {
+  if (!STATE.vehicleId) {
+    UI.showToast('No tienes una unidad seleccionada o asignada todavía.', 'warning');
+    entrarAVista(auth.getRole() === 'ADMIN' ? 'admin' : 'user-vehicles');
+    return;
+  }
   vistaActual = 'control';
   actualizarNavPills('control');
   wsService.connect(STATE.vehicleId);
@@ -1008,13 +1017,16 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
 
   if (!user) {
     wsService.disconnect('En espera de sesión');
+    STATE.vehicleId = null;
+    STATE.vehicleInfo = null;
     STATE.misVehiculos = [];
     STATE.comandosVehiculo = [];
     STATE.fisicoToComandoId.clear();
+    if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
     if (reason === 'expired') {
       UI.showToast('Tu sesión expiró o fue revocada. Inicia sesión nuevamente.', 'warning');
     }
-    if (vistaActual !== 'guest') {
+    if (vistaActual !== 'guest' || reason === 'logout') {
       await entrarAVista('auth');
     }
     return;
@@ -1095,9 +1107,32 @@ function bindAuthEvents() {
     UI.showToast(`Bienvenido, ${res.data?.usuario?.nombre || correo}`, 'success');
   });
 
-  getEl('btnHeaderLogout')?.addEventListener('click', async () => {
-    await auth.logout();
-    UI.showToast('Sesión cerrada correctamente.', 'info');
+  let cerrandoSesion = false;
+  const ejecutarLogout = async () => {
+    if (cerrandoSesion) return;
+    cerrandoSesion = true;
+    try {
+      wsService.disconnect('Cerrando sesión...');
+      await auth.logout();
+    } catch (_) {
+      // auth.logout ya limpia en su propio finally
+    } finally {
+      wsService.disconnect('En espera de sesión');
+      UI.syncAuthUi(null);
+      await entrarAVista('auth');
+      cerrandoSesion = false;
+      UI.showToast('Sesión cerrada correctamente.', 'info');
+    }
+  };
+
+  // Delegación global: cubre escritorio (#btnHeaderLogout) y móvil (#btnLobbyLogout)
+  document.addEventListener('click', (e) => {
+    const btn = e.target && typeof e.target.closest === 'function'
+      ? e.target.closest('[data-action="logout"], #btnHeaderLogout')
+      : null;
+    if (!btn) return;
+    e.preventDefault();
+    ejecutarLogout();
   });
 
   getEl('btnHeaderLogin')?.addEventListener('click', () => entrarAVista('auth'));
@@ -1122,7 +1157,7 @@ function syncDiagnostics(extra = {}) {
   const metrics = wsService.getMetrics();
   UI.updateDiagnostics({
     restUrl: CONFIG.BASE_URL,
-    wssUrl: metrics.wssUrl || CONFIG.buildDisplayWssUrl(STATE.vehicleId),
+    wssUrl: STATE.vehicleId ? (metrics.wssUrl || CONFIG.buildDisplayWssUrl(STATE.vehicleId)) : 'Sin unidad activa',
     wsReconnects: metrics.attempts,
     lastWsMessage: metrics.lastMessage,
     ...extra,
@@ -1530,12 +1565,15 @@ async function boot() {
     },
   });
 
-  // 1. Verificar salud independiente API AWS + RDS inmediatamente
+  // 1. Verificar salud independiente API AWS + RDS en paralelo
   const healthPromise = iniciarSaludPolling();
 
-  // 2. Verificar sesión JWT existente (o mostrar Login)
-  const valida = await auth.verifySession();
-  await aplicarEstadoAutenticacion(valida ? auth.session : null, 'boot');
+  // 2. Recuperar y validar sesión JWT persistida antes de renderizar la vista inicial
+  const verificacion = await auth.verifySession();
+  await aplicarEstadoAutenticacion(
+    verificacion.valid ? auth.session : null,
+    verificacion.reason === 'expired' ? 'expired' : 'boot'
+  );
   await healthPromise;
 }
 

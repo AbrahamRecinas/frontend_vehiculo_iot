@@ -18,6 +18,8 @@ class WebSocketService {
     this.socket = null;
     this.listeners = new Map();
     this.reconnectAttempts = 0;
+    this.consecutiveHandshakeFails = 0;
+    this.hasOpenedCurrent = false;
     this.reconnectTimer = null;
     this.isExplicitlyClosed = true;
     this.state = 'closed'; // 'connecting' | 'open' | 'closed' | 'error'
@@ -86,6 +88,7 @@ class WebSocketService {
     this.activeToken = token;
     this.displayUrl = CONFIG.buildDisplayWssUrl(targetId);
     this.isExplicitlyClosed = false;
+    this.hasOpenedCurrent = false;
     this.updateState('connecting', `Conectando a unidad #${targetId}...`);
 
     try {
@@ -95,6 +98,8 @@ class WebSocketService {
 
       sock.onopen = () => {
         if (this.socket !== sock) return;
+        this.hasOpenedCurrent = true;
+        this.consecutiveHandshakeFails = 0;
         this.handleOpen();
       };
 
@@ -122,6 +127,14 @@ class WebSocketService {
           this.updateState('closed', reason);
           this.emit('authError', { code: event.code, reason, vehicleId: this.vehicleId });
           return;
+        }
+
+        if (!this.hasOpenedCurrent) {
+          this.consecutiveHandshakeFails += 1;
+          if (this.consecutiveHandshakeFails >= 3) {
+            this.updateState('closed', 'No autorizado o canal WSS no disponible');
+            return;
+          }
         }
 
         this.updateState('closed', `Canal cerrado (código ${event.code})`);
