@@ -14,7 +14,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js';
+import { UI } from './ui.js?v=4.4.3';
 
 const $ = (id) => document.getElementById(id);
 const lista = (res) => (res?.ok && Array.isArray(res.data) ? res.data : []);
@@ -1295,15 +1295,26 @@ function abrirModalPaso(item = null) {
 // ---------------------------------------------------------------------------
 async function enviarFormulario(form, fn, modalId, msgOk, onSuccess) {
   const btn = form.querySelector('button[type="submit"]');
-  if (btn) btn.disabled = true;
-  const res = await fn();
-  if (btn) btn.disabled = false;
+  const originalText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+  }
+  let res;
+  try {
+    res = await fn();
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || 'Guardar';
+    }
+  }
 
-  if (!res.ok) {
+  if (!res || !res.ok) {
     toast(formatApiError(res), 'danger');
     return;
   }
-  bootstrap.Modal.getOrCreateInstance($(modalId)).hide();
+  UI.hideModal(modalId);
   toast(res.data?.mensaje || msgOk, 'success');
   await onSuccess();
 }
@@ -1779,18 +1790,16 @@ export function initAdmin({ onOperarVehiculo } = {}) {
     accionPendiente = null;
   });
 
-  // Confirmación genérica
+  // Confirmación genérica: cerrar la ventana de inmediato al confirmar y ejecutar la acción
   $('btnConfirmarAccion')?.addEventListener('click', async () => {
     const accion = accionPendiente;
     if (!accion) return;
-    const boton = $('btnConfirmarAccion');
     accionPendiente = null;
-    boton.disabled = true;
+    UI.hideModal('modalConfirmar');
     try {
       await accion();
-    } finally {
-      boton.disabled = false;
-      bootstrap.Modal.getOrCreateInstance($('modalConfirmar')).hide();
+    } catch (err) {
+      toast(`Error al procesar la acción: ${err?.message || 'desconocido'}`, 'danger');
     }
   });
 }

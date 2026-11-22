@@ -714,6 +714,67 @@ const UI = {
       badge.className = 'badge text-bg-secondary';
     }
   },
+
+  /**
+   * Cierra de forma segura cualquier modal de Bootstrap 5:
+   * - Quita foco interno para evitar bloqueo aria-hidden en navegadores modernos.
+   * - Si el modal estaba todavía en transición de apertura (_isTransitioning),
+   *   reintenta el cierre en shown.bs.modal y aplica limpieza de respaldo de backdrop.
+   */
+  hideModal: (modalIdOrEl) => {
+    const el =
+      typeof modalIdOrEl === 'string' ? document.getElementById(modalIdOrEl) : modalIdOrEl;
+    if (!el) return;
+
+    if (document.activeElement && el.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch (_) {}
+    }
+
+    const forceCleanup = () => {
+      el.classList.remove('show');
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+      el.removeAttribute('aria-modal');
+      el.removeAttribute('role');
+
+      const anyOtherOpen = document.querySelector('.modal.show');
+      if (!anyOtherOpen) {
+        document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+      }
+    };
+
+    try {
+      const inst = bootstrap.Modal.getOrCreateInstance(el);
+      if (inst._isTransitioning) {
+        el.addEventListener(
+          'shown.bs.modal',
+          () => {
+            try {
+              inst.hide();
+            } catch (_) {
+              forceCleanup();
+            }
+          },
+          { once: true }
+        );
+      }
+      inst.hide();
+    } catch (_) {
+      forceCleanup();
+    }
+
+    // Respaldo garantizado si Bootstrap no completó el cierre tras la transición
+    setTimeout(() => {
+      if (el.classList.contains('show') || el.style.display === 'block') {
+        forceCleanup();
+      }
+    }, 380);
+  },
 };
 
 export { UI };

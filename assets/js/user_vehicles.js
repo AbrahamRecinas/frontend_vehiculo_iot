@@ -11,7 +11,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js';
+import { UI } from './ui.js?v=4.4.3';
 
 const $ = (id) => document.getElementById(id);
 const esActivo = (v) => v === 1 || v === true || v === '1';
@@ -1153,7 +1153,7 @@ export function initUserVehicles(cbs = {}) {
       return;
     }
 
-    bootstrap.Modal.getOrCreateInstance($('modalUserTimedCmd')).hide();
+    UI.hideModal('modalUserTimedCmd');
     toast(editando ? 'Movimiento actualizado.' : 'Movimiento temporizado creado.', 'success');
     await cargarComandosUnidad(STORE.vehiculoActivo.id_vehiculo);
     callbacks.onUnitDataChanged?.(STORE.vehiculoActivo.id_vehiculo);
@@ -1189,7 +1189,7 @@ export function initUserVehicles(cbs = {}) {
       return;
     }
 
-    bootstrap.Modal.getOrCreateInstance($('modalUserDemo')).hide();
+    UI.hideModal('modalUserDemo');
     toast(editando ? 'Demo privada actualizada.' : 'Demo privada creada.', 'success');
     const createdId = res.data?.id_demo;
     await cargarDemosUnidad(STORE.vehiculoActivo.id_vehiculo);
@@ -1241,7 +1241,7 @@ export function initUserVehicles(cbs = {}) {
       return;
     }
 
-    bootstrap.Modal.getOrCreateInstance($('modalUserDemoStep')).hide();
+    UI.hideModal('modalUserDemoStep');
     toast(editando ? 'Paso actualizado.' : 'Paso agregado a la demo.', 'success');
     await cargarPasosDemo(STORE.demoSeleccionada.id_demo);
   });
@@ -1282,18 +1282,16 @@ export function initUserVehicles(cbs = {}) {
     confirmActionPending = null;
   });
 
-  // Hook compartido sobre el modal de confirmación genérico
+  // Hook compartido sobre el modal de confirmación genérico: cerrar de inmediato al confirmar
   $('btnConfirmarAccion')?.addEventListener('click', async () => {
     if (!confirmActionPending) return;
     const fn = confirmActionPending;
     confirmActionPending = null;
-    const btn = $('btnConfirmarAccion');
-    if (btn) btn.disabled = true;
+    UI.hideModal('modalConfirmar');
     try {
       await fn();
-    } finally {
-      if (btn) btn.disabled = false;
-      bootstrap.Modal.getOrCreateInstance($('modalConfirmar')).hide();
+    } catch (err) {
+      toast(`Error al procesar la acción: ${err?.message || 'desconocido'}`, 'danger');
     }
   });
 }

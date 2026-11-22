@@ -13,7 +13,7 @@
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js';
+import { UI } from './ui.js?v=4.4.3';
 
 const $ = (id) => document.getElementById(id);
 const toast = (msg, tipo = 'info') => UI.showToast(msg, tipo);

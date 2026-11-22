@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js';
-import { initAdmin, alEntrarAdmin } from './admin.js';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.4.2';
+import { UI } from './ui.js?v=4.4.3';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.4.3';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.4.3';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js';
+} from './guest.js?v=4.4.3';
 
 let joystickController = null;
 let mandoActivo = false;
