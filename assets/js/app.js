@@ -983,8 +983,18 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
   if (user.rol === 'ADMIN') {
     detenerTemporizadorInvitado();
     clearGuestControlRestrictions();
-    const resVeh = await api.obtenerVehiculos();
-    const vehs = resVeh.ok && Array.isArray(resVeh.data) ? resVeh.data : [];
+    vistaActual = 'admin';
+    actualizarNavPills('admin');
+    UI.setView('admin');
+
+    const [vehRes] = await Promise.allSettled([
+      api.obtenerVehiculos(),
+      alEntrarAdmin(),
+    ]);
+    const vehs =
+      vehRes.status === 'fulfilled' && vehRes.value.ok && Array.isArray(vehRes.value.data)
+        ? vehRes.value.data
+        : [];
     const operable =
       vehs.find(
         (v) =>
@@ -1000,13 +1010,16 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
         conectarWss: !esUnidadBloqueadaParaAdmin(operable),
       });
     }
-    await entrarAVista('admin');
     return;
   }
 
   if (user.rol === 'USUARIO') {
     detenerTemporizadorInvitado();
     clearGuestControlRestrictions();
+    vistaActual = 'user-vehicles';
+    actualizarNavPills('user-vehicles');
+    UI.setView('user-vehicles');
+
     const mis = await cargarMisVehiculosModulo();
     if (mis.length > 0) {
       await seleccionarVehiculoActivo(mis[0]);
@@ -1015,7 +1028,6 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
       STATE.vehicleInfo = null;
       wsService.disconnect('Sin unidades asignadas');
     }
-    await entrarAVista('user-vehicles');
     return;
   }
 
@@ -1074,9 +1086,24 @@ function bindAuthEvents() {
     }
 
     const btn = formLogin.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
-    const res = await auth.login(correo, password);
-    if (btn) btn.disabled = false;
+    const originalBtnText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Iniciando sesión…';
+    }
+    let res;
+    try {
+      res = await auth.login(correo, password);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '';
+        const ico = document.createElement('i');
+        ico.className = 'bi bi-box-arrow-in-right me-1';
+        ico.setAttribute('aria-hidden', 'true');
+        btn.append(ico, document.createTextNode(originalBtnText.trim() || 'Iniciar Sesión'));
+      }
+    }
 
     if (!res.ok) {
       if (loginError) {
@@ -1091,28 +1118,27 @@ function bindAuthEvents() {
   });
 
   let cerrandoSesion = false;
-  const ejecutarLogout = async () => {
+  const ejecutarLogout = () => {
     if (cerrandoSesion) return;
     cerrandoSesion = true;
     try {
-      const eraInvitadoConReserva = auth.getRole() === 'INVITADO' && Boolean(auth.getGuestSession()?.id_sesion);
+      // Logout optimista instantáneo: cerrar WS, limpiar storage/UI al instante y revocar en segundo plano
       detenerTemporizadorInvitado();
       clearGuestControlRestrictions();
-      wsService.disconnect('Cerrando sesión...');
-      if (eraInvitadoConReserva) {
-        try {
-          await api.cerrarSesionInvitado();
-        } catch (_) {}
-      }
-      await auth.logout();
-    } catch (_) {
-      // auth.logout ya limpia en su propio finally
-    } finally {
       wsService.disconnect('En espera de sesión');
+      auth.logout();
+      STATE.vehicleId = null;
+      STATE.vehicleInfo = null;
+      STATE.comandosVehiculo = [];
+      STATE.fisicoToComandoId.clear();
       UI.syncAuthUi(null);
-      await entrarAVista('auth');
-      cerrandoSesion = false;
+      if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
+      vistaActual = 'auth';
+      actualizarNavPills('auth');
+      UI.setView('auth');
       UI.showToast('Sesión cerrada correctamente.', 'info');
+    } finally {
+      cerrandoSesion = false;
     }
   };
 
@@ -1598,6 +1624,16 @@ async function boot() {
       if (STATE.vehicleId === Number(idVehiculo)) {
         const [cmdRes] = await Promise.all([api.obtenerComandos(idVehiculo), cargarCatalogoDemos()]);
         if (cmdRes.ok) reconstruirMapaComandos(cmdRes.data);
+      }
+    },
+    onEstadoComercialChanged: (vehiculoActualizado) => {
+      if (vehiculoActualizado && STATE.vehicleId === Number(vehiculoActualizado.id_vehiculo)) {
+        STATE.vehicleInfo = { ...(STATE.vehicleInfo || {}), ...vehiculoActualizado };
+        UI.updateVehicleContext({
+          id: vehiculoActualizado.id_vehiculo,
+          nombre: vehiculoActualizado.nombre || STATE.vehicleInfo.nombre || '',
+          estadoComercial: vehiculoActualizado.estado_comercial || '',
+        });
       }
     },
     onExecuteCommand: async (vehiculo, cmd) => {

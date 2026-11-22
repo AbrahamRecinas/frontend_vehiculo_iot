@@ -1470,8 +1470,13 @@ function manejarAccion(btn) {
 // ENTRADA E INICIALIZACIÓN DEL MÓDULO
 // ---------------------------------------------------------------------------
 export async function alEntrarAdmin() {
-  await Promise.all([cargarDashboard(), cargarModelos(), cargarUsuarios(), cargarVehiculos()]);
-  await cargarAuditoria(true);
+  await Promise.allSettled([
+    cargarDashboard(),
+    cargarModelos(),
+    cargarUsuarios(),
+    cargarVehiculos(),
+    cargarAuditoria(true),
+  ]);
 }
 
 export function initAdmin({ onOperarVehiculo } = {}) {
@@ -1762,6 +1767,18 @@ export function initAdmin({ onOperarVehiculo } = {}) {
     );
   });
 
+  // Al seleccionar propietario en el modal de asignación, ajustar estado comercial sugerido
+  $('asignarPropietarioSelect')?.addEventListener('change', (e) => {
+    const estSel = $('asignarEstadoComercial');
+    if (!estSel) return;
+    estSel.value = e.target.value ? 'VENDIDO' : 'DISPONIBLE';
+  });
+
+  // Limpiar acción pendiente al cerrar/cancelar modal de confirmación
+  $('modalConfirmar')?.addEventListener('hidden.bs.modal', () => {
+    accionPendiente = null;
+  });
+
   // Confirmación genérica
   $('btnConfirmarAccion')?.addEventListener('click', async () => {
     const accion = accionPendiente;
@@ -1769,8 +1786,11 @@ export function initAdmin({ onOperarVehiculo } = {}) {
     const boton = $('btnConfirmarAccion');
     accionPendiente = null;
     boton.disabled = true;
-    await accion();
-    boton.disabled = false;
-    bootstrap.Modal.getOrCreateInstance($('modalConfirmar')).hide();
+    try {
+      await accion();
+    } finally {
+      boton.disabled = false;
+      bootstrap.Modal.getOrCreateInstance($('modalConfirmar')).hide();
+    }
   });
 }

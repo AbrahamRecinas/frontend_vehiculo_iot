@@ -237,43 +237,42 @@ class AuthService {
   }
 
   /**
-   * Cierra sesión revocando access y refresh tokens en backend (`tokens_revocados`).
-   * Siempre limpia storage local y notifica en `finally`.
+   * Logout optimista (instantáneo):
+   * Guarda tokens temporalmente, limpia sesión/storage de inmediato para no congelar la UI,
+   * y revoca los tokens en backend (tokens_revocados / cierre invitado) en segundo plano con keepalive.
    */
-  async logout() {
+  logout() {
     const accessToken = this.getAccessToken();
     const refreshToken = this.getRefreshToken();
     const rol = this.getRole();
+    const isGuestWithSession = rol === 'INVITADO' && Boolean(this.getGuestSession()?.id_sesion);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    // 1. Limpieza local inmediata (UI instantánea)
+    this.clearSession('logout', { notify: false });
 
-    try {
-      if (accessToken) {
-        const isGuest = rol === 'INVITADO';
-        const endpoint = isGuest ? CONFIG.ENDPOINTS.INVITADO_CERRAR : CONFIG.ENDPOINTS.AUTH_LOGOUT;
-        const headers = {
-          Accept: 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        };
-        const fetchOpts = {
-          method: 'POST',
-          signal: controller.signal,
-          headers,
-        };
-        if (!isGuest) {
-          headers['Content-Type'] = 'application/json';
-          fetchOpts.body = JSON.stringify(
-            refreshToken ? { refresh_token: refreshToken } : { refresh_token: null }
-          );
-        }
-        await fetch(`${CONFIG.BASE_URL}${endpoint}`, fetchOpts);
+    // 2. Revocación real en backend sin bloquear la interfaz
+    if (accessToken) {
+      const endpoint = isGuestWithSession
+        ? CONFIG.ENDPOINTS.INVITADO_CERRAR
+        : CONFIG.ENDPOINTS.AUTH_LOGOUT;
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      };
+      const fetchOpts = {
+        method: 'POST',
+        keepalive: true,
+        headers,
+      };
+      if (!isGuestWithSession) {
+        headers['Content-Type'] = 'application/json';
+        fetchOpts.body = JSON.stringify(
+          refreshToken ? { refresh_token: refreshToken } : { refresh_token: null }
+        );
       }
-    } catch (_) {
-      // Aunque falle la red o venza el timeout, siempre se limpia localmente en finally
-    } finally {
-      clearTimeout(timer);
-      this.clearSession('logout');
+      fetch(`${CONFIG.BASE_URL}${endpoint}`, fetchOpts).catch(() => {
+        // Si la red falla, la sesión local ya quedó cerrada
+      });
     }
   }
 

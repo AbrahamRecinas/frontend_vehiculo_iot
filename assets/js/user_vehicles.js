@@ -32,12 +32,25 @@ let callbacks = {
   onSelectForControl: null,
   onSelectForMonitor: null,
   onUnitDataChanged: null,
+  onEstadoComercialChanged: null,
   onExecuteCommand: null,
   onExecuteDemo: null,
   onCancelDemo: null,
 };
 
 let confirmActionPending = null;
+
+function mostrarAlertaTienda(mensaje = '') {
+  const box = $('userVehiclesAlert');
+  if (!box) return;
+  if (!mensaje) {
+    box.textContent = '';
+    box.hidden = true;
+    return;
+  }
+  box.textContent = mensaje;
+  box.hidden = false;
+}
 
 function crearBoton({ icono, texto = '', clase = 'btn-outline-secondary', title = '', disabled = false, onClick }) {
   const btn = document.createElement('button');
@@ -263,23 +276,36 @@ function renderTarjetasVehiculos() {
 }
 
 function solicitarCambioExhibicion(vehiculo, habilitar) {
+  mostrarAlertaTienda('');
   const titulo = habilitar ? 'Habilitar Modo Exhibición' : 'Desactivar Modo Exhibición';
   const msg = habilitar
     ? `¿Habilitar "${vehiculo.nombre}" (#${vehiculo.id_vehiculo}) en modo EXHIBICIÓN para que clientes invitados puedan reservarlo y probarlo desde el catálogo público? (El ADMIN seguirá sin acceso operativo salvo que le otorgues soporte).`
-    : `¿Desactivar el modo exhibición de "${vehiculo.nombre}" y regresarlo a estado VENDIDO?${
+    : `¿Pasar "${vehiculo.nombre}" (#${vehiculo.id_vehiculo}) a estado VENDIDO (uso exclusivo de tienda)?${
         vehiculo.sesion_invitado_activa
           ? ' Hay una sesión de invitado activa: se enviará DETENER (12) y se cerrará su sesión inmediatamente.'
           : ''
       }`;
 
   pedirConfirmacion(titulo, msg, async () => {
-    const res = await api.cambiarModoExhibicion(vehiculo.id_vehiculo, habilitar);
+    const res = await api.cambiarModoExhibicion(
+      vehiculo.id_vehiculo,
+      habilitar,
+      habilitar ? 'Habilitado desde panel de Tienda' : 'Desactivado desde panel de Tienda'
+    );
     if (!res.ok) {
-      toast(formatApiError(res, 'No se pudo cambiar el modo exhibición.'), 'danger');
+      const errMsg = `Error HTTP ${res.status || 'red'}: ${formatApiError(res, 'No se pudo cambiar el estado comercial.')}`;
+      mostrarAlertaTienda(errMsg);
+      toast(errMsg, 'danger');
       return;
     }
-    toast(res.data?.mensaje || 'Estado actualizado.', 'success');
+    mostrarAlertaTienda('');
+    toast(res.data?.mensaje || 'Estado comercial actualizado correctamente.', 'success');
+    const actualizada = res.data?.vehiculo || {
+      ...vehiculo,
+      estado_comercial: res.data?.estado_comercial || (habilitar ? 'EXHIBICION' : 'VENDIDO'),
+    };
     await cargarMisVehiculosModulo(vehiculo.id_vehiculo);
+    callbacks.onEstadoComercialChanged?.(actualizada);
     callbacks.onUnitDataChanged?.(vehiculo.id_vehiculo);
   });
 }
@@ -1220,6 +1246,11 @@ export function initUserVehicles(cbs = {}) {
     form.elements.duracion_minutos.value = '30';
     toast('Autorización temporal de soporte otorgada al administrador.', 'success');
     await cargarMisVehiculosModulo(STORE.vehiculoActivo.id_vehiculo);
+  });
+
+  // Limpiar acción pendiente si el usuario cancela el modal de confirmación
+  $('modalConfirmar')?.addEventListener('hidden.bs.modal', () => {
+    confirmActionPending = null;
   });
 
   // Hook compartido sobre el modal de confirmación genérico
