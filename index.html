@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.4.1" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.4.1" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.4.2" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.4.2" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -349,7 +349,12 @@
                   <i class="bi bi-sliders text-info" aria-hidden="true"></i>
                   <strong class="text-white small text-truncate" id="userWorkspaceTitle">Unidad seleccionada</strong>
                 </div>
-                <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="userWorkspaceEstado">VENDIDO</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="userWorkspaceEstado">VENDIDO</span>
+                  <button type="button" id="btnUserWorkspaceToggleExhibicion" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-shop me-1" aria-hidden="true"></i>Cambiar a EXHIBICIÓN
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -458,8 +463,8 @@
 
               <!-- TAB 3: AUTORIZACIÓN TEMPORAL DE SOPORTE AL ADMIN -->
               <div class="tab-pane fade" id="userPaneSoporte" role="tabpanel">
-                <div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center justify-content-between gap-2" id="userSoporteExhibicionNotice" role="alert" hidden>
-                  <span><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Esta unidad está en modo <strong>EXHIBICIÓN</strong>. Para otorgar soporte temporal al administrador primero regrésala a estado <strong>VENDIDO</strong>.</span>
+                <div class="alert alert-warning py-2 small d-none flex-wrap align-items-center justify-content-between gap-2" id="userSoporteExhibicionNotice" role="alert" hidden>
+                  <span><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><span id="userSoporteNoticeText">Esta unidad está en modo EXHIBICIÓN. Para otorgar soporte temporal al administrador primero regrésala a estado VENDIDO.</span></span>
                   <button type="button" id="btnUserSoporteVolverVendido" class="btn btn-sm btn-warning text-dark fw-semibold">
                     Volver a VENDIDO
                   </button>
@@ -1820,6 +1825,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.4.1"></script>
+  <script type="module" src="./assets/js/app.js?v=4.4.2"></script>
 </body>
 </html>

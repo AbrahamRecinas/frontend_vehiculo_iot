@@ -262,7 +262,7 @@ function renderTarjetasVehiculos() {
       }),
       crearBoton({
         icono: enExhibicion ? 'bi-shop-window' : 'bi-shop',
-        texto: enExhibicion ? 'Volver a Tienda (VENDIDO)' : 'Habilitar Exhibición',
+        texto: enExhibicion ? 'Cambiar a VENDIDO (tienda)' : 'Cambiar a EXHIBICIÓN (mostrador)',
         clase: enExhibicion ? 'btn-outline-warning w-100' : 'btn-outline-success w-100',
         onClick: () => solicitarCambioExhibicion(v, !enExhibicion),
       })
@@ -320,13 +320,28 @@ async function cargarWorkspaceUnidad(vehiculo) {
 
   const titulo = $('userWorkspaceTitle');
   const estadoBadge = $('userWorkspaceEstado');
+  const btnToggle = $('btnUserWorkspaceToggleExhibicion');
+  const enExhibicion = vehiculo.estado_comercial === 'EXHIBICION';
+
   if (titulo) titulo.textContent = `${vehiculo.nombre} (#${vehiculo.id_vehiculo})`;
   if (estadoBadge) {
     estadoBadge.textContent = vehiculo.estado_comercial || 'VENDIDO';
-    estadoBadge.className =
-      vehiculo.estado_comercial === 'EXHIBICION'
-        ? 'badge bg-primary-subtle text-primary border border-primary-subtle'
-        : 'badge bg-warning-subtle text-warning border border-warning-subtle';
+    estadoBadge.className = enExhibicion
+      ? 'badge bg-primary-subtle text-primary border border-primary-subtle'
+      : 'badge bg-warning-subtle text-warning border border-warning-subtle';
+  }
+  if (btnToggle) {
+    btnToggle.className = enExhibicion
+      ? 'btn btn-sm btn-outline-warning'
+      : 'btn btn-sm btn-outline-success';
+    btnToggle.textContent = '';
+    const ico = document.createElement('i');
+    ico.className = `bi ${enExhibicion ? 'bi-shop-window' : 'bi-shop'} me-1`;
+    ico.setAttribute('aria-hidden', 'true');
+    btnToggle.append(
+      ico,
+      document.createTextNode(enExhibicion ? 'Cambiar a VENDIDO' : 'Cambiar a EXHIBICIÓN')
+    );
   }
 
   STORE.demoSeleccionada = null;
@@ -946,10 +961,19 @@ function eliminarPasoPrivado(paso) {
 // ---------------------------------------------------------------------------
 async function cargarSoporteUnidad(vehiculo) {
   const avisoExh = $('userSoporteExhibicionNotice');
+  const avisoText = $('userSoporteNoticeText');
   const form = $('formUserSoporte');
   const enVendido = vehiculo.estado_comercial === 'VENDIDO';
 
-  if (avisoExh) avisoExh.hidden = enVendido;
+  if (avisoExh) {
+    // Alternar d-flex/d-none porque Bootstrap .d-flex (!important) pisa el atributo hidden
+    avisoExh.classList.toggle('d-flex', !enVendido);
+    avisoExh.classList.toggle('d-none', enVendido);
+    avisoExh.hidden = enVendido;
+  }
+  if (avisoText && !enVendido) {
+    avisoText.textContent = `Esta unidad está actualmente en estado ${vehiculo.estado_comercial || 'EXHIBICION'}. Para otorgar soporte temporal al administrador primero pásala a estado VENDIDO.`;
+  }
   if (form) {
     Array.from(form.elements).forEach((el) => {
       if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'TEXTAREA') {
@@ -1073,6 +1097,11 @@ export function initUserVehicles(cbs = {}) {
   });
   $('btnUserSoporteVolverVendido')?.addEventListener('click', () => {
     if (STORE.vehiculoActivo) solicitarCambioExhibicion(STORE.vehiculoActivo, false);
+  });
+  $('btnUserWorkspaceToggleExhibicion')?.addEventListener('click', () => {
+    if (!STORE.vehiculoActivo) return;
+    const habilitar = STORE.vehiculoActivo.estado_comercial !== 'EXHIBICION';
+    solicitarCambioExhibicion(STORE.vehiculoActivo, habilitar);
   });
 
   // Chips rápidos de duración de soporte

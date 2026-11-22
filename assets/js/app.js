@@ -12,7 +12,7 @@ import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
 import { UI } from './ui.js';
 import { initAdmin, alEntrarAdmin } from './admin.js';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.4.2';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
