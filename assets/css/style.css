@@ -2181,3 +2181,28 @@ a:focus-visible,
   min-height: 38px;
   font-weight: 600;
 }
+
+/* --------------------------------------------------------------------------
+   FASE 4 B2B2C: BANNER INVITADO, CONTROLES RESTRINGIDOS Y EDITOR DE DEMOS
+   -------------------------------------------------------------------------- */
+.guest-session-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1025;
+  background: linear-gradient(90deg, rgba(8, 28, 48, 0.96), rgba(15, 23, 42, 0.96));
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.18);
+}
+
+.guest-cmd-blocked {
+  opacity: 0.32 !important;
+  filter: grayscale(0.8);
+  pointer-events: none !important;
+}
+
+.demo-step-editor-card {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.demo-step-editor-card:hover {
+  border-color: rgba(6, 182, 212, 0.45) !important;
+}

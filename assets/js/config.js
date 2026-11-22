@@ -88,6 +88,7 @@ export const CONFIG = Object.freeze({
     VEHICULO_ACTUALIZAR: (id = 1) => `/api/vehiculos/${id}/actualizar`,
     VEHICULO_ELIMINAR: (id = 1) => `/api/vehiculos/${id}/eliminar`,
     VEHICULO_ASIGNAR: (id = 1) => `/api/vehiculos/${id}/asignar-propietario`,
+    VEHICULO_MODO_EXHIBICION: (id = 1) => `/api/vehiculos/${id}/modo-exhibicion`,
     VEHICULO_PROPIETARIOS_HISTORIAL: (id = 1) => `/api/vehiculos/${id}/propietarios-historial`,
     MOVIMIENTO: (id = 1) => `/api/vehiculos/${id}/movimiento`,
     CANCELAR_DEMO: (id = 1) => `/api/vehiculos/${id}/demo/cancelar`,
@@ -166,8 +167,9 @@ export const CONFIG = Object.freeze({
   }),
 
   TIMING: Object.freeze({
-    REST_TIMEOUT_MS: 8000,
-    MOVEMENT_TIMEOUT_MS: 5000,
+    REST_TIMEOUT_MS: 12000,
+    MOVEMENT_TIMEOUT_MS: 8000,
+    HEALTH_TIMEOUT_MS: 10000,
     HEALTH_POLL_INTERVAL_MS: 30000,
     WS_INITIAL_RECONNECT_DELAY_MS: 1500,
     WS_MAX_RECONNECT_DELAY_MS: 15000,

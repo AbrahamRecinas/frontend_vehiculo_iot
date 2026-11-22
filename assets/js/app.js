@@ -1,7 +1,7 @@
 /**
  * app.js
- * Orquestador principal de la aplicación IoT (4.1 Control + 4.2 Monitoreo + 4.3 Auth/RBAC/Admin).
- * Coordina Auth JWT, WebSocket único (WSS), API REST, Joystick, UI y Administración.
+ * Orquestador principal de la aplicación IoT (4.1 Control + 4.2 Monitoreo + 4.3/4.4 B2B2C).
+ * Coordina Auth JWT, WebSocket único (WSS), API REST, Joystick, Admin, Tienda (USUARIO) e Invitado.
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
@@ -12,6 +12,16 @@ import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
 import { UI } from './ui.js';
 import { initAdmin, alEntrarAdmin } from './admin.js';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js';
+import {
+  initGuestModule,
+  cargarCatalogoInvitado,
+  iniciarTemporizadorInvitado,
+  detenerTemporizadorInvitado,
+  finalizarPruebaInvitado,
+  applyGuestControlRestrictions,
+  clearGuestControlRestrictions,
+} from './guest.js';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -35,7 +45,6 @@ const STATE = {
   busyCommands: new Set(),
   activeController: null,
   monitorHistorial: [],
-  misVehiculos: [],
 };
 
 window.activeController = null;
@@ -47,13 +56,20 @@ const MOVIMIENTO_FISICO_IDS = [
   CONFIG.COMMANDS.DIAGONAL_IZQUIERDA,
 ];
 
+function esUnidadBloqueadaParaAdmin(vehiculo) {
+  if (!vehiculo || auth.getRole() !== 'ADMIN') return false;
+  const esPropiedadCliente =
+    vehiculo.estado_comercial === 'VENDIDO' ||
+    (vehiculo.id_propietario !== null && vehiculo.id_propietario !== undefined);
+  return esPropiedadCliente && !vehiculo.soporte_activo;
+}
+
 // ---------------------------------------------------------------------------
 // RESOLUCIÓN DINÁMICA: codigo_fisico (hardware 1..14) -> id_comando real de la unidad
 // ---------------------------------------------------------------------------
 function reconstruirMapaComandos(comandos = []) {
   STATE.comandosVehiculo = Array.isArray(comandos) ? comandos : [];
   const mapa = new Map();
-  // Priorizar comandos base (duracion_ms === null) activos
   STATE.comandosVehiculo.forEach((c) => {
     const activo = c.activo === 1 || c.activo === true;
     const cf = Number(c.codigo_fisico ?? c.codigo);
@@ -66,6 +82,12 @@ function reconstruirMapaComandos(comandos = []) {
   });
   STATE.fisicoToComandoId = mapa;
   renderMovimientosTemporizadosControl();
+
+  if (auth.getRole() === 'INVITADO') {
+    applyGuestControlRestrictions(STATE.comandosVehiculo);
+  } else {
+    clearGuestControlRestrictions();
+  }
 }
 
 function resolverIdComandoDesdeFisico(codigoFisico) {
@@ -153,6 +175,10 @@ function actualizarGuiaVisual(info) {
 // GESTIÓN DE COMANDOS DE MOVIMIENTO / DEMO
 // ---------------------------------------------------------------------------
 async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
+  if (!STATE.vehicleId) {
+    UI.showToast('Selecciona primero una unidad activa.', 'warning');
+    return false;
+  }
   const cmdId = Number(idComandoReal);
   const codigoFisico = Number(cmdObj?.codigo_fisico ?? cmdObj?.codigo ?? cmdId);
 
@@ -187,6 +213,17 @@ async function handleMovimiento(codigoFisicoInput) {
   if (codigoFisico === CONFIG.COMMANDS.DETENER) {
     await detenerVehiculo();
     return true;
+  }
+
+  if (!STATE.vehicleId) {
+    UI.showToast('No hay una unidad activa seleccionada.', 'warning');
+    return false;
+  }
+
+  // En modo invitado, bloquear localmente comandos no permitidos antes del POST
+  if (auth.getRole() === 'INVITADO' && !STATE.fisicoToComandoId.has(codigoFisico)) {
+    UI.showToast('Esta acción está restringida en el modo de prueba para invitados.', 'warning');
+    return false;
   }
 
   const idComandoReal = resolverIdComandoDesdeFisico(codigoFisico);
@@ -236,14 +273,13 @@ async function handleMovimiento(codigoFisicoInput) {
 }
 
 async function detenerVehiculo() {
+  if (!STATE.vehicleId) return;
   STATE.movementSequence += 1;
 
   if (STATE.movementInFlight) {
     try {
       await STATE.movementInFlight;
-    } catch (_) {
-      // continuar al paro obligatorio
-    }
+    } catch (_) {}
   }
 
   const idDetener = resolverIdComandoDesdeFisico(CONFIG.COMMANDS.DETENER);
@@ -251,7 +287,8 @@ async function detenerVehiculo() {
 }
 
 async function enviarParo(idComandoDetener) {
-  const res = await api.enviarMovimiento(idComandoDetener, { keepalive: true, timeoutMs: 4000 });
+  if (!STATE.vehicleId) return false;
+  const res = await api.enviarMovimiento(idComandoDetener, { keepalive: true, timeoutMs: 5000 });
   if (res.ok) {
     STATE.lastSentCommand = CONFIG.COMMANDS.DETENER;
     UI.setCommandState(idComandoDetener, 'VEHÍCULO DETENIDO');
@@ -259,15 +296,13 @@ async function enviarParo(idComandoDetener) {
     return true;
   }
 
-  if (res.status === 401 || res.status === 403) {
-    return false;
-  }
+  if (res.status === 401 || res.status === 403) return false;
 
   return new Promise((resolve) => {
     setTimeout(async () => {
       const retryRes = await api.enviarMovimiento(idComandoDetener, {
         keepalive: true,
-        timeoutMs: 4000,
+        timeoutMs: 5000,
       });
       resolve(retryRes.ok);
     }, 600);
@@ -280,9 +315,10 @@ function armarBotonApagar(btn, armado) {
   if (label) label.textContent = armado ? 'Confirmar' : 'Apagar';
 }
 
-async function iniciarDemo() {
+async function iniciarDemo(explicitIdDemo = null) {
+  if (!STATE.vehicleId) return;
   const select = getEl('demoSelect');
-  const idDemo = select ? Number(select.value) : NaN;
+  const idDemo = explicitIdDemo !== null ? Number(explicitIdDemo) : select ? Number(select.value) : NaN;
   if (!idDemo) {
     UI.showToast('Selecciona primero una demo disponible', 'warning');
     return;
@@ -315,6 +351,7 @@ async function iniciarDemo() {
 }
 
 async function cancelarDemo() {
+  if (!STATE.vehicleId) return;
   UI.setActionButtonBusy('btnCancelarDemo', true);
   const res = await api.cancelarDemo();
   UI.setActionButtonBusy('btnCancelarDemo', false);
@@ -337,7 +374,7 @@ async function cancelarDemo() {
 }
 
 // ---------------------------------------------------------------------------
-// MONITOREO (4.2 conservado intacto: máx. 10 individuales persistidos)
+// MONITOREO (4.2 conservado intacto: máx. 10 individuales + aviso explícito 403/retry)
 // ---------------------------------------------------------------------------
 function extraerFechaHora(timestamp) {
   const iso = String(timestamp || '').replace(' ', 'T');
@@ -486,7 +523,15 @@ function renderUltimoMovimiento(mov) {
 
   const esSinMovimientos = !mov.idComando && !mov.idRegistro && !mov.codigoFisico;
   if (esSinMovimientos) {
-    paint('—', 'Sin movimientos registrados para el vehículo.', '—', '—', 'Sin movimientos', 'text-bg-secondary', null);
+    paint(
+      '—',
+      mov.comando || 'Sin movimientos registrados para el vehículo.',
+      '—',
+      '—',
+      'Sin movimientos',
+      'text-bg-secondary',
+      null
+    );
     return;
   }
 
@@ -637,7 +682,31 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
   UI.etiquetarCeldas(tbody);
 }
 
+function mostrarAvisoMonitoreo(texto = null) {
+  const box = getEl('monitorAccessNotice');
+  const msg = getEl('monitorAccessNoticeText');
+  if (!box) return;
+  if (!texto) {
+    box.hidden = true;
+    return;
+  }
+  if (msg) msg.textContent = texto;
+  box.hidden = false;
+}
+
 async function cargarPanelMonitoreo() {
+  if (!STATE.vehicleId) return;
+  mostrarAvisoMonitoreo(null);
+
+  if (esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) {
+    const aviso = 'Unidad vendida — requiere autorización temporal de soporte del propietario.';
+    mostrarAvisoMonitoreo(aviso);
+    renderUltimoMovimiento({ idComando: null, comando: aviso });
+    renderHistorial([], aviso);
+    renderComandosCatalogo([], aviso);
+    return;
+  }
+
   renderUltimoMovimiento(null);
   renderHistorial([], 'Consultando historial de movimientos…');
   renderComandosCatalogo([], 'Consultando catálogo de comandos…');
@@ -648,18 +717,27 @@ async function cargarPanelMonitoreo() {
     api.obtenerComandos(),
   ]);
 
-  if (!estadoRes.ok && estadoRes.status === 403) {
-    const msg = formatApiError(estadoRes, 'Sin autorización para monitorear esta unidad.');
+  if ((!estadoRes.ok && estadoRes.status === 403) || (!historialRes.ok && historialRes.status === 403)) {
+    const msg = formatApiError(
+      estadoRes.status === 403 ? estadoRes : historialRes,
+      'Unidad vendida — requiere autorización temporal de soporte del propietario.'
+    );
+    mostrarAvisoMonitoreo(msg);
     UI.showToast(msg, 'warning');
-    renderUltimoMovimiento({ idComando: null, comando: 'Acceso restringido' });
+    wsService.disconnect('Requiere autorización de soporte');
+    renderUltimoMovimiento({ idComando: null, comando: msg });
     renderHistorial([], msg);
-    renderComandosCatalogo([], msg);
+    renderComandosCatalogo(Array.isArray(comandosRes?.data) ? comandosRes.data : [], msg);
     return;
   }
 
-  const comandos = Array.isArray(comandosRes?.data) ? comandosRes.data : [];
-  reconstruirMapaComandos(comandos);
-  renderComandosCatalogo(comandos);
+  if (comandosRes.ok) {
+    const comandos = Array.isArray(comandosRes.data) ? comandosRes.data : [];
+    reconstruirMapaComandos(comandos);
+    renderComandosCatalogo(comandos);
+  } else {
+    renderComandosCatalogo([], `Error al cargar comandos: ${formatApiError(comandosRes)}`);
+  }
 
   if (historialRes.ok) {
     const historial = aHistorial(historialRes.data);
@@ -672,193 +750,15 @@ async function cargarPanelMonitoreo() {
     renderUltimoMovimiento(ultimo);
   } else {
     STATE.monitorHistorial = [];
-    renderHistorial([], formatApiError(historialRes, 'Historial no disponible.'));
+    renderHistorial([], `Error al cargar historial: ${formatApiError(historialRes)}`);
     renderUltimoMovimiento(estadoRes.ok ? aEstadoInicial({ estado: estadoRes.data }) : { idComando: null });
   }
 }
 
 // ---------------------------------------------------------------------------
-// CATÁLOGO PÚBLICO (preview en Fase 3; sesión exclusiva completa en Fase 4)
+// SELECCIÓN DE UNIDAD ACTIVA (sin duplicar WSS ni reconectar si está bloqueada 403)
 // ---------------------------------------------------------------------------
-async function cargarCatalogoPublico() {
-  const modelosWrap = getEl('guestModelosGrid');
-  const exhibWrap = getEl('guestExhibicionGrid');
-  if (modelosWrap) modelosWrap.textContent = 'Cargando catálogo público de modelos…';
-  if (exhibWrap) exhibWrap.textContent = 'Consultando disponibilidad en exhibición…';
-
-  const [modRes, exhRes] = await Promise.all([
-    api.obtenerCatalogoPublicoModelos(),
-    api.obtenerCatalogoPublicoExhibicion(),
-  ]);
-
-  if (modelosWrap) {
-    modelosWrap.textContent = '';
-    const modelos = modRes.ok && Array.isArray(modRes.data) ? modRes.data : [];
-    if (!modelos.length) {
-      const p = document.createElement('p');
-      p.className = 'text-secondary small mb-0';
-      p.textContent = modRes.ok ? 'Sin modelos publicados por el momento.' : formatApiError(modRes);
-      modelosWrap.appendChild(p);
-    } else {
-      modelos.forEach((m) => {
-        const col = document.createElement('div');
-        col.className = 'col-12 col-md-6';
-        const card = document.createElement('div');
-        card.className = 'card bg-dark border-secondary-subtle h-100';
-        const body = document.createElement('div');
-        body.className = 'card-body p-3';
-        const head = document.createElement('div');
-        head.className = 'd-flex justify-content-between align-items-start gap-2 mb-1';
-        const h3 = document.createElement('h3');
-        h3.className = 'h6 text-white mb-0';
-        h3.textContent = m.nombre_comercial || m.codigo_modelo;
-        const code = document.createElement('span');
-        code.className = 'badge text-bg-dark border border-secondary font-monospace';
-        code.textContent = m.codigo_modelo;
-        head.append(h3, code);
-        const desc = document.createElement('p');
-        desc.className = 'small text-secondary mb-2';
-        desc.textContent = m.descripcion || 'Modelo IoT de catálogo oficial.';
-        const caps = document.createElement('div');
-        caps.className = 'small text-info';
-        caps.textContent = `Capacidades físicas activas: ${(m.capacidades || []).length}`;
-        body.append(head, desc, caps);
-        card.appendChild(body);
-        col.appendChild(card);
-        modelosWrap.appendChild(col);
-      });
-    }
-  }
-
-  if (exhibWrap) {
-    exhibWrap.textContent = '';
-    const unidades = exhRes.ok && Array.isArray(exhRes.data) ? exhRes.data : [];
-    if (!unidades.length) {
-      const p = document.createElement('p');
-      p.className = 'text-secondary small mb-0';
-      p.textContent = exhRes.ok
-        ? 'No hay unidades en exhibición disponibles en este momento.'
-        : formatApiError(exhRes);
-      exhibWrap.appendChild(p);
-    } else {
-      unidades.forEach((u) => {
-        const col = document.createElement('div');
-        col.className = 'col-12 col-md-6';
-        const card = document.createElement('div');
-        card.className = 'card bg-dark border-secondary-subtle h-100';
-        const body = document.createElement('div');
-        body.className = 'card-body p-3 d-flex flex-column gap-2';
-        const top = document.createElement('div');
-        top.className = 'd-flex justify-content-between align-items-center';
-        const title = document.createElement('strong');
-        title.className = 'text-white';
-        title.textContent = `${u.nombre} (#${u.id_vehiculo})`;
-        const badge = document.createElement('span');
-        badge.className = u.disponible_ahora
-          ? 'badge bg-success-subtle text-success border border-success-subtle'
-          : 'badge bg-warning-subtle text-warning border border-warning-subtle';
-        badge.textContent = u.disponible_ahora
-          ? 'Disponible'
-          : `Ocupada (${u.segundos_ocupacion}s)`;
-        top.append(title, badge);
-        const sub = document.createElement('small');
-        sub.className = 'text-secondary';
-        sub.textContent = u.nombre_comercial || u.modelo || 'Unidad de exhibición';
-        body.append(top, sub);
-        card.appendChild(body);
-        col.appendChild(card);
-        exhibWrap.appendChild(col);
-      });
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MIS VEHÍCULOS (rol USUARIO — base en Fase 3, soporte/temporizados/editor en Fase 4)
-// ---------------------------------------------------------------------------
-async function cargarMisVehiculos() {
-  const wrap = getEl('userVehiclesGrid');
-  if (wrap) wrap.textContent = 'Cargando tus unidades…';
-  const res = await api.obtenerVehiculos();
-  if (!res.ok) {
-    STATE.misVehiculos = [];
-    if (wrap) {
-      wrap.textContent = '';
-      const p = document.createElement('p');
-      p.className = 'text-danger small mb-0';
-      p.textContent = formatApiError(res);
-      wrap.appendChild(p);
-    }
-    return [];
-  }
-
-  STATE.misVehiculos = Array.isArray(res.data) ? res.data : [];
-  if (wrap) {
-    wrap.textContent = '';
-    if (!STATE.misVehiculos.length) {
-      const p = document.createElement('p');
-      p.className = 'text-secondary small mb-0';
-      p.textContent = 'Aún no tienes vehículos asignados a tu cuenta.';
-      wrap.appendChild(p);
-    } else {
-      STATE.misVehiculos.forEach((v) => {
-        const col = document.createElement('div');
-        col.className = 'col-12 col-md-6';
-        const card = document.createElement('div');
-        card.className = `card bg-dark border-${v.id_vehiculo === STATE.vehicleId ? 'info' : 'secondary-subtle'} h-100`;
-        const body = document.createElement('div');
-        body.className = 'card-body p-3 d-flex flex-column gap-2';
-
-        const top = document.createElement('div');
-        top.className = 'd-flex justify-content-between align-items-center';
-        const h3 = document.createElement('h3');
-        h3.className = 'h6 text-white mb-0';
-        h3.textContent = `${v.nombre} (#${v.id_vehiculo})`;
-        const estado = document.createElement('span');
-        estado.className = 'badge bg-info-subtle text-info border border-info-subtle';
-        estado.textContent = v.estado_comercial || 'PROPIO';
-        top.append(h3, estado);
-
-        const meta = document.createElement('div');
-        meta.className = 'small text-secondary';
-        meta.textContent = `${v.nombre_comercial || v.modelo || 'Grúa RC IoT'}${v.numero_serie ? ` · Serie: ${v.numero_serie}` : ''}`;
-
-        const actions = document.createElement('div');
-        actions.className = 'd-flex gap-2 mt-auto pt-1';
-
-        const btnCtrl = document.createElement('button');
-        btnCtrl.type = 'button';
-        btnCtrl.className = 'btn btn-sm btn-primary flex-fill';
-        btnCtrl.textContent = 'Controlar';
-        btnCtrl.addEventListener('click', async () => {
-          await seleccionarVehiculoActivo(v);
-          salirDeMonitor();
-        });
-
-        const btnMon = document.createElement('button');
-        btnMon.type = 'button';
-        btnMon.className = 'btn btn-sm btn-outline-info flex-fill';
-        btnMon.textContent = 'Monitoreo';
-        btnMon.addEventListener('click', async () => {
-          await seleccionarVehiculoActivo(v);
-          await entrarAMonitor();
-        });
-
-        actions.append(btnCtrl, btnMon);
-        body.append(top, meta, actions);
-        card.appendChild(body);
-        col.appendChild(card);
-        wrap.appendChild(col);
-      });
-    }
-  }
-  return STATE.misVehiculos;
-}
-
-// ---------------------------------------------------------------------------
-// SELECCIÓN DE UNIDAD ACTIVA (sin duplicar WebSockets)
-// ---------------------------------------------------------------------------
-async function seleccionarVehiculoActivo(vehiculo) {
+async function seleccionarVehiculoActivo(vehiculo, { conectarWss = true } = {}) {
   if (!vehiculo || !vehiculo.id_vehiculo) return false;
   const nuevoId = Number(vehiculo.id_vehiculo);
   STATE.vehicleId = nuevoId;
@@ -871,8 +771,19 @@ async function seleccionarVehiculoActivo(vehiculo) {
     estadoComercial: vehiculo.estado_comercial || '',
   });
 
-  // Conectar (o reutilizar si ya es la misma unidad) un único canal WSS
-  wsService.connect(nuevoId);
+  if (esUnidadBloqueadaParaAdmin(vehiculo)) {
+    wsService.disconnect('Unidad vendida · requiere soporte');
+    syncDiagnostics();
+    reconstruirMapaComandos([]);
+    STATE.demos = [];
+    UI.renderDemos([]);
+    UI.renderDemoSelect([]);
+    return false;
+  }
+
+  if (conectarWss) {
+    wsService.connect(nuevoId);
+  }
   syncDiagnostics();
 
   const [cmdRes] = await Promise.all([api.obtenerComandos(nuevoId), cargarCatalogoDemos()]);
@@ -885,7 +796,7 @@ async function seleccionarVehiculoActivo(vehiculo) {
 }
 
 async function cargarCatalogoDemos() {
-  if (!auth.isAuthenticated() || auth.getRole() === 'INVITADO') {
+  if (!STATE.vehicleId || !auth.isAuthenticated() || auth.getRole() === 'INVITADO') {
     STATE.demos = [];
     UI.renderDemos([]);
     UI.renderDemoSelect([]);
@@ -898,7 +809,7 @@ async function cargarCatalogoDemos() {
     UI.renderDemos(demos);
     UI.renderDemoSelect(demos);
   } else {
-    UI.renderDemoError(formatApiError(res));
+    UI.renderDemoError(`Error al cargar demos: ${formatApiError(res)}`);
   }
 }
 
@@ -927,7 +838,7 @@ async function entrarAVista(vista) {
     vistaActual = 'guest';
     actualizarNavPills('guest');
     UI.setView('guest');
-    await cargarCatalogoPublico();
+    await cargarCatalogoInvitado();
     return;
   }
 
@@ -950,13 +861,13 @@ async function entrarAVista(vista) {
 
   if (vista === 'user-vehicles') {
     if (rol !== 'USUARIO') {
-      UI.showToast('Esta vista corresponde al perfil de Comprador.', 'warning');
+      UI.showToast('Esta vista corresponde al perfil de Tienda / Comprador.', 'warning');
       return;
     }
     vistaActual = 'user-vehicles';
     actualizarNavPills('user-vehicles');
     UI.setView('user-vehicles');
-    await cargarMisVehiculos();
+    await cargarMisVehiculosModulo(STATE.vehicleId);
     return;
   }
 
@@ -968,7 +879,6 @@ async function entrarAVista(vista) {
     return entrarAMonitor();
   }
 
-  // vista === 'control'
   salirDeMonitor();
 }
 
@@ -976,6 +886,15 @@ async function entrarAMonitor() {
   if (!STATE.vehicleId) {
     UI.showToast('No tienes una unidad seleccionada o asignada todavía.', 'warning');
     return entrarAVista(auth.getRole() === 'ADMIN' ? 'admin' : 'user-vehicles');
+  }
+  if (esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) {
+    const aviso = 'Unidad vendida — requiere autorización temporal de soporte del propietario.';
+    UI.showToast(aviso, 'warning');
+    vistaActual = 'monitor';
+    UI.setView('monitor');
+    actualizarNavPills('monitor');
+    await cargarPanelMonitoreo();
+    return;
   }
   vistaActual = 'monitor';
   UI.setView('monitor');
@@ -986,8 +905,27 @@ async function entrarAMonitor() {
 
 function salirDeMonitor() {
   if (!STATE.vehicleId) {
-    UI.showToast('No tienes una unidad seleccionada o asignada todavía.', 'warning');
-    entrarAVista(auth.getRole() === 'ADMIN' ? 'admin' : 'user-vehicles');
+    UI.showToast(
+      auth.getRole() === 'INVITADO'
+        ? 'Reserva primero una unidad en exhibición para iniciar la prueba.'
+        : 'No tienes una unidad seleccionada o asignada todavía.',
+      'warning'
+    );
+    entrarAVista(
+      auth.getRole() === 'ADMIN'
+        ? 'admin'
+        : auth.getRole() === 'INVITADO'
+          ? 'guest'
+          : 'user-vehicles'
+    );
+    return;
+  }
+  if (esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) {
+    UI.showToast(
+      'Unidad vendida — requiere autorización temporal de soporte del propietario.',
+      'warning'
+    );
+    entrarAVista('admin');
     return;
   }
   vistaActual = 'control';
@@ -1004,22 +942,25 @@ function bindViewNavigation() {
   });
 
   getEl('btnRefreshMonitor')?.addEventListener('click', () => cargarPanelMonitoreo());
-  getEl('btnRefreshGuestCatalog')?.addEventListener('click', () => cargarCatalogoPublico());
-  getEl('btnRefreshMisVehiculos')?.addEventListener('click', () => cargarMisVehiculos());
+  getEl('btnRefreshGuestCatalog')?.addEventListener('click', () => cargarCatalogoInvitado());
+  getEl('btnRefreshMisVehiculos')?.addEventListener('click', () =>
+    cargarMisVehiculosModulo(STATE.vehicleId)
+  );
 }
 
 // ---------------------------------------------------------------------------
-// AUTENTICACIÓN: LOGIN / LOGOUT / REACCIÓN AL CAMBIO DE SESIÓN
+// AUTENTICACIÓN: LOGIN / LOGOUT / REACCIÓN AL CAMBIO DE SESIÓN (SIN RACE)
 // ---------------------------------------------------------------------------
 async function aplicarEstadoAutenticacion(session, reason = 'boot') {
   const user = session?.usuario || null;
   UI.syncAuthUi(user);
 
   if (!user) {
+    detenerTemporizadorInvitado();
+    clearGuestControlRestrictions();
     wsService.disconnect('En espera de sesión');
     STATE.vehicleId = null;
     STATE.vehicleInfo = null;
-    STATE.misVehiculos = [];
     STATE.comandosVehiculo = [];
     STATE.fisicoToComandoId.clear();
     if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
@@ -1033,29 +974,45 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
   }
 
   if (reason === 'refresh') {
-    // Re-sincronizar WSS si hace falta sin cambiar de vista
-    if (STATE.vehicleId) wsService.connect(STATE.vehicleId);
+    if (STATE.vehicleId && !esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) {
+      wsService.connect(STATE.vehicleId);
+    }
     return;
   }
 
   if (user.rol === 'ADMIN') {
+    detenerTemporizadorInvitado();
+    clearGuestControlRestrictions();
     const resVeh = await api.obtenerVehiculos();
     const vehs = resVeh.ok && Array.isArray(resVeh.data) ? resVeh.data : [];
     const operable =
-      vehs.find((v) => v.activo && (v.estado_comercial === 'EXHIBICION' || v.estado_comercial === 'DISPONIBLE')) ||
+      vehs.find(
+        (v) =>
+          v.activo &&
+          v.id_propietario == null &&
+          (v.estado_comercial === 'EXHIBICION' || v.estado_comercial === 'DISPONIBLE')
+      ) ||
+      vehs.find((v) => v.activo && v.soporte_activo) ||
       vehs[0];
+
     if (operable) {
-      await seleccionarVehiculoActivo(operable);
+      await seleccionarVehiculoActivo(operable, {
+        conectarWss: !esUnidadBloqueadaParaAdmin(operable),
+      });
     }
     await entrarAVista('admin');
     return;
   }
 
   if (user.rol === 'USUARIO') {
-    const mis = await cargarMisVehiculos();
+    detenerTemporizadorInvitado();
+    clearGuestControlRestrictions();
+    const mis = await cargarMisVehiculosModulo();
     if (mis.length > 0) {
       await seleccionarVehiculoActivo(mis[0]);
     } else {
+      STATE.vehicleId = null;
+      STATE.vehicleInfo = null;
       wsService.disconnect('Sin unidades asignadas');
     }
     await entrarAVista('user-vehicles');
@@ -1063,12 +1020,38 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
   }
 
   if (user.rol === 'INVITADO') {
-    const idVeh = session?.sesionInvitado?.id_vehiculo;
-    if (idVeh) {
-      const r = await api.obtenerVehiculo(idVeh);
-      await seleccionarVehiculoActivo(r.ok ? r.data : { id_vehiculo: idVeh, nombre: `Exhibición #${idVeh}` });
+    let ses = session?.sesionInvitado || null;
+    // Consultar el estado y segundos restantes reales en servidor (evita contador desfasado tras F5)
+    if (ses && ses.id_sesion) {
+      const sesActualRes = await api.obtenerSesionInvitadoActual();
+      if (sesActualRes.ok && sesActualRes.data?.estado === 'ACTIVA' && Number(sesActualRes.data?.segundos_restantes || 0) > 0) {
+        ses = { ...ses, ...sesActualRes.data };
+        auth.setSession({ ...auth.session, sesionInvitado: ses }, 'guest_session_sync');
+      } else if (sesActualRes.status === 404 || sesActualRes.status === 401 || sesActualRes.status === 403 || (sesActualRes.ok && sesActualRes.data?.estado !== 'ACTIVA')) {
+        ses = null;
+        auth.clearSession('guest_expired_boot', { notify: false });
+        UI.syncAuthUi(null);
+        UI.showToast('Tu sesión de prueba anterior expiró o fue finalizada.', 'info');
+        await entrarAVista('guest');
+        return;
+      }
     }
-    await entrarAVista('control');
+    if (ses && ses.id_sesion && ses.id_vehiculo) {
+      const r = await api.obtenerVehiculo(ses.id_vehiculo);
+      const vehObj = r.ok
+        ? r.data
+        : { id_vehiculo: ses.id_vehiculo, nombre: ses.vehiculo_nombre || `Exhibición #${ses.id_vehiculo}` };
+      iniciarTemporizadorInvitado({ ...ses, vehiculo_nombre: vehObj.nombre });
+      await seleccionarVehiculoActivo(vehObj);
+      await entrarAVista('control');
+    } else {
+      // Invitado autenticado (ej. invitado@test.local) aún sin reserva -> abrir Catálogo de Exhibición
+      detenerTemporizadorInvitado();
+      STATE.vehicleId = null;
+      STATE.vehicleInfo = null;
+      wsService.disconnect('Selecciona una unidad en exhibición');
+      await entrarAVista('guest');
+    }
   }
 }
 
@@ -1112,7 +1095,15 @@ function bindAuthEvents() {
     if (cerrandoSesion) return;
     cerrandoSesion = true;
     try {
+      const eraInvitadoConReserva = auth.getRole() === 'INVITADO' && Boolean(auth.getGuestSession()?.id_sesion);
+      detenerTemporizadorInvitado();
+      clearGuestControlRestrictions();
       wsService.disconnect('Cerrando sesión...');
+      if (eraInvitadoConReserva) {
+        try {
+          await api.cerrarSesionInvitado();
+        } catch (_) {}
+      }
       await auth.logout();
     } catch (_) {
       // auth.logout ya limpia en su propio finally
@@ -1125,11 +1116,11 @@ function bindAuthEvents() {
     }
   };
 
-  // Delegación global: cubre escritorio (#btnHeaderLogout) y móvil (#btnLobbyLogout)
   document.addEventListener('click', (e) => {
-    const btn = e.target && typeof e.target.closest === 'function'
-      ? e.target.closest('[data-action="logout"], #btnHeaderLogout')
-      : null;
+    const btn =
+      e.target && typeof e.target.closest === 'function'
+        ? e.target.closest('[data-action="logout"], #btnHeaderLogout')
+        : null;
     if (!btn) return;
     e.preventDefault();
     ejecutarLogout();
@@ -1140,6 +1131,10 @@ function bindAuthEvents() {
   getEl('btnBackToLogin')?.addEventListener('click', () => entrarAVista('auth'));
 
   auth.onChange((session, reason) => {
+    if (reason === 'guest_session_start' || reason === 'guest_session_sync') {
+      UI.syncAuthUi(session?.usuario || null);
+      return;
+    }
     aplicarEstadoAutenticacion(session, reason);
   });
 }
@@ -1157,7 +1152,7 @@ function syncDiagnostics(extra = {}) {
   const metrics = wsService.getMetrics();
   UI.updateDiagnostics({
     restUrl: CONFIG.BASE_URL,
-    wssUrl: STATE.vehicleId ? (metrics.wssUrl || CONFIG.buildDisplayWssUrl(STATE.vehicleId)) : 'Sin unidad activa',
+    wssUrl: STATE.vehicleId ? metrics.wssUrl || CONFIG.buildDisplayWssUrl(STATE.vehicleId) : 'Sin unidad activa',
     wsReconnects: metrics.attempts,
     lastWsMessage: metrics.lastMessage,
     ...extra,
@@ -1175,6 +1170,7 @@ function bindWebSocketEvents() {
 
     if (
       auth.isAuthenticated() &&
+      STATE.vehicleId &&
       (state === 'closed' || state === 'error') &&
       STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER
     ) {
@@ -1191,9 +1187,24 @@ function bindWebSocketEvents() {
 
   wsService.on('authError', ({ code, reason }) => {
     if (code === 4403) {
-      UI.showToast(`Canal WSS denegado (403): ${reason}`, 'warning');
+      UI.showToast(`Acceso operativo restringido (403): ${reason}`, 'warning');
+    } else if (code === 4401 && auth.getRole() === 'INVITADO') {
+      finalizarPruebaInvitado(reason || 'Tu sesión de prueba finalizó.');
     } else if (code === 4401 && auth.isAuthenticated()) {
       UI.showToast(`Sesión WSS cerrada: ${reason}`, 'warning');
+    }
+  });
+
+  wsService.on('sesion_invitado', (payload) => {
+    if (auth.getRole() === 'INVITADO') {
+      const estado = String(payload?.estado || '').toUpperCase();
+      if (estado === 'EXPIRADA' || estado === 'CANCELADA' || estado === 'FINALIZADA') {
+        finalizarPruebaInvitado(
+          estado === 'CANCELADA'
+            ? 'La tienda o el administrador finalizó la prueba. Unidad detenida.'
+            : 'Tiempo de prueba finalizado. Unidad detenida y liberada.'
+        );
+      }
     }
   });
 
@@ -1384,7 +1395,7 @@ function salirDeModoMando() {
 }
 
 // ---------------------------------------------------------------------------
-// ARRANQUE GLOBAL
+// ARRANQUE GLOBAL (sin condiciones de carrera)
 // ---------------------------------------------------------------------------
 async function boot() {
   UI.init();
@@ -1422,7 +1433,7 @@ async function boot() {
   getEl('btnEnterMando')?.addEventListener('click', entrarAModoMando);
   getEl('btnLobbyCheck')?.addEventListener('click', () => actualizarSaludApi({ showToast: true }));
   getEl('btnExitMando')?.addEventListener('click', salirDeModoMando);
-  getEl('btnIniciarDemo')?.addEventListener('click', iniciarDemo);
+  getEl('btnIniciarDemo')?.addEventListener('click', () => iniciarDemo());
   getEl('btnCancelarDemo')?.addEventListener('click', cancelarDemo);
 
   const diagPanel = getEl('diagPanel');
@@ -1451,6 +1462,7 @@ async function boot() {
 
   // Botones de acción por data-cmd (conservando cableado D-Pad 3/4 intacto)
   const ejecutarComandoBoton = async (btn) => {
+    if (btn.disabled) return;
     const codigoFisico = Number(btn.dataset.cmd);
 
     if (codigoFisico === CONFIG.COMMANDS.DEMO_FABRICA) {
@@ -1528,7 +1540,7 @@ async function boot() {
     dpadGrid.addEventListener('pointerdown', async (e) => {
       if (STATE.activeController === 'joystick') return;
       const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-cmd]') : null;
-      if (!btn) return;
+      if (!btn || btn.disabled) return;
       STATE.activeController = 'dpad';
       window.activeController = 'dpad';
       UI.setControllerLock('dpad');
@@ -1558,23 +1570,88 @@ async function boot() {
   initJoystick();
   bindViewNavigation();
   bindAuthEvents();
+
   initAdmin({
     onOperarVehiculo: async (vehiculo) => {
+      if (esUnidadBloqueadaParaAdmin(vehiculo)) {
+        UI.showToast(
+          'Unidad vendida — requiere autorización temporal de soporte del propietario.',
+          'warning'
+        );
+        return;
+      }
       await seleccionarVehiculoActivo(vehiculo);
       salirDeMonitor();
     },
   });
 
-  // 1. Verificar salud independiente API AWS + RDS en paralelo
-  const healthPromise = iniciarSaludPolling();
+  initUserVehicles({
+    onSelectForControl: async (vehiculo) => {
+      await seleccionarVehiculoActivo(vehiculo);
+      salirDeMonitor();
+    },
+    onSelectForMonitor: async (vehiculo) => {
+      await seleccionarVehiculoActivo(vehiculo);
+      await entrarAMonitor();
+    },
+    onUnitDataChanged: async (idVehiculo) => {
+      if (STATE.vehicleId === Number(idVehiculo)) {
+        const [cmdRes] = await Promise.all([api.obtenerComandos(idVehiculo), cargarCatalogoDemos()]);
+        if (cmdRes.ok) reconstruirMapaComandos(cmdRes.data);
+      }
+    },
+    onExecuteCommand: async (vehiculo, cmd) => {
+      if (STATE.vehicleId !== Number(vehiculo.id_vehiculo)) {
+        await seleccionarVehiculoActivo(vehiculo);
+      }
+      await ejecutarComandoPorId(cmd.id_comando, cmd);
+    },
+    onExecuteDemo: async (vehiculo, demo) => {
+      if (STATE.vehicleId !== Number(vehiculo.id_vehiculo)) {
+        await seleccionarVehiculoActivo(vehiculo);
+      }
+      await iniciarDemo(demo.id_demo);
+    },
+    onCancelDemo: async (vehiculo) => {
+      if (STATE.vehicleId !== Number(vehiculo.id_vehiculo)) {
+        await seleccionarVehiculoActivo(vehiculo);
+      }
+      await cancelarDemo();
+    },
+  });
 
-  // 2. Recuperar y validar sesión JWT persistida antes de renderizar la vista inicial
+  initGuestModule({
+    onSessionStarted: async (sesion) => {
+      UI.syncAuthUi(auth.getUser());
+      const vehObj = {
+        id_vehiculo: sesion.id_vehiculo,
+        nombre: sesion.vehiculo_nombre || `Exhibición #${sesion.id_vehiculo}`,
+        estado_comercial: 'EXHIBICION',
+      };
+      await seleccionarVehiculoActivo(vehObj);
+      salirDeMonitor();
+    },
+    onSessionEnded: async () => {
+      wsService.disconnect('Prueba finalizada');
+      STATE.vehicleId = null;
+      STATE.vehicleInfo = null;
+      UI.syncAuthUi(null);
+      if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
+      await entrarAVista('guest');
+    },
+  });
+
+  // 1. Verificar sesión JWT persistida primero (evita condiciones de carrera con vehicleId)
   const verificacion = await auth.verifySession();
-  await aplicarEstadoAutenticacion(
+  const authFlowPromise = aplicarEstadoAutenticacion(
     verificacion.valid ? auth.session : null,
     verificacion.reason === 'expired' ? 'expired' : 'boot'
   );
-  await healthPromise;
+
+  // 2. Salud independiente AWS + RDS en paralelo
+  const healthPromise = iniciarSaludPolling();
+
+  await Promise.all([authFlowPromise, healthPromise]);
 }
 
 if (document.getElementById('mainContent')) {

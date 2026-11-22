@@ -597,3 +597,32 @@ body.app-view-control .app-footer {
 .user-vehicles-view .btn {
   min-height: 44px;
 }
+
+/* Fase 4 B2B2C Mobile First: banner de invitado y editor táctil de Tienda */
+.guest-session-banner {
+  flex-wrap: wrap;
+}
+
+.guest-session-banner .btn {
+  min-height: 36px;
+}
+
+.user-vehicles-view .tab-pane {
+  padding: 0.65rem !important;
+}
+
+.demo-step-editor-card .btn {
+  min-height: 38px;
+  min-width: 38px;
+}
+
+@media (min-width: 768px) {
+  .user-vehicles-view .btn {
+    min-height: 0;
+  }
+
+  .demo-step-editor-card .btn {
+    min-height: 0;
+    min-width: 0;
+  }
+}

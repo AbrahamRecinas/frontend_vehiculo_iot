@@ -161,15 +161,25 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
-  // Salud independiente: API AWS + Amazon RDS (público)
+  // Salud independiente: API AWS + Amazon RDS (público, con 1 reintento suave)
   // ---------------------------------------------------------------------------
   async comprobarSaludCompleta() {
-    const res = await this.request(
-      CONFIG.ENDPOINTS.HEALTH,
-      { method: 'GET', cache: 'no-store' },
-      6000,
-      { skipAuth: true }
-    );
+    const attempt = () =>
+      this.request(
+        CONFIG.ENDPOINTS.HEALTH,
+        { method: 'GET', cache: 'no-store' },
+        CONFIG.TIMING.HEALTH_TIMEOUT_MS || 10000,
+        { skipAuth: true }
+      );
+
+    let res = await attempt();
+    if (!res.ok || res.data?.rds?.status !== 'online') {
+      await new Promise((r) => setTimeout(r, 600));
+      const retry = await attempt();
+      if (retry.ok || res.status === 0) {
+        res = retry;
+      }
+    }
 
     const apiOnline = res.ok && res.data?.api === 'online';
     const rdsData = res.data?.rds || null;
@@ -245,7 +255,7 @@ class ApiService {
   }
 
   // ---------------------------------------------------------------------------
-  // Catálogo público e Invitados
+  // Catálogo público, Invitados, Tienda (capacidades, exhibición y soporte)
   // ---------------------------------------------------------------------------
   obtenerCatalogoPublicoModelos() {
     return this.get(CONFIG.ENDPOINTS.PUBLIC_MODELOS, { skipAuth: true });
@@ -253,6 +263,41 @@ class ApiService {
 
   obtenerCatalogoPublicoExhibicion() {
     return this.get(CONFIG.ENDPOINTS.PUBLIC_EXHIBICION, { skipAuth: true });
+  }
+
+  iniciarSesionInvitado(payload) {
+    return this.post(CONFIG.ENDPOINTS.INVITADO_SESIONES, payload);
+  }
+
+  obtenerSesionInvitadoActual() {
+    return this.get(CONFIG.ENDPOINTS.INVITADO_ACTUAL);
+  }
+
+  cerrarSesionInvitado() {
+    return this.post(CONFIG.ENDPOINTS.INVITADO_CERRAR);
+  }
+
+  obtenerCapacidadesModelo(idModelo) {
+    return this.get(CONFIG.ENDPOINTS.MODELO_CAPACIDADES(idModelo));
+  }
+
+  cambiarModoExhibicion(idVehiculo, habilitar, motivo = null) {
+    return this.post(CONFIG.ENDPOINTS.VEHICULO_MODO_EXHIBICION(idVehiculo), {
+      habilitar: Boolean(habilitar),
+      motivo,
+    });
+  }
+
+  listarSoporte(idVehiculo) {
+    return this.get(CONFIG.ENDPOINTS.SOPORTE_LISTAR(idVehiculo));
+  }
+
+  otorgarSoporte(idVehiculo, payload) {
+    return this.post(CONFIG.ENDPOINTS.SOPORTE_OTORGAR(idVehiculo), payload);
+  }
+
+  revocarSoporte(idAutorizacion) {
+    return this.post(CONFIG.ENDPOINTS.SOPORTE_REVOCAR(idAutorizacion));
   }
 }
 

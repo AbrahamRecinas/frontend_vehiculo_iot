@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.1" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.1" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.4" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.4" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -166,6 +166,28 @@
       </section>
     </header>
 
+    <!-- BANNER FIJO DE SESIÓN EXCLUSIVA DE INVITADO (Fase 4 B2B2C) -->
+    <div
+      id="guestSessionBanner"
+      class="guest-session-banner d-none align-items-center justify-content-between gap-2 px-3 py-2 border-bottom border-info-subtle"
+      role="region"
+      aria-label="Sesión exclusiva de invitado"
+      hidden
+    >
+      <div class="d-flex align-items-center gap-2 min-w-0">
+        <span class="badge bg-info-subtle text-info border border-info-subtle text-nowrap">
+          <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Prueba Exclusiva
+        </span>
+        <strong class="small text-white text-truncate" id="guestBannerUnit">Unidad en exhibición</strong>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <span class="badge text-bg-dark border border-secondary font-monospace fs-6 text-info" id="guestCountdownTimer">03:00</span>
+        <button type="button" id="btnGuestFinish" class="btn btn-danger btn-sm fw-semibold">
+          <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Finalizar prueba
+        </button>
+      </div>
+    </div>
+
     <!-- PANEL DE DIAGNÓSTICO COLAPSABLE -->
     <aside id="diagPanel" class="diag-panel bg-body-tertiary border-bottom border-secondary collapse" aria-label="Detalles de diagnóstico">
       <div class="container-fluid py-3 px-3">
@@ -252,9 +274,9 @@
                   <hr class="border-secondary-subtle my-3" />
 
                   <div class="text-center">
-                    <p class="small text-secondary mb-2">¿Aún no eres cliente? Explora los modelos y unidades en exhibición.</p>
+                    <p class="small text-secondary mb-2">¿Aún no eres cliente? Explora los modelos y prueba en vivo las unidades en exhibición.</p>
                     <button type="button" id="btnGoGuestCatalog" class="btn btn-outline-info btn-sm w-100">
-                      <i class="bi bi-shop me-1" aria-hidden="true"></i>Ver Catálogo Público y Exhibición
+                      <i class="bi bi-shop me-1" aria-hidden="true"></i>Probar vehículos como Invitado
                     </button>
                   </div>
                 </div>
@@ -264,16 +286,24 @@
         </div>
       </section>
 
-      <!-- VISTA CATÁLOGO PÚBLICO / EXHIBICIÓN (base Fase 3, reserva exclusiva Fase 4) -->
+      <!-- VISTA CATÁLOGO PÚBLICO / EXHIBICIÓN (Fase 4: reserva exclusiva temporal de invitado) -->
       <section id="guestView" class="guest-view" aria-label="Catálogo público y exhibición" hidden>
         <div class="container-fluid px-2 py-2">
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-3">
             <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
               <div>
-                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-shop me-1 text-info" aria-hidden="true"></i>Catálogo Público y Unidades en Exhibición</h2>
-                <small class="text-secondary">Consulta pública sin exponer datos de clientes ni inventario privado</small>
+                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-shop me-1 text-info" aria-hidden="true"></i>Prueba nuestros vehículos IoT</h2>
+                <small class="text-secondary">Catálogo público y reserva exclusiva temporal en unidades habilitadas en EXHIBICIÓN</small>
               </div>
-              <div class="d-flex gap-2">
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="d-flex align-items-center gap-1">
+                  <label for="guestDuracionSelect" class="small text-secondary mb-0 text-nowrap">Duración prueba:</label>
+                  <select id="guestDuracionSelect" class="form-select form-select-sm" style="width: auto;">
+                    <option value="60">1 min (60 s)</option>
+                    <option value="180" selected>3 min (180 s)</option>
+                    <option value="300">5 min (300 s)</option>
+                  </select>
+                </div>
                 <button type="button" id="btnRefreshGuestCatalog" class="btn btn-sm btn-outline-info">
                   <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
                 </button>
@@ -292,21 +322,191 @@
         </div>
       </section>
 
-      <!-- VISTA MIS VEHÍCULOS (USUARIO COMPRADOR — ampliable en Fase 4) -->
+      <!-- VISTA MIS VEHÍCULOS (USUARIO TIENDA / COMPRADOR — Fase 4 completa) -->
       <section id="userVehiclesView" class="user-vehicles-view" aria-label="Mis vehículos" hidden>
         <div class="container-fluid px-2 py-2">
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-3">
             <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
               <div>
-                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-truck me-1 text-info" aria-hidden="true"></i>Mis Vehículos</h2>
-                <small class="text-secondary">Unidades asignadas exclusivamente a tu cuenta</small>
+                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-truck me-1 text-info" aria-hidden="true"></i>Mis Vehículos (Tienda / Comprador)</h2>
+                <small class="text-secondary">Controla tus unidades, crea movimientos temporizados, arma demos privadas, habilita exhibición en mostrador u otorga soporte temporal</small>
               </div>
               <button type="button" id="btnRefreshMisVehiculos" class="btn btn-sm btn-outline-info">
                 <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
               </button>
             </div>
           </div>
+
           <div class="row g-2" id="userVehiclesGrid"></div>
+
+          <!-- WORKSPACE DE GESTIÓN DE LA UNIDAD SELECCIONADA -->
+          <div id="userUnitWorkspace" class="mt-3" hidden>
+            <div class="card bg-body-tertiary border-info-subtle shadow-sm mb-2">
+              <div class="card-body p-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2 min-w-0">
+                  <i class="bi bi-sliders text-info" aria-hidden="true"></i>
+                  <strong class="text-white small text-truncate" id="userWorkspaceTitle">Unidad seleccionada</strong>
+                </div>
+                <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="userWorkspaceEstado">VENDIDO</span>
+              </div>
+            </div>
+
+            <ul class="nav nav-tabs admin-tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="userTabComandos" data-bs-toggle="tab" data-bs-target="#userPaneComandos" type="button" role="tab">
+                  <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Comandos y Temporizados
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="userTabDemos" data-bs-toggle="tab" data-bs-target="#userPaneDemos" type="button" role="tab">
+                  <i class="bi bi-collection-play me-1" aria-hidden="true"></i>Demos Privadas
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="userTabSoporte" data-bs-toggle="tab" data-bs-target="#userPaneSoporte" type="button" role="tab">
+                  <i class="bi bi-life-preserver me-1" aria-hidden="true"></i>Soporte al Admin
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content bg-body-tertiary border border-top-0 border-secondary-subtle rounded-bottom p-2">
+              <!-- TAB 1: COMANDOS BASE + TEMPORIZADOS PROPIOS -->
+              <div class="tab-pane fade show active" id="userPaneComandos" role="tabpanel">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
+                    <h3 class="h6 text-info mb-0">Mis Movimientos Personalizados Temporizados</h3>
+                    <small class="text-secondary">Duración 1..10000 ms sobre capacidades permitidas del modelo · Aparecen también en Control</small>
+                  </div>
+                  <button type="button" id="btnUserNewTimedCmd" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nuevo movimiento temporizado
+                  </button>
+                </div>
+
+                <div class="table-responsive monitor-table-responsive mb-3">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th class="text-center">Acción física</th>
+                        <th class="text-center">Duración</th>
+                        <th class="text-center">Invitado</th>
+                        <th class="text-end">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userTimedCommandsBody"></tbody>
+                  </table>
+                </div>
+
+                <h3 class="h6 text-secondary mb-2">Comandos Físicos Base (de fábrica · solo lectura)</h3>
+                <div class="table-responsive monitor-table-responsive">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th class="text-center">Físico</th>
+                        <th>Nombre</th>
+                        <th class="text-center">Tipo</th>
+                        <th class="text-center">Invitado</th>
+                        <th class="text-end">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userBaseCommandsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB 2: EDITOR VISUAL TÁCTIL DE DEMOS PRIVADAS -->
+              <div class="tab-pane fade" id="userPaneDemos" role="tabpanel">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-5">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h3 class="h6 text-info mb-0">Demos de la unidad</h3>
+                      <button type="button" id="btnUserNewDemo" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva demo privada
+                      </button>
+                    </div>
+                    <div id="userDemosList"></div>
+                  </div>
+                  <div class="col-12 col-lg-7">
+                    <div class="card bg-dark border-secondary-subtle">
+                      <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="min-w-0">
+                          <strong class="text-white small d-block text-truncate" id="userDemoEditorTitle">Selecciona o crea una demo</strong>
+                          <div class="d-flex flex-wrap gap-2 mt-1">
+                            <span class="badge text-bg-secondary" id="userDemoStepCount">0 pasos</span>
+                            <span class="badge bg-info-subtle text-info border border-info-subtle font-monospace" id="userDemoTotalDuration">Duración total: 0.00 s</span>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                          <button type="button" id="btnUserAddStep" class="btn btn-sm btn-outline-info" disabled>
+                            <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Agregar paso
+                          </button>
+                          <button type="button" id="btnUserRunDemo" class="btn btn-sm btn-success" disabled>
+                            <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Probar demo
+                          </button>
+                          <button type="button" id="btnUserStopDemo" class="btn btn-sm btn-outline-danger" disabled>
+                            <i class="bi bi-stop-fill me-1" aria-hidden="true"></i>Detener
+                          </button>
+                        </div>
+                      </div>
+                      <div class="card-body p-2" id="userDemoStepsWrap"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 3: AUTORIZACIÓN TEMPORAL DE SOPORTE AL ADMIN -->
+              <div class="tab-pane fade" id="userPaneSoporte" role="tabpanel">
+                <div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center justify-content-between gap-2" id="userSoporteExhibicionNotice" role="alert" hidden>
+                  <span><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Esta unidad está en modo <strong>EXHIBICIÓN</strong>. Para otorgar soporte temporal al administrador primero regrésala a estado <strong>VENDIDO</strong>.</span>
+                  <button type="button" id="btnUserSoporteVolverVendido" class="btn btn-sm btn-warning text-dark fw-semibold">
+                    Volver a VENDIDO
+                  </button>
+                </div>
+
+                <form id="formUserSoporte" class="card bg-dark border-secondary-subtle p-3 mb-3" novalidate>
+                  <h3 class="h6 text-info mb-2">Otorgar soporte técnico temporal al Administrador</h3>
+                  <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-6">
+                      <label for="userSoporteMotivo" class="form-label small">Motivo del diagnóstico <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control form-control-sm" id="userSoporteMotivo" name="motivo" maxlength="255" placeholder="Ej. Revisión de calibración de pala y giro" required />
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <label for="userSoporteMinutos" class="form-label small">Duración (min) <span class="text-danger">*</span></label>
+                      <input type="number" class="form-control form-control-sm" id="userSoporteMinutos" name="duracion_minutos" min="1" max="1440" value="30" required />
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <button type="submit" class="btn btn-sm btn-success w-100 fw-semibold">
+                        <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Otorgar soporte
+                      </button>
+                    </div>
+                  </div>
+                  <div class="d-flex flex-wrap align-items-center gap-1 mt-2">
+                    <span class="small text-secondary me-1">Atajos:</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="15">15 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="30">30 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="60">60 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="120">2 h</button>
+                  </div>
+                </form>
+
+                <h3 class="h6 text-secondary mb-2">Historial de autorizaciones de soporte</h3>
+                <div class="table-responsive monitor-table-responsive">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th class="text-center">Estado</th>
+                        <th>Motivo</th>
+                        <th class="text-center">Inicio</th>
+                        <th class="text-center">Expira</th>
+                        <th class="text-end">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userSoporteBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -377,6 +577,14 @@
               <span>Entrar al modo mando</span>
             </button>
             <nav class="lobby-nav" aria-label="Otras vistas de la aplicación">
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="user-vehicles" data-roles="USUARIO">
+                <i class="bi bi-truck" aria-hidden="true"></i>
+                <span>Mis Vehículos</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="guest" data-roles="INVITADO">
+                <i class="bi bi-shop" aria-hidden="true"></i>
+                <span>Exhibición</span>
+              </button>
               <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="monitor" data-roles="ADMIN,USUARIO">
                 <i class="bi bi-activity" aria-hidden="true"></i>
                 <span>Monitoreo</span>
@@ -581,6 +789,11 @@
               </button>
               <span class="badge text-bg-primary font-monospace" id="monitorVehicleBadge">ID: 1</span>
             </div>
+          </div>
+
+          <div class="alert alert-warning py-2 small mb-2" id="monitorAccessNotice" role="alert" hidden>
+            <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+            <span id="monitorAccessNoticeText"></span>
           </div>
 
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-last-movement" id="monitorLastMovementCard">
@@ -1458,6 +1671,110 @@
       </div>
     </div>
 
+    <!-- MODALES TIENDA / USUARIO (Fase 4: Temporizados propios y Editor de Demos Privadas) -->
+    <div class="modal fade" id="modalUserTimedCmd" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserTimedCmd" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserTimedCmdTitulo">Nuevo movimiento temporizado</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userTimedNombre" class="form-label small">Nombre del movimiento <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="userTimedNombre" name="nombre" maxlength="60" placeholder="Ej. Avance corto 1.5s" required />
+            </div>
+            <div class="mb-2">
+              <label for="userTimedCodigoFisico" class="form-label small">Acción física base <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="userTimedCodigoFisico" name="codigo_fisico" required></select>
+              <div class="form-text small">Solo capacidades con temporizado permitido en el modelo.</div>
+            </div>
+            <div class="mb-2">
+              <label for="userTimedDurMs" class="form-label small">Duración (1..10000 ms) <span class="text-danger">*</span></label>
+              <input type="range" class="form-range" id="userTimedDurRange" min="100" max="10000" step="100" value="1500" />
+              <input type="number" class="form-control form-control-sm font-monospace" id="userTimedDurMs" name="duracion_ms" min="1" max="10000" value="1500" required />
+            </div>
+            <div class="mb-2">
+              <label for="userTimedDesc" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="userTimedDesc" name="descripcion" rows="2" maxlength="255"></textarea>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="userTimedInvitado" name="permitido_invitado" />
+              <label class="form-check-label small" for="userTimedInvitado">Permitido para invitados en modo exhibición</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal fade" id="modalUserDemo" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserDemo" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserDemoTitulo">Nueva demo privada</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userDemoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="userDemoNombre" name="nombre" maxlength="80" placeholder="Ej. Rutina mostrador apertura" required />
+            </div>
+            <div class="mb-2">
+              <label for="userDemoDesc" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="userDemoDesc" name="descripcion" rows="3" maxlength="255"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal fade" id="modalUserDemoStep" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserDemoStep" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserDemoStepTitulo">Agregar paso a demo</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userStepComando" class="form-label small">Comando <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="userStepComando" name="id_comando" required></select>
+            </div>
+            <div class="row g-2">
+              <div class="col-4">
+                <label for="userStepOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepOrden" name="orden" min="1" required />
+              </div>
+              <div class="col-4">
+                <label for="userStepDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepDuracion" name="duracion_ms" min="1" max="10000" required />
+              </div>
+              <div class="col-4">
+                <label for="userStepPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepPausa" name="pausa_ms" min="0" max="10000" required />
+              </div>
+            </div>
+            <div class="form-text small">Orden ≥ 1 · Duración 1..10000 ms · Pausa 0..10000 ms.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Confirmación genérica -->
     <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -1501,6 +1818,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3.1"></script>
+  <script type="module" src="./assets/js/app.js?v=4.4"></script>
 </body>
 </html>

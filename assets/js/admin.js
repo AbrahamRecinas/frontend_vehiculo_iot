@@ -515,7 +515,10 @@ function pintarVehiculos() {
     const tdEstado = document.createElement('td');
     tdEstado.className = 'text-center';
     tdEstado.appendChild(badgeEstadoComercial(v.estado_comercial));
-    if (v.estado_comercial === 'VENDIDO' && v.soporte_activo) {
+    const esUnidadPropiedadCliente =
+      v.estado_comercial === 'VENDIDO' || (v.id_propietario !== null && v.id_propietario !== undefined);
+
+    if (esUnidadPropiedadCliente && v.soporte_activo) {
       const sop = crearBadge('Soporte OK', 'bg-success-subtle text-success border border-success-subtle ms-1');
       tdEstado.appendChild(sop);
     }
@@ -527,7 +530,7 @@ function pintarVehiculos() {
     const puedeOperar =
       esActivo(v.activo) &&
       v.estado_comercial !== 'INACTIVO' &&
-      (v.estado_comercial !== 'VENDIDO' || Boolean(v.soporte_activo));
+      (!esUnidadPropiedadCliente || Boolean(v.soporte_activo));
 
     const acciones = document.createElement('td');
     acciones.className = 'text-end text-nowrap';
