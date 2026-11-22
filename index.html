@@ -13,10 +13,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <!-- Nota CSP: los orígenes 127.0.0.1:8000 / localhost:8000 son solo para pruebas locales de Fase 3/4 y se depuran en Fase 5 antes de publicar en GitHub Pages -->
+  <!-- CSP estricta de producción para GitHub Pages (sin orígenes locales HTTP/WS) -->
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org http://127.0.0.1:8000 ws://127.0.0.1:8000 http://localhost:8000 ws://localhost:8000; object-src 'none'; base-uri 'self'; form-action 'self'"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org; object-src 'none'; base-uri 'self'; form-action 'self'"
   />
 
   <link rel="icon" type="image/svg+xml" href="./assets/icons/favicon.svg" />
