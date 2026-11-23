@@ -1,28 +1,32 @@
 /**
  * ws.js
- * Gestor del canal WebSocket seguro (WSS) con telemetría en tiempo real.
- * Implementa reconexión automática con retroceso exponencial, jitter y despacho de eventos.
+ * Gestor del canal WebSocket seguro (WSS) con autenticación JWT por unidad.
+ * Garantiza una única conexión activa por cliente (sin sockets duplicados al cambiar de vista).
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
 import { CONFIG } from './config.js';
+import { auth } from './auth.js';
+
+const NO_RECONNECT_CODES = new Set([1000, 1008, 4401, 4403, 4404]);
 
 class WebSocketService {
   constructor() {
-    this.url = CONFIG.WSS_URL;
+    this.vehicleId = null;
+    this.activeToken = null;
+    this.displayUrl = CONFIG.buildDisplayWssUrl(CONFIG.VEHICLE_ID);
     this.socket = null;
     this.listeners = new Map();
     this.reconnectAttempts = 0;
+    this.consecutiveHandshakeFails = 0;
+    this.hasOpenedCurrent = false;
+    this.hadUnexpectedDisconnect = false;
     this.reconnectTimer = null;
-    this.isExplicitlyClosed = false;
+    this.isExplicitlyClosed = true;
     this.state = 'closed'; // 'connecting' | 'open' | 'closed' | 'error'
     this.lastMessageRaw = null;
   }
 
-  /**
-   * Suscribe un callback a un evento interno.
-   * Eventos: 'statusChange', 'command_echo', 'fin_demo', 'message'
-   */
   on(event, callback) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
@@ -37,53 +41,112 @@ class WebSocketService {
     }
   }
 
-  emit(event, data) {
+  emit(event, ...args) {
     if (this.listeners.has(event)) {
       for (const cb of this.listeners.get(event)) {
         try {
-          cb(data);
+          cb(...args);
         } catch (err) {
-          console.error(`[WS] Error en listener del evento '${event}':`, err);
+          console.error(`[WS] Error en listener '${event}':`, err);
         }
       }
     }
   }
 
   /**
-   * Inicia la conexión con el endpoint WSS.
+   * Conecta (o reutiliza) el canal WSS para la unidad y token actual.
+   * Si ya existe una conexión abierta/conectando al mismo vehículo y token, no la duplica.
    */
-  connect() {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+  connect(vehicleId = this.vehicleId ?? CONFIG.VEHICLE_ID) {
+    const token = auth.getAccessToken();
+    const targetId = Number(vehicleId);
+
+    if (!token || !Number.isInteger(targetId) || targetId <= 0) {
+      this.disconnect('En espera de sesión');
       return;
     }
 
+    const sameTarget = this.vehicleId === targetId && this.activeToken === token;
+    if (
+      sameTarget &&
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    // Si había otro socket previo (otra unidad o token renovado), cerrarlo limpiamente
+    if (this.socket) {
+      this._closeCurrentSocket('Cambio de unidad o token');
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    const changedVehicle = this.vehicleId !== null && this.vehicleId !== targetId;
+    if (changedVehicle) {
+      this.reconnectAttempts = 0;
+      this.hadUnexpectedDisconnect = false;
+    }
+
+    this.vehicleId = targetId;
+    this.activeToken = token;
+    this.displayUrl = CONFIG.buildDisplayWssUrl(targetId);
     this.isExplicitlyClosed = false;
-    this.updateState('connecting', 'Conectando al canal de telemetría...');
+    this.hasOpenedCurrent = false;
+    this.updateState('connecting', `Conectando a unidad #${targetId}...`);
 
     try {
-      this.socket = new WebSocket(this.url);
+      const wsUrl = CONFIG.buildWssUrl(targetId, token);
+      const sock = new WebSocket(wsUrl);
+      this.socket = sock;
 
-      this.socket.onopen = () => {
+      sock.onopen = () => {
+        if (this.socket !== sock) return;
+        this.hasOpenedCurrent = true;
+        this.consecutiveHandshakeFails = 0;
         this.handleOpen();
       };
 
-      this.socket.onmessage = (event) => {
+      sock.onmessage = (event) => {
+        if (this.socket !== sock) return;
         this.handleMessage(event.data);
       };
 
-      this.socket.onerror = (err) => {
-        console.error("Detalle del Error WSS:", err);
+      sock.onerror = () => {
+        if (this.socket !== sock) return;
         this.updateState('error', 'Error en canal WSS');
       };
 
-      this.socket.onclose = (event) => {
+      sock.onclose = (event) => {
+        if (this.socket !== sock) return;
         this.socket = null;
-        if (!this.isExplicitlyClosed) {
-          this.updateState('closed', `Canal cerrado (código ${event.code})`);
-          this.scheduleReconnect();
-        } else {
-          this.updateState('closed', 'Desconectado manualmente');
+
+        if (this.isExplicitlyClosed) {
+          this.updateState('closed', 'Desconectado');
+          return;
         }
+
+        if (NO_RECONNECT_CODES.has(event.code)) {
+          const reason = event.reason || `Acceso WSS cerrado (${event.code})`;
+          this.updateState('closed', reason);
+          this.emit('authError', { code: event.code, reason, vehicleId: this.vehicleId });
+          return;
+        }
+
+        if (!this.hasOpenedCurrent) {
+          this.consecutiveHandshakeFails += 1;
+          if (this.consecutiveHandshakeFails >= 3) {
+            this.updateState('closed', 'No autorizado o canal WSS no disponible');
+            return;
+          }
+        }
+
+        this.hadUnexpectedDisconnect = true;
+        this.updateState('closed', `Canal cerrado (código ${event.code})`);
+        this.scheduleReconnect();
       };
     } catch (err) {
       this.updateState('error', err.message || 'Error al instanciar WebSocket');
@@ -91,31 +154,34 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Cierra explícitamente la conexión y cancela reintentos.
-   */
-  disconnect() {
+  _closeCurrentSocket(reason = 'Reemplazado') {
+    const old = this.socket;
+    this.socket = null;
+    if (!old) return;
+    old.onopen = null;
+    old.onmessage = null;
+    old.onerror = null;
+    old.onclose = null;
+    try {
+      old.close(1000, reason);
+    } catch (_) {
+      // noop
+    }
+  }
+
+  disconnect(detail = 'Desconectado') {
     this.isExplicitlyClosed = true;
+    this.hadUnexpectedDisconnect = false;
+    this.reconnectAttempts = 0;
+    this.activeToken = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this.socket) {
-      this.socket.close(1000, 'Cierre ordenado por usuario');
-      this.socket = null;
-    }
-    this.updateState('closed', 'Desconectado');
+    this._closeCurrentSocket(detail);
+    this.updateState('closed', detail);
   }
 
-  /**
-   * Procesa mensajes de texto entrantes desde el backend.
-   * Espera formatos JSON tales como:
-   *  - {"id_comando": 1}
-   *  - {"evento": "ESTADO_INICIAL", "id_vehiculo": 1, "estado": {...}, "timestamp": "..."}
-   *  - {"tipo": "MOVIMIENTO_INDIVIDUAL", "id_vehiculo": 1, "id_comando": 12, "timestamp": "..."}
-   *  - {"evento": "MOVIMIENTO_DEMO", "orden": 1, "comando": "Girar Derecha", "duracion_ms": 2000, "pausa_ms": 500}
-   *  - {"evento": "FIN_DEMO", "timestamp": "..."}
-   */
   handleMessage(rawText) {
     this.lastMessageRaw = rawText;
     let payload = null;
@@ -123,7 +189,6 @@ class WebSocketService {
     try {
       payload = JSON.parse(rawText);
     } catch (_) {
-      // Si el backend envía texto plano
       this.emit('message', { raw: rawText });
       return;
     }
@@ -131,45 +196,47 @@ class WebSocketService {
     this.emit('message', payload);
 
     if (payload && typeof payload === 'object') {
-      const evento = String(payload.evento || payload.tipo || payload.event || payload.type || '').toUpperCase();
+      const evento = String(
+        payload.evento || payload.tipo || payload.event || payload.type || ''
+      ).toUpperCase();
 
-      // Evento de estado inicial del vehículo (tarjeta de último movimiento / estado)
       if (evento === 'ESTADO_INICIAL') {
         this.emit('estado_inicial', payload);
       }
 
-      // Evento de finalización de demo
-      if (evento === 'FIN_DEMO' || evento === 'DEMO_FIN') {
+      if (evento === 'ESTADO_DISPOSITIVO') {
+        this.emit('estado_dispositivo', payload);
+      }
+
+      if (evento === 'FIN_DEMO' || evento === 'DEMO_FIN' || evento === 'DEMO_CANCELADA') {
         this.emit('fin_demo', payload);
       }
 
-      // Evento de movimiento individual persistido (SÍ debe ir al historial del panel de Monitoreo)
       if (evento === 'MOVIMIENTO_INDIVIDUAL') {
         this.emit('movimiento_individual', payload);
       }
 
-      // Evento de movimiento emitido por una demo (actualiza cronología en vivo y último movimiento)
-      const isDemoMovement = evento === 'MOVIMIENTO_DEMO' || evento === 'DEMO_MOVIMIENTO';
-      if (isDemoMovement) {
+      if (evento === 'MOVIMIENTO_DEMO' || evento === 'DEMO_MOVIMIENTO') {
         this.emit('movimiento_demo', payload);
       }
 
-      // Eco de comando ejecutado (algunos clientes serializan el ID como cadena)
-      const rawCmd = payload.id_comando ?? payload.codigo;
+      if (evento === 'SESION_INVITADO_EXPIRADA' || evento === 'SESION_INVITADO_ESTADO') {
+        this.emit('sesion_invitado', payload);
+      }
+
+      // Contrato congelado: priorizar codigo_fisico / codigo para feedback físico
+      const rawCmd = payload.codigo_fisico ?? payload.codigo ?? payload.id_comando;
       if (rawCmd !== undefined && rawCmd !== null && rawCmd !== '') {
-        const idComando = Number(rawCmd);
-        if (Number.isInteger(idComando)) {
-          this.emit('command_echo', idComando, payload);
+        const codigoFisico = Number(rawCmd);
+        if (Number.isInteger(codigoFisico)) {
+          this.emit('command_echo', codigoFisico, payload);
         }
       }
     }
   }
 
-  /**
-   * Programa reconexión automática con retroceso exponencial y jitter.
-   */
   scheduleReconnect() {
-    if (this.isExplicitlyClosed) return;
+    if (this.isExplicitlyClosed || !auth.isAuthenticated()) return;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
     this.reconnectAttempts += 1;
@@ -177,14 +244,18 @@ class WebSocketService {
       CONFIG.TIMING.WS_INITIAL_RECONNECT_DELAY_MS * Math.pow(1.8, this.reconnectAttempts - 1),
       CONFIG.TIMING.WS_MAX_RECONNECT_DELAY_MS
     );
-    // Aplicar jitter aleatorio para no saturar el servidor
     const jitter = baseDelay * CONFIG.TIMING.WS_RECONNECT_JITTER * (Math.random() * 2 - 1);
     const delay = Math.max(800, Math.round(baseDelay + jitter));
 
-    this.updateState('connecting', `Reintentando en ${Math.round(delay / 1000)}s (intento ${this.reconnectAttempts})...`);
+    this.updateState(
+      'connecting',
+      `Reintentando en ${Math.round(delay / 1000)}s (intento ${this.reconnectAttempts})...`
+    );
 
     this.reconnectTimer = setTimeout(() => {
-      this.connect();
+      if (!this.isExplicitlyClosed && this.vehicleId && auth.isAuthenticated()) {
+        this.connect(this.vehicleId);
+      }
     }, delay);
   }
 
@@ -193,12 +264,14 @@ class WebSocketService {
     this.emit('statusChange', { state, detail, attempts: this.reconnectAttempts });
   }
 
-  /**
-   * Estado del socket y manejo de eventos de ciclo de vida.
-   */
   handleOpen() {
+    const wasReconnect = this.reconnectAttempts > 0 || this.hadUnexpectedDisconnect;
     this.reconnectAttempts = 0;
-    this.updateState('open', 'En línea · Operativo');
+    this.hadUnexpectedDisconnect = false;
+    this.updateState('open', `En línea · Unidad #${this.vehicleId}`);
+    if (wasReconnect) {
+      this.emit('reconnected', { vehicleId: this.vehicleId });
+    }
   }
 
   getState() {
@@ -210,6 +283,7 @@ class WebSocketService {
       state: this.state,
       attempts: this.reconnectAttempts,
       lastMessage: this.lastMessageRaw,
+      wssUrl: this.displayUrl,
       readyState: this.socket ? this.socket.readyState : WebSocket.CLOSED,
     };
   }

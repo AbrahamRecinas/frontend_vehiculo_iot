@@ -1,18 +1,32 @@
 /**
  * ui.js
- * Interfaz de usuario: renderizado de conectividad, toasts, indicadores
- * y actualización visual de botones. Sin lógica de negocio aquí.
+ * Interfaz de usuario: renderizado de conectividad, navegación por rol, toasts,
+ * indicadores y actualización visual. Todo texto dinámico usa DOM API y textContent.
  * Desarrollado por Abraham Falcon Recinas · 2026
  */
 
 import { CONFIG } from './config.js';
 
+const ALL_VIEWS = ['auth', 'guest', 'user-vehicles', 'lobby', 'mando', 'monitor', 'admin'];
+
+const ROLE_LABELS = Object.freeze({
+  ADMIN: 'Admin',
+  USUARIO: 'Usuario',
+  INVITADO: 'Invitado',
+});
+
+const ROLE_BADGE_CLASSES = Object.freeze({
+  ADMIN: 'text-bg-warning text-dark',
+  USUARIO: 'text-bg-info text-dark',
+  INVITADO: 'text-bg-secondary',
+});
+
 const UI = {
   elements: {},
   connectivityState: {
-    wss: { state: 'connecting', detail: 'Conectando...' },
+    wss: { state: 'closed', detail: 'En espera de sesión' },
     aws: { state: 'connecting', detail: 'Verificando...', latencyMs: null, httpStatus: null },
-    rds: { state: 'unverified', detail: 'Sin verificar' },
+    rds: { state: 'connecting', detail: 'Verificando...' },
   },
 
   init: () => {
@@ -54,9 +68,13 @@ const UI = {
       btnApagar: document.getElementById('btnApagar'),
       btnEnterMando: document.getElementById('btnEnterMando'),
       btnExitMando: document.getElementById('btnExitMando'),
+      authView: document.getElementById('authView'),
+      guestView: document.getElementById('guestView'),
+      userVehiclesView: document.getElementById('userVehiclesView'),
       lobbyView: document.getElementById('lobbyView'),
       mandoView: document.getElementById('mandoView'),
       monitorView: document.getElementById('monitorView'),
+      adminView: document.getElementById('adminView'),
       joystickPanel: document.getElementById('joystickPanel'),
       dpadPanel: document.getElementById('dpadPanel'),
       mandoLedWss: document.getElementById('mandoLedWss'),
@@ -64,6 +82,8 @@ const UI = {
       mandoLedRds: document.getElementById('mandoLedRds'),
       vehicleBadge: document.getElementById('vehicleBadge'),
       monitorVehicleBadge: document.getElementById('monitorVehicleBadge'),
+      monitorVehicleTitle: document.getElementById('monitorVehicleTitle'),
+      lobbyVehicleTitle: document.getElementById('lobbyVehicleTitle'),
       monitorLastMovementCard: document.getElementById('monitorLastMovementCard'),
       monitorLastCommand: document.getElementById('monitorLastCommand'),
       monitorLastMeta: document.getElementById('monitorLastMeta'),
@@ -76,14 +96,89 @@ const UI = {
       monitorComandosBody: document.getElementById('monitorComandosBody'),
       monitorComandosEmpty: document.getElementById('monitorComandosEmpty'),
       monitorComandosCount: document.getElementById('monitorComandosCount'),
+      headerUserWrap: document.getElementById('headerUserWrap'),
+      headerUserRole: document.getElementById('headerUserRole'),
+      headerUserName: document.getElementById('headerUserName'),
+      btnHeaderLogout: document.getElementById('btnHeaderLogout'),
+      btnHeaderLogin: document.getElementById('btnHeaderLogin'),
+      envBadge: document.getElementById('envBadge'),
       toastContainer: document.getElementById('toastContainer'),
       currentYear: document.getElementById('currentYear'),
     };
+
+    if (UI.elements.envBadge) {
+      UI.elements.envBadge.textContent = CONFIG.ENV === 'local' ? 'LOCAL · 127.0.0.1' : 'AWS';
+      UI.elements.envBadge.className =
+        CONFIG.ENV === 'local'
+          ? 'badge bg-warning-subtle text-warning border border-warning-subtle d-none d-md-inline-block'
+          : 'badge bg-info-subtle text-info border border-info-subtle d-none d-md-inline-block';
+    }
   },
 
   /**
-   * Actualiza un LED individual (en píldoras del header o en la barra compacta).
+   * Sincroniza la barra de usuario y visibilidad de menú según el rol autenticado.
    */
+  syncAuthUi: (user = null) => {
+    const rol = user?.rol || null;
+    const isAuth = Boolean(rol);
+
+    if (UI.elements.headerUserWrap) {
+      UI.elements.headerUserWrap.classList.toggle('d-flex', isAuth);
+      UI.elements.headerUserWrap.classList.toggle('d-none', !isAuth);
+      UI.elements.headerUserWrap.hidden = !isAuth;
+    }
+    if (UI.elements.btnHeaderLogin) {
+      UI.elements.btnHeaderLogin.classList.toggle('d-none', isAuth);
+      UI.elements.btnHeaderLogin.hidden = isAuth;
+    }
+
+    if (isAuth) {
+      if (UI.elements.headerUserRole) {
+        UI.elements.headerUserRole.textContent = ROLE_LABELS[rol] || rol;
+        UI.elements.headerUserRole.className = `badge ${ROLE_BADGE_CLASSES[rol] || 'text-bg-secondary'}`;
+      }
+      if (UI.elements.headerUserName) {
+        UI.elements.headerUserName.textContent = user.nombre || user.correo || '';
+      }
+    } else {
+      if (UI.elements.headerUserRole) UI.elements.headerUserRole.textContent = '';
+      if (UI.elements.headerUserName) UI.elements.headerUserName.textContent = '';
+    }
+
+    // Mostrar únicamente los ítems de navegación permitidos para el rol activo
+    document.querySelectorAll('[data-roles]').forEach((el) => {
+      const allowed = String(el.dataset.roles || '')
+        .split(',')
+        .map((r) => r.trim())
+        .filter(Boolean);
+      const key = rol || 'ANON';
+      const visible = allowed.includes(key);
+      el.hidden = !visible;
+    });
+  },
+
+  /**
+   * Actualiza badges y títulos con el nombre/ID de la unidad seleccionada.
+   */
+  updateVehicleContext: ({ id, nombre = '', estadoComercial = '' } = {}) => {
+    const vid = id ?? CONFIG.VEHICLE_ID;
+    const label = nombre ? `${nombre} (#${vid})` : `Vehículo #${vid}`;
+    if (UI.elements.vehicleBadge) {
+      UI.elements.vehicleBadge.textContent = estadoComercial
+        ? `${label} · ${estadoComercial}`
+        : label;
+    }
+    if (UI.elements.monitorVehicleBadge) {
+      UI.elements.monitorVehicleBadge.textContent = `ID: ${vid}`;
+    }
+    if (UI.elements.monitorVehicleTitle) {
+      UI.elements.monitorVehicleTitle.textContent = label;
+    }
+    if (UI.elements.lobbyVehicleTitle) {
+      UI.elements.lobbyVehicleTitle.textContent = label;
+    }
+  },
+
   applyLedClass: (container, state) => {
     if (!container) return;
     const dot = container.querySelector('.status-led') || container;
@@ -98,9 +193,6 @@ const UI = {
     dot.className = `status-led ${ledClass}`;
   },
 
-  /**
-   * Actualiza los tres semáforos de conectividad conservando estados parciales previos.
-   */
   setConnectivity: (params) => {
     const current = UI.connectivityState;
     const wss = params?.wss ? { ...current.wss, ...params.wss } : current.wss;
@@ -121,11 +213,13 @@ const UI = {
       UI.applyLedClass(UI.elements.pillAws, aws?.state);
       if (UI.elements.descAws) {
         UI.elements.descAws.textContent = aws?.detail || '--';
-        UI.elements.descAws.title = aws?.state === 'online' ? `HTTP OK · Latencia: ${aws?.latencyMs ?? '--'} ms` : (aws?.error || 'Sin comunicación');
+        UI.elements.descAws.title =
+          aws?.state === 'online'
+            ? `HTTP OK · Latencia: ${aws?.latencyMs ?? '--'} ms`
+            : aws?.error || 'Sin comunicación';
       }
     }
 
-    // Amazon RDS: se actualiza solo desde la vista de Administración (GET /api/vehiculos/)
     if (UI.elements.pillRds) {
       UI.elements.pillRds.className = 'status-pill status-pill--' + String(rds?.state || 'unverified');
       UI.elements.pillRds.title = `Amazon RDS: ${rds?.detail || 'Sin verificar'}`;
@@ -133,7 +227,6 @@ const UI = {
       if (UI.elements.descRds) UI.elements.descRds.textContent = rds?.detail || 'Sin verificar';
     }
 
-    // Sincronizar los LEDs minimales del Modo Mando (FASE 1)
     UI.syncMandoLeds({ wss, aws, rds });
     UI.syncLobby({ wss, aws, rds });
 
@@ -141,19 +234,19 @@ const UI = {
   },
 
   /**
-   * Actualiza el semáforo de Amazon RDS a partir de la respuesta de GET /api/vehiculos/.
-   * 200 → Disponible (verde) · cualquier otro resultado → No disponible (rojo).
+   * Actualiza el semáforo independiente de Amazon RDS a partir de GET /api/health.
    */
-  setRdsStatus: (res) => {
-    if (res?.ok && res.status === 200) {
-      return UI.setConnectivity({ rds: { state: 'online', detail: 'Disponible' } });
+  setRdsStatus: (rdsInfo) => {
+    if (rdsInfo?.ok) {
+      return UI.setConnectivity({
+        rds: { state: 'online', detail: rdsInfo.detail || 'Disponible' },
+      });
     }
-    return UI.setConnectivity({ rds: { state: 'offline', detail: 'No disponible' } });
+    return UI.setConnectivity({
+      rds: { state: 'offline', detail: rdsInfo?.detail || 'No disponible' },
+    });
   },
 
-  /**
-   * Replica el estado de conectividad en el panel de entrada (lobby) móvil.
-   */
   syncLobby: (states = {}) => {
     const details = {
       wss: states.wss?.detail || '--',
@@ -172,10 +265,6 @@ const UI = {
     });
   },
 
-  /**
-   * Sincroniza los 3 LEDs minimales (WSS / AWS / RDS) del Modo Mando.
-   * Verde = operativo, Ámbar = conectando, Rojo = caído/error, Gris = sin verificar.
-   */
   syncMandoLeds: (states = {}) => {
     const ledMap = {
       wss: 'mandoLedWss',
@@ -190,19 +279,12 @@ const UI = {
     });
   },
 
-  /**
-   * Fija el estado visual del semáforo WSS en "En línea · Operativo".
-   * Se invoca directamente desde el manejador del evento open del WebSocket.
-   */
   setWssOnline: (detail = 'En línea · Operativo') => {
     return UI.setConnectivity({
       wss: { state: 'online', detail },
     });
   },
 
-  /**
-   * Actualiza los campos del panel de diagnóstico con métricas reales.
-   */
   updateDiagnostics: (info = {}) => {
     if (UI.elements.diagRestUrl && info.restUrl) {
       UI.elements.diagRestUrl.textContent = info.restUrl;
@@ -211,10 +293,14 @@ const UI = {
       UI.elements.diagWssUrl.textContent = info.wssUrl;
     }
     if (UI.elements.diagLatency && info.latencyMs !== undefined) {
-      UI.elements.diagLatency.textContent = Number.isFinite(info.latencyMs) ? `${info.latencyMs} ms` : '-- ms';
+      UI.elements.diagLatency.textContent = Number.isFinite(info.latencyMs)
+        ? `${info.latencyMs} ms`
+        : '-- ms';
     }
     if (UI.elements.diagHttpStatus && info.httpStatus !== undefined) {
-      UI.elements.diagHttpStatus.textContent = info.httpStatus ? String(info.httpStatus) : 'Sin respuesta';
+      UI.elements.diagHttpStatus.textContent = info.httpStatus
+        ? String(info.httpStatus)
+        : 'Sin respuesta';
     }
     if (UI.elements.diagWsReconnects && info.wsReconnects !== undefined) {
       UI.elements.diagWsReconnects.textContent = String(info.wsReconnects ?? 0);
@@ -225,7 +311,6 @@ const UI = {
       UI.elements.diagLastWsMsg.title = raw ? String(raw) : 'Ninguno';
     }
 
-    // Mismos datos en el panel de entrada (lobby) mediante atributos data-diag
     const setDiag = (key, text) => {
       document.querySelectorAll(`[data-diag="${key}"]`).forEach((el) => {
         el.textContent = text;
@@ -247,38 +332,29 @@ const UI = {
   },
 
   /**
-   * Control centralizado y atómico de vistas (Lobby, Mando, Monitoreo).
-   * Garantiza exclusión mutua total: exactamente UNA sola vista puede estar visible.
-   * viewName: 'lobby' | 'mando' | 'monitor' | 'admin'
+   * Exclusión mutua atómica: exactamente UNA sola vista visible a la vez.
    */
   setView: (viewName) => {
-    const monitor = document.getElementById('monitorView');
-    const admin   = document.getElementById('adminView');
-    const mando   = document.getElementById('mandoView');
-    const lobby   = document.getElementById('lobbyView');
+    const viewMap = {
+      auth: document.getElementById('authView'),
+      guest: document.getElementById('guestView'),
+      'user-vehicles': document.getElementById('userVehiclesView'),
+      lobby: document.getElementById('lobbyView'),
+      mando: document.getElementById('mandoView'),
+      monitor: document.getElementById('monitorView'),
+      admin: document.getElementById('adminView'),
+    };
 
-    const showMonitor = viewName === 'monitor';
-    const showAdmin   = viewName === 'admin';
-    const showMando   = viewName === 'mando';
-    const showLobby   = viewName === 'lobby';
+    ALL_VIEWS.forEach((key) => {
+      const el = viewMap[key];
+      if (!el) return;
+      const active = key === viewName;
+      el.classList.toggle('is-visible', active);
+      el.hidden = !active;
+    });
 
-    if (monitor) {
-      monitor.classList.toggle('is-visible', showMonitor);
-      monitor.hidden = !showMonitor;
-    }
-    if (admin) {
-      admin.classList.toggle('is-visible', showAdmin);
-      admin.hidden = !showAdmin;
-    }
-    if (mando) {
-      mando.classList.toggle('is-visible', showMando);
-      mando.hidden = !showMando;
-    }
-    if (lobby) {
-      lobby.classList.toggle('is-visible', showLobby);
-      lobby.hidden = !showLobby;
-    }
-
+    const showMando = viewName === 'mando';
+    const showLobby = viewName === 'lobby';
     document.body.classList.toggle('mando-mode', showMando);
     document.body.classList.toggle('mando-control', showMando);
     document.body.classList.toggle('app-view-control', showLobby || showMando);
@@ -286,24 +362,10 @@ const UI = {
     return viewName;
   },
 
-  /**
-   * FASE 1: alterna entre el Lobby (vista inicial movil) y el Modo Mando.
-   */
-  setMandoMode: (isActive) => {
-    return UI.setView(isActive ? 'mando' : 'lobby');
-  },
+  setMandoMode: (isActive) => UI.setView(isActive ? 'mando' : 'lobby'),
 
-  /**
-   * FASE MONITOREO: activa la Vista de Monitoreo o restaura la vista de control.
-   */
-  setMonitorView: (isActive) => {
-    return UI.setView(isActive ? 'monitor' : 'lobby');
-  },
+  setMonitorView: (isActive) => UI.setView(isActive ? 'monitor' : 'lobby'),
 
-  /**
-   * FASE 4: exclusión mutua entre el Joystick y la Cruceta D-Pad.
-   * controller: 'joystick' | 'dpad' | null
-   */
   setControllerLock: (controller) => {
     const joystickPanel = document.getElementById('joystickPanel');
     const dpadPanel = document.getElementById('dpadPanel');
@@ -399,9 +461,10 @@ const UI = {
     }
 
     demos.forEach((d, index) => {
-      const value = String(d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid ?? index + 1);
-      const name = String(d.nombre || d.name || d.titulo || `Rutina #${value}`);
-      const desc = String(d.descripcion || d.description || d.desc || 'Secuencia automática lista para ejecutar.');
+      const value = String(d?.id_demo ?? d?.id ?? index + 1);
+      const name = String(d.nombre || d.name || `Rutina #${value}`);
+      const tipo = d.tipo ? `[${d.tipo}] ` : '';
+      const desc = String(d.descripcion || 'Secuencia automática lista para ejecutar.');
 
       const item = document.createElement('button');
       item.type = 'button';
@@ -413,7 +476,7 @@ const UI = {
 
       const title = document.createElement('strong');
       title.className = 'demo-catalog-name';
-      title.textContent = name;
+      title.textContent = `${tipo}${name}`;
 
       const code = document.createElement('span');
       code.className = 'demo-catalog-id';
@@ -450,15 +513,12 @@ const UI = {
     });
   },
 
-  /**
-   * Llena dinámicamente el selector (<select>) con el catálogo de demos devuelto por GET /demos.
-   */
   renderDemoSelect: (demos = []) => {
     const select = document.getElementById('demoSelect');
     if (!select) return;
 
     const list = Array.isArray(demos) ? demos : [];
-    select.innerHTML = '';
+    select.textContent = '';
 
     const placeholder = document.createElement('option');
     placeholder.value = '';
@@ -466,16 +526,17 @@ const UI = {
     select.appendChild(placeholder);
 
     list.forEach((d, index) => {
-      const value = d?.id_demo ?? d?.id ?? d?.id_comando ?? d?.demo_id ?? d?.uuid ?? index + 1;
-      const name = d?.nombre || d?.name || d?.titulo || `Rutina ${value}`;
+      const value = d?.id_demo ?? d?.id ?? index + 1;
+      const name = d?.nombre || d?.name || `Rutina ${value}`;
+      const tipo = d?.tipo ? ` (${d.tipo})` : '';
       const opt = document.createElement('option');
       opt.value = String(value);
-      opt.textContent = `${name}`;
+      opt.textContent = `${name}${tipo}`;
       select.appendChild(opt);
     });
 
     if (list.length > 0) {
-      const firstValue = list[0]?.id_demo ?? list[0]?.id ?? list[0]?.id_comando ?? list[0]?.demo_id ?? list[0]?.uuid ?? 1;
+      const firstValue = list[0]?.id_demo ?? list[0]?.id ?? 1;
       select.value = String(firstValue);
     }
 
@@ -490,24 +551,17 @@ const UI = {
     UI.syncSelectedDemoCard(select.value);
   },
 
-  /**
-   * Muestra el estado de error al cargar el catálogo de demos.
-   */
-  renderDemoError: () => {
+  renderDemoError: (msg = 'No se pudo sincronizar el catálogo de rutinas.') => {
     const container = document.getElementById('demosListContainer');
     if (container) {
       container.textContent = '';
       const err = document.createElement('div');
       err.className = 'demo-empty demo-empty--error';
-      err.textContent = 'No se pudo sincronizar el catálogo de rutinas.';
+      err.textContent = msg;
       container.appendChild(err);
     }
   },
 
-  /**
-   * Cronología en vivo de la rutina (PC): abre el panel antes de enviar el inicio,
-   * para no perder pasos que lleguen por WSS antes de que responda el REST.
-   */
   demoTimelineStart: ({ name = 'Rutina', description = '' } = {}) => {
     const panel = document.getElementById('demoTimeline');
     const list = document.getElementById('demoTimelineList');
@@ -527,14 +581,11 @@ const UI = {
     panel.classList.add('is-live');
   },
 
-  /**
-   * Copia el encabezado de cada columna a data-label en sus celdas,
-   * para que en móvil las tablas se muestren como tarjetas con etiquetas.
-   */
   etiquetarCeldas: (tbody) => {
     if (!tbody) return;
-    const encabezados = Array.from(tbody.closest('table')?.tHead?.rows[0]?.cells || [])
-      .map((th) => th.textContent.trim());
+    const encabezados = Array.from(tbody.closest('table')?.tHead?.rows[0]?.cells || []).map((th) =>
+      th.textContent.trim()
+    );
     tbody.querySelectorAll('tr').forEach((tr) => {
       Array.from(tr.cells).forEach((td, i) => {
         if (td.colSpan > 1) return;
@@ -544,26 +595,19 @@ const UI = {
     });
   },
 
-  demoTimelineIsLive: () => {
-    return Boolean(document.getElementById('demoTimeline')?.classList.contains('is-live'));
-  },
+  demoTimelineIsLive: () => Boolean(document.getElementById('demoTimeline')?.classList.contains('is-live')),
 
-  /**
-   * Añade un paso recibido por WSS a la cronología de la rutina.
-   * Acepta un cmdId numérico o un objeto de opciones { name, cmdId, orden, duracionMs, timestamp }.
-   */
   demoTimelineAddStep: (cmdIdOrInfo, extraOptions = {}) => {
     const panel = document.getElementById('demoTimeline');
     const list = document.getElementById('demoTimelineList');
     const empty = document.getElementById('demoTimelineEmpty');
     if (!panel || !list) return;
 
-    // Solo se registran pasos dentro de una rutina iniciada (demoTimelineStart)
     if (!panel.classList.contains('is-live')) return;
 
     const isObj = cmdIdOrInfo !== null && typeof cmdIdOrInfo === 'object';
     const opts = isObj ? { ...cmdIdOrInfo, ...extraOptions } : extraOptions;
-    const rawCmdId = isObj ? (opts.cmdId ?? opts.id_comando ?? opts.codigo) : cmdIdOrInfo;
+    const rawCmdId = isObj ? opts.cmdId ?? opts.codigo_fisico ?? opts.codigo ?? opts.id_comando : cmdIdOrInfo;
     const numId = rawCmdId !== null && rawCmdId !== undefined && rawCmdId !== '' ? Number(rawCmdId) : null;
     const cmdId = Number.isInteger(numId) ? numId : null;
 
@@ -604,7 +648,7 @@ const UI = {
 
     const chip = document.createElement('span');
     chip.className = 'demo-step-id font-monospace';
-    chip.textContent = cmdId ? `#${cmdId}` : (opts.orden ? `Paso ${opts.orden}` : '•');
+    chip.textContent = cmdId ? `#${cmdId}` : opts.orden ? `Paso ${opts.orden}` : '•';
 
     li.append(time, name, chip);
     list.appendChild(li);
@@ -614,9 +658,6 @@ const UI = {
     list.scrollTop = list.scrollHeight;
   },
 
-  /**
-   * Cierra la cronología con un mensaje final (finalizada, cancelada o error).
-   */
   demoTimelineEnd: (text, tone = 'info') => {
     const panel = document.getElementById('demoTimeline');
     const list = document.getElementById('demoTimelineList');
@@ -666,12 +707,102 @@ const UI = {
     }
   },
 
+  setHardwareStatus: (conectado) => {
+    const ids = ['controlHardwareBadge', 'monitorHardwareBadge', 'userWorkspaceHardwareBadge'];
+    let texto = 'Hardware ESP8266: Sin verificar';
+    let clase = 'badge text-bg-dark border border-secondary text-secondary';
+    let lobbyTexto = 'Sin verificar';
+
+    if (conectado === true || conectado === 1) {
+      texto = 'Hardware ESP8266: En línea';
+      clase = 'badge bg-success-subtle text-success border border-success-subtle';
+      lobbyTexto = 'En línea';
+    } else if (conectado === false || conectado === 0) {
+      texto = 'Hardware ESP8266: Desconectado';
+      clase = 'badge bg-secondary-subtle text-warning border border-warning-subtle';
+      lobbyTexto = 'Desconectado';
+    }
+
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = clase;
+      el.textContent = texto;
+    });
+
+    const lobbyEl = document.getElementById('lobbyHardwareState');
+    if (lobbyEl) {
+      lobbyEl.textContent = lobbyTexto;
+    }
+  },
+
   setJoystickState: (state) => {
     const badge = UI.elements.joystickStateBadge;
     if (badge) {
       badge.textContent = state;
       badge.className = 'badge text-bg-secondary';
     }
+  },
+
+  /**
+   * Cierra de forma segura cualquier modal de Bootstrap 5:
+   * - Quita foco interno para evitar bloqueo aria-hidden en navegadores modernos.
+   * - Si el modal estaba todavía en transición de apertura (_isTransitioning),
+   *   reintenta el cierre en shown.bs.modal y aplica limpieza de respaldo de backdrop.
+   */
+  hideModal: (modalIdOrEl) => {
+    const el =
+      typeof modalIdOrEl === 'string' ? document.getElementById(modalIdOrEl) : modalIdOrEl;
+    if (!el) return;
+
+    if (document.activeElement && el.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch (_) {}
+    }
+
+    const forceCleanup = () => {
+      el.classList.remove('show');
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+      el.removeAttribute('aria-modal');
+      el.removeAttribute('role');
+
+      const anyOtherOpen = document.querySelector('.modal.show');
+      if (!anyOtherOpen) {
+        document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+      }
+    };
+
+    try {
+      const inst = bootstrap.Modal.getOrCreateInstance(el);
+      if (inst._isTransitioning) {
+        el.addEventListener(
+          'shown.bs.modal',
+          () => {
+            try {
+              inst.hide();
+            } catch (_) {
+              forceCleanup();
+            }
+          },
+          { once: true }
+        );
+      }
+      inst.hide();
+    } catch (_) {
+      forceCleanup();
+    }
+
+    // Respaldo garantizado si Bootstrap no completó el cierre tras la transición
+    setTimeout(() => {
+      if (el.classList.contains('show') || el.style.display === 'block') {
+        forceCleanup();
+      }
+    }, 380);
   },
 };
 

@@ -1,106 +1,85 @@
-# Grúa RC IoT · Frontend de Control
+# Grúa RC IoT · Frontend Web Mobile First (4.1 Control · 4.2 Monitoreo · 4.3 Administración B2B2C)
 
-Aplicación web **Mobile First** (HTML5 semántico + CSS3 + Bootstrap 5 + Vanilla JS) dedicada al **control remoto** del vehículo grúa RC IoT.
+Aplicación web **Mobile First** en **HTML5 semántico + CSS3 + Bootstrap 5.3 (SRI) + JavaScript ES6 modular puro** publicada en **GitHub Pages**, conectada al backend FastAPI/WSS en AWS EC2 (`https://grua-abraham.duckdns.org`).
 
-## Fases del proyecto
+Desarrollado por **Abraham Falcon Recinas**.
 
-| Fase | Módulo | Estado |
-|---|---|---|
-| **Control** | `index.html`, `assets/css/style.css`, `assets/js/{config,api,ws,joystick,ui,app}.js` | ✅ En desarrollo |
-| **Monitoreo** | Panel de telemetría / estado del vehículo (Vista integrada en el mismo sitio) | ✅ En desarrollo |
-| Administración | Gestión de vehículos / usuarios | ⬜ No iniciado |
+---
 
-> Este repositorio contiene las fases de **Control** y **Monitoreo**. No incluye backend nuevo, ni tablas, ni procedimientos almacenados, ni módulo de Administración.
+## Módulos Integrados
 
-## Especificación del Backend (AWS / FastAPI)
+| Módulo | Descripción | Estado |
+| --- | --- | :---: |
+| **4.1 Control** | Joystick circular táctil + teclado WASD/flechas, D-Pad maquinaria (`3/4/5/6`), energía (`9/10/13/14`), prioridad absoluta de **`DETENER (12)`**, movimientos temporizados rápidos y rutinas DEMO con línea de tiempo en vivo | Completo |
+| **4.2 Monitoreo** | Tarjeta de último movimiento en tiempo real, tabla de historial acotada a **máximo 10 individuales** (sin pasos internos de demo), catálogo de comandos de la unidad y panel de diagnóstico | Completo |
+| **4.3 Administración B2B2C** | Login JWT real (`bcrypt` + refresh + logout optimista), menú dinámico por rol (**Fábrica `ADMIN`**, **Tienda `USUARIO`**, **Cliente Final `INVITADO`**), CRUD de modelos/capacidades/unidades/clientes/comandos/demos/auditoría, **Mis Vehículos** con editor visual táctil de demos privadas, modo exhibición en mostrador, soporte temporal y pruebas exclusivas de invitados con contador regresivo | Completo |
 
-- **Base URL:** `https://grua-abraham.duckdns.org`
-- **WSS:** `wss://grua-abraham.duckdns.org/ws/vehiculo/1`
-- **Vehículo:** `#1`
+---
 
-### Endpoints de acción
+## Flujo B2B2C y Vistas por Rol
 
-```http
-POST /api/vehiculos/1/movimiento
-Content-Type: application/json
-
-{ "id_comando": 1 }
+```mermaid
+flowchart LR
+    A["Fábrica (ADMIN)"] -->|"Crea modelos y fabrica unidades (clona 14 comandos base)"| B["Unidades / Catálogo"]
+    A -->|"Vende / Asigna propietario"| C["Tienda (USUARIO)"]
+    C -->|"Gestiona temporizados, demos PRIVADA y soporte temporal"| C
+    C -->|"Habilita Modo Exhibición en mostrador"| D["Catálogo Público (EXHIBICION)"]
+    A -->|"Unidades propias en EXHIBICION"| D
+    D -->|"Reserva exclusiva temporal (409 si ocupada)"| E["Invitado (INVITADO)"]
+    E -->|"Control filtrado (permitido_invitado=1 + DETENER 12)"| F["Grúa RC IoT (ESP8266)"]
 ```
 
-```http
-POST /api/vehiculos/1/demo/cancelar
+- **`ADMIN` (Fábrica):** Dashboard KPIs en vivo, CRUD de Modelos y `modelo_capacidades`, Unidades (con baja lógica obligatoria y clonación automática de comandos base), Clientes, Comandos v2 (base vs. temporizados), Demos `FABRICA` + pasos y Bitácora de Auditoría filtrable. Aviso explícito `403` sobre unidades vendidas sin soporte (sin ciclar WSS).
+- **`USUARIO` (Tienda / Comprador):** Vista **Mis Vehículos** con tarjetas de sus unidades, botón directo **`Cambiar a EXHIBICIÓN` / `Cambiar a VENDIDO`**, tabla de comandos base protegidos (solo lectura/ejecución), CRUD de movimientos temporizados (`1..10000 ms`), Editor Visual Táctil de Demos Privadas (duración total y reordenamiento atómico `↑ / ↓`) y pestaña **Soporte al Admin**.
+- **`INVITADO` (Cliente Final):** Acceso sin cuenta («Probar vehículos como Invitado») o con `invitado@test.local`, selector de duración (`60`/`180`/`300 s`), reserva exclusiva con manejo de `409`, banner fijo superior con cuenta regresiva `mm:ss` sincronizada tras `F5`, controles filtrados y cierre seguro emitiendo `DETENER (12)`.
+
+---
+
+## Arquitectura Modular
+
+```text
+frontend_vehiculo_iot/
+├── index.html                    # SPA semántica con CSP estricta de producción y modales Bootstrap 5
+├── manifest.webmanifest          # Metadatos PWA
+├── assets/
+│   ├── icons/favicon.svg
+│   ├── css/
+│   │   ├── style.css             # Consola oscura Mobile First, indicadores, joystick, banner invitado
+│   │   └── mobile.css            # Adaptación táctil móvil y tablas responsivas como tarjetas
+│   └── js/
+│       ├── config.js             # Autodetección de entorno (GitHub Pages fuerza HTTPS/WSS producción)
+│       ├── auth.js               # JWT (localStorage ADMIN/USUARIO, sessionStorage INVITADO), refresh y logout optimista
+│       ├── api.js                # Cliente REST con AbortController, reintento suave en /api/health y manejo 401/403/409
+│       ├── ws.js                 # Cliente WSS único con reconexión controlada (sin loop ante 4401/4403/4404)
+│       ├── joystick.js           # Controlador táctil/teclado con paro obligatorio al soltar
+│       ├── ui.js                 # Renderizado seguro (solo textContent / DOM API), 3 semáforos y UI.hideModal
+│       ├── admin.js              # Panel completo de Administración (Fábrica)
+│       ├── user_vehicles.js      # Panel completo de Tienda (Mis Vehículos, temporizados, demos privadas, soporte)
+│       ├── guest.js              # Catálogo público, reserva exclusiva, contador y filtrado de controles
+│       └── app.js                # Orquestador global sin condiciones de carrera
+└── .github/workflows/pages.yml   # Despliegue automático a GitHub Pages
 ```
 
-### Endpoints de consulta
+---
 
-```http
-GET /api/vehiculos/1/comandos
-GET /api/vehiculos/1/demos
-GET /health        // (o /api/health según configuración)
-```
+## Seguridad y Conectividad
 
-### Eventos WebSocket esperados
+- **Sin `innerHTML` con datos de API:** toda renderización dinámica usa `textContent` y nodos DOM explícitos.
+- **CSP estricta para GitHub Pages:** en [index.html](index.html) `connect-src` restringe las conexiones únicamente a `'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org`, con `object-src 'none'`, `base-uri 'self'` y `form-action 'self'`.
+- **Protección contra downgrade en `config.js`:** fuera de `localhost`/`127.0.0.1`, la aplicación fuerza siempre los endpoints HTTPS/WSS de producción (`https://grua-abraham.duckdns.org`).
+- **Tres indicadores independientes en cabecera:** **WSS** (socket único activo), **Servidor AWS** (`GET /api/health`) y **Amazon RDS** (verificado en tiempo real por el backend).
 
-```json
-{ "id_comando": 1 }
-```
+---
 
-```json
-{ "evento": "FIN_DEMO", "timestamp": "2026-..." }
-```
+## Ejecución Local y Despliegue
 
-## Reglas de negocio implementadas (Control)
+### Despliegue en GitHub Pages (producción)
+1. Hacer merge de `feat/fase-4.3-admin` a `main` una vez migrada la base de producción `vehiculo_iot` y actualizado EC2.
+2. GitHub Actions (`.github/workflows/pages.yml`) publica automáticamente el sitio estático con CSP de producción estricta.
 
-1. **Joystick circular táctil (Mobile First):**
-   - Mapea direcciones a `POST /movimiento` con lógica **Toggle** de hardware.
-   - Envía **una sola vez** el `POST` de dirección al iniciar el arrastre.
-   - Al **soltar** el joystick: envía obligatoriamente `POST /movimiento { "id_comando": 12 }` (DETENER / paro general).
-2. **Botones secundarios** (Pala `5/6`, Diagonales `7/8`, Auxiliares `9/10/13/14`).
-3. **Botón gigante e inconfundible de DETENER** (`CMD 12`) en barra sticky inferior.
-4. **Panel de conectividad** con tres estados:
-   - **WebSocket WSS** (conexión / reconexión / estado).
-   - **Servidor AWS** (comprobación vía `GET /docs`).
-   - **Amazon RDS** (`Sin verificar` — sin endpoint dedicado).
-5. **Footer responsivo:** «Desarrollado por Abraham Falcon Recinas · 2026».
-
-## Seguridad y experiencia
-
-- **CSP** estricta via `<meta http-equiv>` (compatible con GitHub Pages).
-- Bootstrap 5.3.3 con **SRI** (Subresource Integrity) + CDN.
-- JavaScript Modules (ES6) puro, sin frameworks.
-- Fetch API + async/await. AbortController con timeouts.
-- WebSocket con reconexión automática (retroceso exponencial + jitter).
-- Fail-safe: si falla un movimiento o se pierde WSS durante un arrastre → frenado automático vía `CMD 12`.
-
-## Despliegue en GitHub Pages
-
-1. El repositorio debe estar configurado con GitHub Actions como origen de Pages.
-2. El workflow en `.github/workflows/pages.yml` publica la rama `main`.
-3. Las rutas relativas se usan para que funcione en el subpath del repositorio:
-   - `./assets/css/style.css`
-   - `./assets/js/app.js`
-   - `./manifest.webmanifest`
-   - `./assets/icons/favicon.svg`
-4. **CORS:** el backend FastAPI ya debe permitir el origen `https://<usuario>.github.io`.
-
-## Construcción / Verificación local
-
+### Pruebas locales (opcional)
 ```bash
-# Servir estáticamente con HTTPS (o usar un servidor local)
-npx serve -s .
+python -m http.server 8080
 ```
-
-Para pruebas con HTTPS local:
-
-```bash
-npx http-server -S --cert ./cert.pem --key ./key.pem -p 8080
-```
-
-## Checklist de Pruebas Funcionales
-
-- [ ] Joystick envía 1 POST al iniciar arrastre y 12 al soltar.
-- [ ] Botón DETENER envía 12 aunque haya movimiento en curso.
-- [ ] Demo: iniciar (`11`) → cancelar (`/demo/cancelar`).
-- [ ] Evento `FIN_DEMO` limpia estado.
-- [ ] Semáforos WSS / AWS / RDS se muestran correctamente.
-- [ ] Reconexión automática tras caída de WSS.
+- Abrir `http://127.0.0.1:8080/?api=prod` para probar contra AWS con la CSP estricta de producción.
+- Si deseas apuntar temporalmente a un backend local en `http://127.0.0.1:8000`, agrega temporalmente `http://127.0.0.1:8000 ws://127.0.0.1:8000` en `connect-src` de `index.html` (sin commitearlo a producción).

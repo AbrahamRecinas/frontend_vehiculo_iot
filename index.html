@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>Grúa RC IoT · Panel de Control</title>
-  
+  <title>Grúa RC IoT · Control, Monitoreo y Administración</title>
+
   <!-- Metadatos PWA y SEO -->
-  <meta name="description" content="Aplicación de control remoto Mobile First para grúa RC IoT con FastAPI, WebSocket y AWS." />
+  <meta name="description" content="Aplicación Mobile First para control, monitoreo y administración de la grúa RC IoT con FastAPI, WSS, JWT y Amazon RDS." />
   <meta name="author" content="Abraham Falcon Recinas" />
   <meta name="theme-color" content="#0a0f1d" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,13 +15,13 @@
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org; object-src 'none'; base-uri 'self'; form-action 'self'"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://accounts.google.com/gsi/style; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'"
   />
 
   <link rel="icon" type="image/svg+xml" href="./assets/icons/favicon.svg" />
   <link rel="manifest" href="./manifest.webmanifest" />
 
-  <!-- Bootstrap 5.3 CSS con SRI (Subresource Integrity) -->
+  <!-- Bootstrap 5.3 CSS con SRI -->
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -29,32 +29,47 @@
     crossorigin="anonymous"
   />
 
-  <!-- Bootstrap Icons (iconografía vectorial para botones de control) -->
+  <!-- Bootstrap Icons -->
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
   />
 
-  <!-- Estilos propios de la consola de control IoT -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=2.3" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=2" />
+  <!-- Estilos propios Mobile First -->
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.5.1" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.5.1" />
 </head>
 <body>
-  <!-- Contenedor principal de la aplicación -->
   <div class="app-wrapper d-flex flex-column h-100">
 
     <!-- HEADER / BARRA SUPERIOR -->
     <header class="app-header border-bottom border-secondary-subtle sticky-top">
-      <div class="container-fluid px-3 py-2 d-flex align-items-center justify-content-between">
-        <div class="brand-lockup d-flex align-items-center gap-2">
+      <div class="container-fluid px-3 py-2 d-flex align-items-center justify-content-between gap-2">
+        <div class="brand-lockup d-flex align-items-center gap-2 min-w-0">
           <img src="./assets/icons/favicon.svg" alt="Ícono Grúa IoT" class="header-logo" width="34" height="34" />
-          <div>
-            <h1 class="h6 mb-0 text-white fw-bold tracking-wide">Grúa RC IoT</h1>
-            <span class="badge text-bg-primary vehicle-badge" id="vehicleBadge">Vehículo #1</span>
+          <div class="min-w-0">
+            <div class="d-flex align-items-center gap-2">
+              <h1 class="h6 mb-0 text-white fw-bold tracking-wide text-truncate">Grúa RC IoT</h1>
+              <span class="badge bg-info-subtle text-info border border-info-subtle d-none d-md-inline-block" id="envBadge">AWS</span>
+            </div>
+            <span class="badge text-bg-primary vehicle-badge" id="vehicleBadge">Sin unidad</span>
           </div>
         </div>
 
         <div class="d-flex align-items-center gap-2">
+          <!-- Usuario autenticado + Logout (d-none inicial para evitar conflicto con Bootstrap d-flex !important) -->
+          <div class="d-none align-items-center gap-2" id="headerUserWrap" hidden>
+            <span class="badge text-bg-secondary" id="headerUserRole"></span>
+            <span class="small text-light d-none d-md-inline text-truncate" style="max-width: 150px;" id="headerUserName"></span>
+            <button type="button" id="btnHeaderLogout" data-action="logout" class="btn btn-outline-danger btn-sm" title="Cerrar sesión">
+              <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+              <span class="d-none d-sm-inline ms-1">Salir</span>
+            </button>
+          </div>
+          <button type="button" id="btnHeaderLogin" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-person-lock me-1" aria-hidden="true"></i>Ingresar
+          </button>
+
           <button
             type="button"
             id="btnToggleDiag"
@@ -64,83 +79,71 @@
             aria-label="Abrir diagnóstico de red"
             title="Abrir diagnóstico de red"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M6 10.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5"/>
-            </svg>
+            <i class="bi bi-activity" aria-hidden="true"></i>
             <span class="d-none d-sm-inline">Diagnóstico</span>
           </button>
         </div>
       </div>
 
-      <!-- NAVEGACIÓN PRINCIPAL: ALTERNAR ENTRE VISTA DE CONTROL Y VISTA DE MONITOREO -->
+      <!-- NAVEGACIÓN PRINCIPAL DINÁMICA POR ROL -->
       <nav class="app-nav" id="appNav" aria-label="Navegación principal de la aplicación">
         <div class="container-fluid px-3">
           <ul class="nav nav-pills app-nav-pills" id="appNavList">
-            <li class="nav-item" role="presentation">
-              <button
-                type="button"
-                class="nav-link app-nav-link active"
-                id="navBtnControl"
-                data-view-switch="control"
-                role="tab"
-                aria-selected="true"
-                aria-controls="viewControl"
-              >
-                <i class="bi bi-controller" aria-hidden="true"></i>
-                <span>Vista de Control</span>
+            <li class="nav-item" role="presentation" data-roles="ANON">
+              <button type="button" class="nav-link app-nav-link active" id="navBtnAuth" data-view-switch="auth" role="tab" aria-selected="true">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                <span>Iniciar Sesión</span>
               </button>
             </li>
-            <li class="nav-item" role="presentation">
-              <button
-                type="button"
-                class="nav-link app-nav-link"
-                id="navBtnMonitor"
-                data-view-switch="monitor"
-                role="tab"
-                aria-selected="false"
-                aria-controls="viewMonitor"
-              >
-                <i class="bi bi-activity" aria-hidden="true"></i>
-                <span>Vista de Monitoreo</span>
+            <li class="nav-item" role="presentation" data-roles="ANON,INVITADO">
+              <button type="button" class="nav-link app-nav-link" id="navBtnGuest" data-view-switch="guest" role="tab" aria-selected="false">
+                <i class="bi bi-shop" aria-hidden="true"></i>
+                <span>Catálogo Exhibición</span>
               </button>
             </li>
-            <li class="nav-item" role="presentation">
-              <button
-                type="button"
-                class="nav-link app-nav-link"
-                id="navBtnAdmin"
-                data-view-switch="admin"
-                role="tab"
-                aria-selected="false"
-                aria-controls="adminView"
-              >
-                <i class="bi bi-gear" aria-hidden="true"></i>
+            <li class="nav-item" role="presentation" data-roles="USUARIO" hidden>
+              <button type="button" class="nav-link app-nav-link" id="navBtnUserVehicles" data-view-switch="user-vehicles" role="tab" aria-selected="false">
+                <i class="bi bi-truck" aria-hidden="true"></i>
+                <span>Mis Vehículos</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation" data-roles="ADMIN" hidden>
+              <button type="button" class="nav-link app-nav-link" id="navBtnAdmin" data-view-switch="admin" role="tab" aria-selected="false">
+                <i class="bi bi-speedometer2" aria-hidden="true"></i>
                 <span>Administración</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation" data-roles="ADMIN,USUARIO,INVITADO" hidden>
+              <button type="button" class="nav-link app-nav-link" id="navBtnControl" data-view-switch="control" role="tab" aria-selected="false">
+                <i class="bi bi-controller" aria-hidden="true"></i>
+                <span>Control</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation" data-roles="ADMIN,USUARIO" hidden>
+              <button type="button" class="nav-link app-nav-link" id="navBtnMonitor" data-view-switch="monitor" role="tab" aria-selected="false">
+                <i class="bi bi-activity" aria-hidden="true"></i>
+                <span>Monitoreo</span>
               </button>
             </li>
           </ul>
         </div>
       </nav>
 
-      <!-- PANEL DE CONECTIVIDAD: TRES ESTADOS VISUALES DIFERENCIADOS -->
+      <!-- PANEL DE CONECTIVIDAD: TRES INDICADORES INDEPENDIENTES (WSS / AWS / RDS) -->
       <section class="connectivity-bar px-3 py-1 bg-dark-subtle border-top border-secondary-subtle" aria-label="Estado del sistema">
         <div class="container-fluid px-0">
           <div class="row g-2 align-items-center text-center text-sm-start" id="connectivityGroup">
-            
-            <!-- Semáforo 1: WebSocket WSS -->
             <div class="col-4 connectivity-col">
-              <div class="status-pill status-pill--connecting" id="pillWss" role="status" aria-live="polite" title="Canal de telemetría en tiempo real WSS">
-                <span class="status-led led-amber" aria-hidden="true"></span>
+              <div class="status-pill status-pill--closed" id="pillWss" role="status" aria-live="polite" title="Canal de telemetría WSS del navegador">
+                <span class="status-led led-gray" aria-hidden="true"></span>
                 <div class="status-text text-truncate">
                   <span class="status-title d-block">WSS</span>
-                  <span class="status-desc" id="descWss">Conectando...</span>
+                  <span class="status-desc" id="descWss">En espera de sesión</span>
                 </div>
               </div>
             </div>
-
-            <!-- Semáforo 2: Servidor AWS -->
             <div class="col-4 connectivity-col">
-              <div class="status-pill status-pill--connecting" id="pillAws" role="status" aria-live="polite" title="API REST FastAPI en AWS">
+              <div class="status-pill status-pill--connecting" id="pillAws" role="status" aria-live="polite" title="Salud API FastAPI (GET /api/health)">
                 <span class="status-led led-amber" aria-hidden="true"></span>
                 <div class="status-text text-truncate">
                   <span class="status-title d-block">Servidor AWS</span>
@@ -148,21 +151,40 @@
                 </div>
               </div>
             </div>
-
-            <!-- Semáforo 3: Amazon RDS (Honesto: sin endpoint dedicado) -->
             <div class="col-4 connectivity-col">
-              <div class="status-pill status-pill--unverified" id="pillRds" role="status" aria-live="polite" title="Persistencia MySQL Amazon RDS (sin endpoint directo en API)">
-                <span class="status-led led-gray" aria-hidden="true"></span>
+              <div class="status-pill status-pill--connecting" id="pillRds" role="status" aria-live="polite" title="Disponibilidad Amazon RDS verificada desde backend">
+                <span class="status-led led-amber" aria-hidden="true"></span>
                 <div class="status-text text-truncate">
                   <span class="status-title d-block">Amazon RDS</span>
-                  <span class="status-desc" id="descRds">Sin verificar</span>
+                  <span class="status-desc" id="descRds">Verificando...</span>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </section>
+
+      <!-- BANNER FIJO DE SESIÓN EXCLUSIVA DE INVITADO (integrado dentro de header sticky para no taparlo) -->
+      <div
+        id="guestSessionBanner"
+        class="guest-session-banner d-none align-items-center justify-content-between gap-2 px-3 py-2 border-top border-info-subtle"
+        role="region"
+        aria-label="Sesión exclusiva de invitado"
+        hidden
+      >
+        <div class="d-flex align-items-center gap-2 min-w-0">
+          <span class="badge bg-info-subtle text-info border border-info-subtle text-nowrap">
+            <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Prueba Exclusiva
+          </span>
+          <strong class="small text-white text-truncate" id="guestBannerUnit">Unidad en exhibición</strong>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <span class="badge text-bg-dark border border-secondary font-monospace fs-6 text-info" id="guestCountdownTimer">03:00</span>
+          <button type="button" id="btnGuestFinish" class="btn btn-danger btn-sm fw-semibold">
+            <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Finalizar prueba
+          </button>
+        </div>
+      </div>
     </header>
 
     <!-- PANEL DE DIAGNÓSTICO COLAPSABLE -->
@@ -176,13 +198,13 @@
           <div class="col-12 col-md-6">
             <div class="diag-item p-2 rounded bg-dark border border-secondary-subtle">
               <span class="text-secondary d-block">Base REST:</span>
-              <span class="text-break text-warning" id="diagRestUrl">https://grua-abraham.duckdns.org</span>
+              <span class="text-break text-warning" id="diagRestUrl">--</span>
             </div>
           </div>
           <div class="col-12 col-md-6">
             <div class="diag-item p-2 rounded bg-dark border border-secondary-subtle">
               <span class="text-secondary d-block">Canal WSS:</span>
-              <span class="text-break text-warning" id="diagWssUrl">wss://grua-abraham.duckdns.org/ws/vehiculo/1</span>
+              <span class="text-break text-warning" id="diagWssUrl">--</span>
             </div>
           </div>
           <div class="col-6 col-md-3">
@@ -211,25 +233,343 @@
           </div>
         </div>
         <div class="d-flex gap-2 mt-3">
-          <button type="button" id="btnRunDiag" class="btn btn-sm btn-info">
-            Comprobar Enlace Ahora
-          </button>
+          <button type="button" id="btnRunDiag" class="btn btn-sm btn-info">Comprobar Enlace Ahora</button>
         </div>
       </div>
     </aside>
 
-    <!-- CUERPO PRINCIPAL DEL CONTROLADOR -->
+    <!-- CUERPO PRINCIPAL -->
     <main class="container-fluid px-2 py-2 flex-grow-1 main-content" id="mainContent">
 
-      <!-- LOBBY: panel de estado previo al modo mando (móvil · oculto en PC) -->
-      <section id="lobbyView" class="lobby-view" aria-label="Panel de estado y conexión">
+      <!-- VISTA 0: LOGIN REAL (JWT + bcrypt) -->
+      <section id="authView" class="auth-view is-visible" aria-label="Inicio de sesión">
+        <div class="container py-4">
+          <div class="row justify-content-center">
+            <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-lg auth-card">
+                <div class="card-body p-4">
+                  <div class="text-center mb-3">
+                    <img src="./assets/icons/favicon.svg" alt="" width="48" height="48" class="mb-2" />
+                    <h2 class="h5 text-white fw-bold mb-1">Acceso a la Plataforma IoT</h2>
+                    <p class="small text-secondary mb-0">Inicia sesión o crea tu cuenta de cliente/tienda</p>
+                  </div>
+
+                  <!-- Alternador limpio: Iniciar sesión / Crear cuenta -->
+                  <div class="btn-group w-100 mb-3" role="group" aria-label="Modo de acceso">
+                    <button type="button" class="btn btn-sm btn-primary" id="authTabLogin" aria-pressed="true">
+                      <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar sesión
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="authTabRegister" aria-pressed="false">
+                      <i class="bi bi-person-plus me-1" aria-hidden="true"></i>Crear cuenta
+                    </button>
+                  </div>
+
+                  <div class="alert alert-danger py-2 small" id="loginErrorBox" role="alert" hidden></div>
+
+                  <form id="formLogin" novalidate>
+                    <div class="mb-3">
+                      <label for="loginCorreo" class="form-label small text-secondary">Correo electrónico</label>
+                      <input type="email" class="form-control" id="loginCorreo" name="correo" autocomplete="username" placeholder="usuario@dominio.com" required />
+                    </div>
+                    <div class="mb-3">
+                      <label for="loginPassword" class="form-label small text-secondary">Contraseña</label>
+                      <input type="password" class="form-control" id="loginPassword" name="password" autocomplete="current-password" required />
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                      <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar Sesión
+                    </button>
+                  </form>
+
+                  <div class="alert alert-danger py-2 small" id="registerErrorBox" role="alert" hidden></div>
+
+                  <form id="formRegister" novalidate hidden>
+                    <div class="mb-2">
+                      <label for="regNombre" class="form-label small text-secondary">Nombre completo</label>
+                      <input type="text" class="form-control form-control-sm" id="regNombre" name="nombre" autocomplete="name" maxlength="100" placeholder="Ej. Ana López" required />
+                    </div>
+                    <div class="mb-2">
+                      <label for="regCorreo" class="form-label small text-secondary">Correo electrónico</label>
+                      <input type="email" class="form-control form-control-sm" id="regCorreo" name="correo" autocomplete="email" maxlength="150" placeholder="cliente@dominio.com" required />
+                    </div>
+                    <div class="mb-2">
+                      <label for="regPassword" class="form-label small text-secondary">Contraseña (mín. 8 caracteres)</label>
+                      <input type="password" class="form-control form-control-sm" id="regPassword" name="password" autocomplete="new-password" minlength="8" maxlength="72" required />
+                    </div>
+                    <div class="mb-3">
+                      <label for="regPasswordConfirm" class="form-label small text-secondary">Confirmar contraseña</label>
+                      <input type="password" class="form-control form-control-sm" id="regPasswordConfirm" name="password_confirm" autocomplete="new-password" minlength="8" maxlength="72" required />
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 fw-semibold">
+                      <i class="bi bi-person-check me-1" aria-hidden="true"></i>Crear cuenta de cliente
+                    </button>
+                  </form>
+
+                  <!-- Google Identity Services (solo visible si backend expone GOOGLE_CLIENT_ID) -->
+                  <div id="googleSignInWrap" class="mt-3" hidden>
+                    <div class="d-flex align-items-center gap-2 my-2">
+                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
+                      <span class="small text-secondary">o continúa con</span>
+                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
+                    </div>
+                    <div id="googleBtnContainer" class="d-flex justify-content-center"></div>
+                  </div>
+
+                  <hr class="border-secondary-subtle my-3" />
+
+                  <div class="text-center">
+                    <p class="small text-secondary mb-2">¿Aún no eres cliente? Explora los modelos y prueba en vivo las unidades en exhibición.</p>
+                    <button type="button" id="btnGoGuestCatalog" class="btn btn-outline-info btn-sm w-100">
+                      <i class="bi bi-shop me-1" aria-hidden="true"></i>Probar vehículos como Invitado
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA CATÁLOGO PÚBLICO / EXHIBICIÓN (Fase 4: reserva exclusiva temporal de invitado) -->
+      <section id="guestView" class="guest-view" aria-label="Catálogo público y exhibición" hidden>
+        <div class="container-fluid px-2 py-2">
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-3">
+            <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-shop me-1 text-info" aria-hidden="true"></i>Prueba nuestros vehículos IoT</h2>
+                <small class="text-secondary">Catálogo público y reserva exclusiva temporal en unidades habilitadas en EXHIBICIÓN</small>
+              </div>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="d-flex align-items-center gap-1">
+                  <label for="guestDuracionSelect" class="small text-secondary mb-0 text-nowrap">Duración prueba:</label>
+                  <select id="guestDuracionSelect" class="form-select form-select-sm" style="width: auto;">
+                    <option value="60">1 min (60 s)</option>
+                    <option value="180" selected>3 min (180 s)</option>
+                    <option value="300">5 min (300 s)</option>
+                  </select>
+                </div>
+                <button type="button" id="btnRefreshGuestCatalog" class="btn btn-sm btn-outline-info">
+                  <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
+                </button>
+                <button type="button" id="btnBackToLogin" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-person-lock me-1" aria-hidden="true"></i>Ingresar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="h6 text-info mb-2">Modelos Disponibles</h3>
+          <div class="row g-2 mb-3" id="guestModelosGrid"></div>
+
+          <h3 class="h6 text-info mb-2">Unidades en Exhibición</h3>
+          <div class="row g-2" id="guestExhibicionGrid"></div>
+        </div>
+      </section>
+
+      <!-- VISTA MIS VEHÍCULOS (USUARIO TIENDA / COMPRADOR — Fase 4 completa) -->
+      <section id="userVehiclesView" class="user-vehicles-view" aria-label="Mis vehículos" hidden>
+        <div class="container-fluid px-2 py-2">
+          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-3">
+            <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-truck me-1 text-info" aria-hidden="true"></i>Mis Vehículos (Tienda / Comprador)</h2>
+                <small class="text-secondary">Controla tus unidades, crea movimientos temporizados, arma demos privadas, habilita exhibición en mostrador u otorga soporte temporal</small>
+              </div>
+              <button type="button" id="btnRefreshMisVehiculos" class="btn btn-sm btn-outline-info">
+                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
+              </button>
+            </div>
+          </div>
+
+          <div class="alert alert-danger py-2 small" id="userVehiclesAlert" role="alert" hidden></div>
+
+          <div class="row g-2" id="userVehiclesGrid"></div>
+
+          <!-- WORKSPACE DE GESTIÓN DE LA UNIDAD SELECCIONADA -->
+          <div id="userUnitWorkspace" class="mt-3" hidden>
+            <div class="card bg-body-tertiary border-info-subtle shadow-sm mb-2">
+              <div class="card-body p-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2 min-w-0">
+                  <i class="bi bi-sliders text-info" aria-hidden="true"></i>
+                  <strong class="text-white small text-truncate" id="userWorkspaceTitle">Unidad seleccionada</strong>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <span class="badge text-bg-dark border border-secondary text-secondary" id="userWorkspaceHardwareBadge">Hardware ESP8266: Sin verificar</span>
+                  <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="userWorkspaceEstado">VENDIDO</span>
+                  <button type="button" id="btnUserWorkspaceToggleExhibicion" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-shop me-1" aria-hidden="true"></i>Cambiar a EXHIBICIÓN
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <ul class="nav nav-tabs admin-tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="userTabComandos" data-bs-toggle="tab" data-bs-target="#userPaneComandos" type="button" role="tab">
+                  <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Comandos y Temporizados
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="userTabDemos" data-bs-toggle="tab" data-bs-target="#userPaneDemos" type="button" role="tab">
+                  <i class="bi bi-collection-play me-1" aria-hidden="true"></i>Demos Privadas
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="userTabSoporte" data-bs-toggle="tab" data-bs-target="#userPaneSoporte" type="button" role="tab">
+                  <i class="bi bi-life-preserver me-1" aria-hidden="true"></i>Soporte al Admin
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content bg-body-tertiary border border-top-0 border-secondary-subtle rounded-bottom p-2">
+              <!-- TAB 1: COMANDOS BASE + TEMPORIZADOS PROPIOS -->
+              <div class="tab-pane fade show active" id="userPaneComandos" role="tabpanel">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
+                    <h3 class="h6 text-info mb-0">Mis Movimientos Personalizados Temporizados</h3>
+                    <small class="text-secondary">Duración 1..10000 ms sobre capacidades permitidas del modelo · Aparecen también en Control</small>
+                  </div>
+                  <button type="button" id="btnUserNewTimedCmd" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nuevo movimiento temporizado
+                  </button>
+                </div>
+
+                <div class="table-responsive monitor-table-responsive mb-3">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th class="text-center">Acción física</th>
+                        <th class="text-center">Duración</th>
+                        <th class="text-center">Invitado</th>
+                        <th class="text-end">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userTimedCommandsBody"></tbody>
+                  </table>
+                </div>
+
+                <h3 class="h6 text-secondary mb-2">Comandos Físicos Base (de fábrica · solo lectura)</h3>
+                <div class="table-responsive monitor-table-responsive">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th class="text-center">Físico</th>
+                        <th>Nombre</th>
+                        <th class="text-center">Tipo</th>
+                        <th class="text-center">Invitado</th>
+                        <th class="text-end">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userBaseCommandsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB 2: EDITOR VISUAL TÁCTIL DE DEMOS PRIVADAS -->
+              <div class="tab-pane fade" id="userPaneDemos" role="tabpanel">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-5">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h3 class="h6 text-info mb-0">Demos de la unidad</h3>
+                      <button type="button" id="btnUserNewDemo" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva demo privada
+                      </button>
+                    </div>
+                    <div id="userDemosList"></div>
+                  </div>
+                  <div class="col-12 col-lg-7">
+                    <div class="card bg-dark border-secondary-subtle">
+                      <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="min-w-0">
+                          <strong class="text-white small d-block text-truncate" id="userDemoEditorTitle">Selecciona o crea una demo</strong>
+                          <div class="d-flex flex-wrap gap-2 mt-1">
+                            <span class="badge text-bg-secondary" id="userDemoStepCount">0 pasos</span>
+                            <span class="badge bg-info-subtle text-info border border-info-subtle font-monospace" id="userDemoTotalDuration">Duración total: 0.00 s</span>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                          <button type="button" id="btnUserAddStep" class="btn btn-sm btn-outline-info" disabled>
+                            <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Agregar paso
+                          </button>
+                          <button type="button" id="btnUserRunDemo" class="btn btn-sm btn-success" disabled>
+                            <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Probar demo
+                          </button>
+                          <button type="button" id="btnUserStopDemo" class="btn btn-sm btn-outline-danger" disabled>
+                            <i class="bi bi-stop-fill me-1" aria-hidden="true"></i>Detener
+                          </button>
+                        </div>
+                      </div>
+                      <div class="card-body p-2" id="userDemoStepsWrap"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 3: AUTORIZACIÓN TEMPORAL DE SOPORTE AL ADMIN -->
+              <div class="tab-pane fade" id="userPaneSoporte" role="tabpanel">
+                <div class="alert alert-warning py-2 small d-none flex-wrap align-items-center justify-content-between gap-2" id="userSoporteExhibicionNotice" role="alert" hidden>
+                  <span><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><span id="userSoporteNoticeText">Esta unidad está en modo EXHIBICIÓN. Para otorgar soporte temporal al administrador primero regrésala a estado VENDIDO.</span></span>
+                  <button type="button" id="btnUserSoporteVolverVendido" class="btn btn-sm btn-warning text-dark fw-semibold">
+                    Volver a VENDIDO
+                  </button>
+                </div>
+
+                <form id="formUserSoporte" class="card bg-dark border-secondary-subtle p-3 mb-3" novalidate>
+                  <h3 class="h6 text-info mb-2">Otorgar soporte técnico temporal al Administrador</h3>
+                  <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-6">
+                      <label for="userSoporteMotivo" class="form-label small">Motivo del diagnóstico <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control form-control-sm" id="userSoporteMotivo" name="motivo" maxlength="255" placeholder="Ej. Revisión de calibración de pala y giro" required />
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <label for="userSoporteMinutos" class="form-label small">Duración (min) <span class="text-danger">*</span></label>
+                      <input type="number" class="form-control form-control-sm" id="userSoporteMinutos" name="duracion_minutos" min="1" max="1440" value="30" required />
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <button type="submit" class="btn btn-sm btn-success w-100 fw-semibold">
+                        <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Otorgar soporte
+                      </button>
+                    </div>
+                  </div>
+                  <div class="d-flex flex-wrap align-items-center gap-1 mt-2">
+                    <span class="small text-secondary me-1">Atajos:</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="15">15 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="30">30 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="60">60 min</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-soporte-min="120">2 h</button>
+                  </div>
+                </form>
+
+                <h3 class="h6 text-secondary mb-2">Historial de autorizaciones de soporte</h3>
+                <div class="table-responsive monitor-table-responsive">
+                  <table class="table table-sm table-hover align-middle monitor-table">
+                    <thead>
+                      <tr>
+                        <th class="text-center">Estado</th>
+                        <th>Motivo</th>
+                        <th class="text-center">Inicio</th>
+                        <th class="text-center">Expira</th>
+                        <th class="text-end">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userSoporteBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOBBY (MÓVIL · 4.1 conservado intacto) -->
+      <section id="lobbyView" class="lobby-view" aria-label="Panel de estado y conexión" hidden>
         <div class="lobby-shell">
           <header class="lobby-header">
             <div class="brand-lockup d-flex align-items-center gap-2">
               <img src="./assets/icons/favicon.svg" alt="" class="header-logo" width="32" height="32" />
               <div>
                 <span class="lobby-kicker d-block">Control remoto</span>
-                <h2 class="lobby-title">Grúa RC · Vehículo #1</h2>
+                <h2 class="lobby-title" id="lobbyVehicleTitle">Grúa RC · Vehículo #1</h2>
               </div>
             </div>
             <span class="lobby-vehicle-state" data-lobby="vehicleState">Detenido</span>
@@ -240,63 +580,43 @@
               <span class="lobby-hero-label">Estado del vehículo</span>
               <strong class="lobby-hero-state" data-lobby="vehicleState">Detenido</strong>
             </div>
-          <div class="lobby-channels" role="list" aria-label="Estado de canales">
-            <div class="lobby-channel" role="listitem">
-              <span class="status-led led-amber" data-lobby-led="wss" aria-hidden="true"></span>
-              <div class="lobby-channel-text">
-                <span class="lobby-channel-name">WebSocket</span>
-                <span class="lobby-channel-detail" data-lobby-detail="wss">Conectando...</span>
+            <div class="lobby-channels" role="list" aria-label="Estado de canales">
+              <div class="lobby-channel" role="listitem">
+                <span class="status-led led-gray" data-lobby-led="wss" aria-hidden="true"></span>
+                <div class="lobby-channel-text">
+                  <span class="lobby-channel-name">WebSocket</span>
+                  <span class="lobby-channel-detail" data-lobby-detail="wss">En espera</span>
+                </div>
+              </div>
+              <div class="lobby-channel" role="listitem">
+                <span class="status-led led-amber" data-lobby-led="aws" aria-hidden="true"></span>
+                <div class="lobby-channel-text">
+                  <span class="lobby-channel-name">Servidor AWS</span>
+                  <span class="lobby-channel-detail" data-lobby-detail="aws">Verificando...</span>
+                </div>
+              </div>
+              <div class="lobby-channel" role="listitem">
+                <span class="status-led led-amber" data-lobby-led="rds" aria-hidden="true"></span>
+                <div class="lobby-channel-text">
+                  <span class="lobby-channel-name">Amazon RDS</span>
+                  <span class="lobby-channel-detail" data-lobby-detail="rds">Verificando...</span>
+                </div>
               </div>
             </div>
-            <div class="lobby-channel" role="listitem">
-              <span class="status-led led-amber" data-lobby-led="aws" aria-hidden="true"></span>
-              <div class="lobby-channel-text">
-                <span class="lobby-channel-name">Servidor AWS</span>
-                <span class="lobby-channel-detail" data-lobby-detail="aws">Verificando...</span>
-              </div>
-            </div>
-            <div class="lobby-channel" role="listitem">
-              <span class="status-led led-gray" data-lobby-led="rds" aria-hidden="true"></span>
-              <div class="lobby-channel-text">
-                <span class="lobby-channel-name">Amazon RDS</span>
-                <span class="lobby-channel-detail" data-lobby-detail="rds">Sin verificar</span>
-              </div>
-            </div>
-          </div>
 
-          <dl class="lobby-metrics">
-            <div>
-              <dt>Latencia API</dt>
-              <dd data-diag="latency">-- ms</dd>
-            </div>
-            <div>
-              <dt>Último HTTP</dt>
-              <dd data-diag="httpStatus">--</dd>
-            </div>
-            <div>
-              <dt>Reconexiones WS</dt>
-              <dd data-diag="wsReconnects">0</dd>
-            </div>
-            <div>
-              <dt>Rutinas</dt>
-              <dd data-lobby="demoCount">--</dd>
-            </div>
-          </dl>
+            <dl class="lobby-metrics">
+              <div><dt>Latencia API</dt><dd data-diag="latency">-- ms</dd></div>
+              <div><dt>Último HTTP</dt><dd data-diag="httpStatus">--</dd></div>
+              <div><dt>Reconexiones WS</dt><dd data-diag="wsReconnects">0</dd></div>
+              <div><dt>Hardware ESP8266</dt><dd id="lobbyHardwareState">Sin verificar</dd></div>
+              <div><dt>Rutinas</dt><dd data-lobby="demoCount">--</dd></div>
+            </dl>
           </div>
 
           <div class="lobby-endpoints">
-            <div>
-              <span>REST</span>
-              <code data-diag="restUrl">https://grua-abraham.duckdns.org</code>
-            </div>
-            <div>
-              <span>WSS</span>
-              <code data-diag="wssUrl">wss://grua-abraham.duckdns.org/ws/vehiculo/1</code>
-            </div>
-            <div>
-              <span>Último</span>
-              <code data-diag="lastWsMessage">Ninguno</code>
-            </div>
+            <div><span>REST</span><code data-diag="restUrl">--</code></div>
+            <div><span>WSS</span><code data-diag="wssUrl">--</code></div>
+            <div><span>Último</span><code data-diag="lastWsMessage">Ninguno</code></div>
           </div>
 
           <div class="lobby-actions">
@@ -308,27 +628,38 @@
               <i class="bi bi-controller" aria-hidden="true"></i>
               <span>Entrar al modo mando</span>
             </button>
-          <nav class="lobby-nav" aria-label="Otras vistas de la aplicación">
-            <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="monitor">
-              <i class="bi bi-activity" aria-hidden="true"></i>
-              <span>Monitoreo</span>
-            </button>
-            <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="admin">
-              <i class="bi bi-gear" aria-hidden="true"></i>
-              <span>Administración</span>
-            </button>
-          </nav>
+            <nav class="lobby-nav" aria-label="Otras vistas de la aplicación">
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="user-vehicles" data-roles="USUARIO">
+                <i class="bi bi-truck" aria-hidden="true"></i>
+                <span>Mis Vehículos</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="guest" data-roles="INVITADO">
+                <i class="bi bi-shop" aria-hidden="true"></i>
+                <span>Exhibición</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="monitor" data-roles="ADMIN,USUARIO">
+                <i class="bi bi-activity" aria-hidden="true"></i>
+                <span>Monitoreo</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary lobby-nav-btn" data-view-switch="admin" data-roles="ADMIN">
+                <i class="bi bi-gear" aria-hidden="true"></i>
+                <span>Admin</span>
+              </button>
+              <button type="button" class="btn btn-outline-danger lobby-nav-btn" id="btnLobbyLogout" data-action="logout" data-roles="ADMIN,USUARIO,INVITADO">
+                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                <span>Salir</span>
+              </button>
+            </nav>
           </div>
 
           <p class="lobby-footnote">Al entrar se activa pantalla completa y orientación horizontal.</p>
         </div>
       </section>
 
-      <!-- MODO MANDO (FASE 2: arquitectura de 3 columnas "Estación de Mando") -->
-      <section id="mandoView" class="mando-view flex-column" aria-label="Modo mando">
-        <!-- BARRA DE ESTADO COMPACTA (SOLO MÓVIL): 3 LEDS + SALIR -->
+      <!-- MODO MANDO (4.1 conservado intacto + accesos rápidos temporizados) -->
+      <section id="mandoView" class="mando-view flex-column" aria-label="Modo mando" hidden>
         <div class="mando-status-bar" id="mandoStatusBar">
-          <span class="mando-led" id="mandoLedWss" title="WebSocket WSS"><span class="status-led led-green"></span></span>
+          <span class="mando-led" id="mandoLedWss" title="WebSocket WSS"><span class="status-led led-gray"></span></span>
           <span class="mando-led" id="mandoLedAws" title="API AWS"><span class="status-led led-gray"></span></span>
           <span class="mando-led" id="mandoLedRds" title="Amazon RDS"><span class="status-led led-gray"></span></span>
           <button type="button" id="btnExitMando" class="btn btn-outline-secondary btn-sm mando-exit-btn" aria-label="Salir del modo mando">
@@ -336,10 +667,8 @@
           </button>
         </div>
 
-        <!-- LAYOUT DE 3 COLUMNAS (JOYSTICK / CENTRO-ENERGIA-DEMOS / D-PAD) -->
         <div class="mando-layout" id="mandoLayout">
-
-          <!-- COLUMNA IZQUIERDA (30%): JOYSTICK EXCLUSIVO -->
+          <!-- COLUMNA IZQUIERDA: JOYSTICK -->
           <section class="mando-col mando-col-left d-flex flex-column p-2" id="joystickPanel" aria-label="Control por joystick">
             <section class="command-banner desktop-detail mb-2 p-2 rounded border border-secondary-subtle align-items-center justify-content-between" aria-live="polite">
               <div class="d-flex align-items-center gap-2">
@@ -349,119 +678,67 @@
                   <strong class="text-light" id="activeCommandText">VEHÍCULO DETENIDO</strong>
                 </div>
               </div>
-              <div class="text-end">
-                <span class="small text-secondary d-block">Último Comando:</span>
-                <span class="badge text-bg-dark border border-secondary font-monospace" id="activeCommandId">ID: 12</span>
+              <div class="text-end d-flex flex-column align-items-end gap-1">
+                <div>
+                  <span class="small text-secondary d-block">Último Comando:</span>
+                  <span class="badge text-bg-dark border border-secondary font-monospace" id="activeCommandId">ID: 12</span>
+                </div>
+                <span class="badge text-bg-dark border border-secondary text-secondary" id="controlHardwareBadge" title="Estado físico real del ESP8266 en /ws/dispositivo (independiente del WSS del navegador)">Hardware ESP8266: Sin verificar</span>
               </div>
             </section>
 
             <div class="card bg-body-tertiary border-secondary-subtle shadow-sm joystick-card">
               <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                <span class="fw-semibold text-white small">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1 text-primary" viewBox="0 0 16 16">
-                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zm0 2.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
-                  </svg>
-                  Dirección (Joystick Táctil)
-                </span>
+                <span class="fw-semibold text-white small"><i class="bi bi-joystick me-1 text-primary" aria-hidden="true"></i>Dirección (Joystick Táctil)</span>
                 <span class="badge text-bg-secondary small" id="joystickStateBadge">Listo</span>
               </div>
-
               <div class="card-body p-2 d-flex flex-column align-items-center justify-content-center position-relative">
-                
-                <!-- ÁREA DEL JOYSTICK -->
-                <div
-                  class="joystick-wrapper position-relative"
-                  id="joystickTrack"
-                  role="application"
-                  aria-label="Joystick de dirección para el vehículo IoT. Usa arrastre táctil o las flechas del teclado. Soltar envía detener."
-                  tabindex="0"
-                >
-                  <!-- Anillos y guías cardinales -->
+                <div class="joystick-wrapper position-relative" id="joystickTrack" role="application" aria-label="Joystick de dirección" tabindex="0">
                   <div class="joystick-ring"></div>
                   <div class="joystick-guide joystick-guide--n active" id="joystickGuideN" data-dir="1" title="Avanzar (1)">▲</div>
                   <div class="joystick-guide joystick-guide--s" id="joystickGuideS" data-dir="2" title="Retroceder (2)">▼</div>
-                  <div class="joystick-guide joystick-guide--e" id="joystickGuideE" data-dir="7" title="Avanzar a la derecha (7)">↗</div>
-                  <div class="joystick-guide joystick-guide--w" id="joystickGuideW" data-dir="8" title="Avanzar a la izquierda (8)">↖</div>
+                  <div class="joystick-guide joystick-guide--e" id="joystickGuideE" data-dir="7" title="Avanzar derecha (7)">↗</div>
+                  <div class="joystick-guide joystick-guide--w" id="joystickGuideW" data-dir="8" title="Avanzar izquierda (8)">↖</div>
                   <div class="joystick-deadzone-indicator"></div>
-
-                  <!-- Pomo / Knob móvil -->
-                  <div class="joystick-knob" id="joystickKnob">
-                    <div class="knob-core"></div>
-                  </div>
+                  <div class="joystick-knob" id="joystickKnob"><div class="knob-core"></div></div>
                 </div>
-
-                <!-- Indicador contextual bajo el joystick -->
                 <div class="joystick-hint text-center mt-3">
                   <p class="small text-secondary mb-1 desktop-detail" id="joystickHelpText">
-                    Arrastra o usa <span class="text-info fw-semibold">WASD / flechas</span> (una tecla a la vez). Al soltar, se frena (12).
+                    Arrastra o usa <span class="text-info fw-semibold">WASD / flechas</span>. Al soltar, se frena (12).
                   </p>
-                  <span class="small font-monospace text-muted desktop-detail keyboard-hint">
-                    Espacio o Esc = paro inmediato
-                  </span>
+                  <span class="small font-monospace text-muted desktop-detail keyboard-hint">Espacio o Esc = paro inmediato</span>
                 </div>
               </div>
             </div>
           </section>
 
-          <!-- COLUMNA CENTRO (40%): TARJETAS DE ENERGÍA + DEMOS (SCROLL INTERNO) -->
+          <!-- COLUMNA CENTRO: ENERGÍA + TEMPORIZADOS + DEMOS -->
           <section class="mando-col mando-col-center d-flex flex-column p-2 overflow-hidden" id="centerPanel" aria-label="Energía y demos">
             <div class="mando-center-scroll flex-grow-1">
-              <!-- SECCIÓN 2: ENERGÍA Y AUXILIARES -->
               <div class="card bg-body-tertiary border-secondary-subtle shadow-sm">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
                   <span class="fw-semibold text-white small">Energía y Accesorios</span>
                   <span class="badge text-bg-dark border border-secondary text-secondary">Comandos 9, 10, 13, 14</span>
                 </div>
                 <div class="card-body p-2">
-                  <!-- Contenedor de energía/accesorios: DETENER integrado como botón central -->
                   <div id="energyCommandGrid">
-                    <!-- Luces (9) -->
-                    <button
-                      type="button"
-                      class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center"
-                      data-cmd="9"
-                      id="btnLuces"
-                    >
+                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center" data-cmd="9" id="btnLuces">
                       <i class="bi bi-lightbulb btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Luces</strong>
                     </button>
-                    <!-- Sonido / Claxon (10) -->
-                    <button
-                      type="button"
-                      class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center"
-                      data-cmd="10"
-                      id="btnSonido"
-                    >
+                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center" data-cmd="10" id="btnSonido">
                       <i class="bi bi-megaphone btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Sonido</strong>
                     </button>
-                    <!-- DETENER (12) — botón central de la cuadrícula -->
-                    <button
-                      type="button"
-                      class="btn btn-danger px-2 py-2 d-flex align-items-center justify-content-center stop-emergencia-btn"
-                      id="btnEmergencyStop"
-                      aria-label="Detener vehículo inmediatamente (Comando de paro 12)"
-                    >
+                    <button type="button" class="btn btn-danger px-2 py-2 d-flex align-items-center justify-content-center stop-emergencia-btn" id="btnEmergencyStop" aria-label="Detener vehículo inmediatamente (12)">
                       <i class="bi bi-octagon-fill fs-4" aria-hidden="true"></i>
                       <span class="stop-label">DETENER</span>
                     </button>
-                    <!-- Encender (13) -->
-                    <button
-                      type="button"
-                      class="btn btn-action btn-sm btn-outline-success d-flex flex-column align-items-center justify-content-center"
-                      data-cmd="13"
-                      id="btnEncender"
-                    >
+                    <button type="button" class="btn btn-action btn-sm btn-outline-success d-flex flex-column align-items-center justify-content-center" data-cmd="13" id="btnEncender">
                       <i class="bi bi-lightning-charge btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Encender</strong>
                     </button>
-                    <!-- Apagar (14) con confirmación previa -->
-                    <button
-                      type="button"
-                      class="btn btn-action btn-sm btn-outline-danger d-flex flex-column align-items-center justify-content-center"
-                      data-cmd="14"
-                      id="btnApagar"
-                    >
+                    <button type="button" class="btn btn-action btn-sm btn-outline-danger d-flex flex-column align-items-center justify-content-center" data-cmd="14" id="btnApagar">
                       <i class="bi bi-power btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Apagar</strong>
                     </button>
@@ -469,8 +746,18 @@
                 </div>
               </div>
 
-              <!-- SECCIÓN 3: MÓDULO DE DEMOSTRACIÓN -->
-              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm demo-card" id="demoCard">
+              <!-- MOVIMIENTOS TEMPORIZADOS PERSONALIZADOS DE LA UNIDAD -->
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2" id="timedCommandsCard" hidden>
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold text-white small"><i class="bi bi-stopwatch me-1 text-info" aria-hidden="true"></i>Movimientos Temporizados</span>
+                </div>
+                <div class="card-body p-2">
+                  <div class="d-flex flex-wrap gap-2" id="timedCommandsGrid"></div>
+                </div>
+              </div>
+
+              <!-- RUTINAS DEMO -->
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm demo-card mt-2" id="demoCard">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
                   <div class="d-flex align-items-center gap-2">
                     <span class="demo-header-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span>
@@ -482,21 +769,11 @@
                   <span class="demo-status-pill" id="demoStatusBadge">Inactiva</span>
                 </div>
                 <div class="card-body p-2 demo-card-body">
-                  <!-- Selector dinámico de demos (se llena vía GET /demos) -->
                   <div class="demo-picker">
                     <i class="bi bi-sliders2 demo-picker-icon" aria-hidden="true"></i>
                     <select id="demoSelect" class="form-select form-select-sm demo-select" aria-label="Seleccionar rutina autónoma"></select>
                   </div>
-
-                  <!-- Catálogo interactivo en PC (sincronizado con el selector) -->
-                  <div id="demosListContainer" class="demo-catalog desktop-detail" aria-live="polite">
-                    <div class="demo-loading">
-                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                      <span>Sincronizando rutinas disponibles...</span>
-                    </div>
-                  </div>
-
-                  <!-- Cronología en vivo de la rutina (PC): pasos recibidos por WSS en tiempo real -->
+                  <div id="demosListContainer" class="demo-catalog desktop-detail" aria-live="polite"></div>
                   <section id="demoTimeline" class="demo-timeline desktop-detail" aria-live="polite" aria-label="Movimientos de la rutina en tiempo real">
                     <header class="demo-timeline-head">
                       <span class="demo-live-dot" aria-hidden="true"></span>
@@ -508,23 +785,12 @@
                     <ol id="demoTimelineList" class="demo-timeline-list"></ol>
                     <p id="demoTimelineEmpty" class="demo-timeline-empty">Esperando pasos del vehículo...</p>
                   </section>
-
                   <div class="demo-actions">
-                    <button
-                      type="button"
-                      class="btn demo-btn demo-btn--start"
-                      id="btnIniciarDemo"
-                    >
-                      <i class="bi bi-play-fill" aria-hidden="true"></i>
-                      <span>Ejecutar</span>
+                    <button type="button" class="btn demo-btn demo-btn--start" id="btnIniciarDemo">
+                      <i class="bi bi-play-fill" aria-hidden="true"></i><span>Ejecutar</span>
                     </button>
-                    <button
-                      type="button"
-                      class="btn demo-btn demo-btn--stop"
-                      id="btnCancelarDemo"
-                    >
-                      <i class="bi bi-stop-fill" aria-hidden="true"></i>
-                      <span>Detener</span>
+                    <button type="button" class="btn demo-btn demo-btn--stop" id="btnCancelarDemo">
+                      <i class="bi bi-stop-fill" aria-hidden="true"></i><span>Detener</span>
                     </button>
                   </div>
                 </div>
@@ -532,30 +798,26 @@
             </div>
           </section>
 
-          <!-- COLUMNA DERECHA (30%): TARJETA DE CONTROL DE MAQUINARIA (D-PAD) -->
+          <!-- COLUMNA DERECHA: D-PAD (cableado 3/4 intacto) -->
           <section class="mando-col mando-col-right d-flex flex-column p-2" id="dpadPanel" aria-label="Control de cruceta D-Pad">
             <div class="card bg-body-tertiary border-secondary-subtle shadow-sm h-100">
               <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                <span class="fw-semibold text-white small">Control de Máquinaria</span>
+                <span class="fw-semibold text-white small">Control de Maquinaria</span>
                 <span class="badge text-bg-dark border border-secondary text-secondary">Pala · Rotación</span>
               </div>
               <div class="card-body p-2 d-flex align-items-center justify-content-center">
                 <div class="dpad-container" id="dpadGrid" role="group" aria-label="Cruceta de control D-Pad">
-                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)" title="Alzar pala (mantener presionado)">
-                    <i class="bi bi-arrow-bar-up btn-icon" aria-hidden="true"></i>
-                    <span class="dpad-label">Alzar</span>
+                  <button type="button" class="btn btn-action dpad-btn dpad-up" data-cmd="5" id="btnPalaSubir" aria-label="Alzar pala (CMD 5)">
+                    <i class="bi bi-arrow-bar-up btn-icon" aria-hidden="true"></i><span class="dpad-label">Alzar</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)" title="Girar a la izquierda (mantener presionado)">
-                    <i class="bi bi-arrow-counterclockwise btn-icon" aria-hidden="true"></i>
-                    <span class="dpad-label">Izq.</span>
+                  <button type="button" class="btn btn-action dpad-btn dpad-left" data-cmd="3" id="btnGirarIzq" aria-label="Girar izquierda (CMD 3)">
+                    <i class="bi bi-arrow-counterclockwise btn-icon" aria-hidden="true"></i><span class="dpad-label">Izq.</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)" title="Bajar pala (mantener presionado)">
-                    <i class="bi bi-arrow-bar-down btn-icon" aria-hidden="true"></i>
-                    <span class="dpad-label">Bajar</span>
+                  <button type="button" class="btn btn-action dpad-btn dpad-down" data-cmd="6" id="btnPalaBajar" aria-label="Bajar pala (CMD 6)">
+                    <i class="bi bi-arrow-bar-down btn-icon" aria-hidden="true"></i><span class="dpad-label">Bajar</span>
                   </button>
-                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)" title="Girar a la derecha (mantener presionado)">
-                    <i class="bi bi-arrow-clockwise btn-icon" aria-hidden="true"></i>
-                    <span class="dpad-label">Der.</span>
+                  <button type="button" class="btn btn-action dpad-btn dpad-right" data-cmd="4" id="btnGirarDer" aria-label="Girar derecha (CMD 4)">
+                    <i class="bi bi-arrow-clockwise btn-icon" aria-hidden="true"></i><span class="dpad-label">Der.</span>
                   </button>
                 </div>
               </div>
@@ -564,28 +826,20 @@
         </div>
       </section>
 
-      <!-- VISTA DE MONITOREO: NOMBRE DEL VEHÍCULO + TARJETA ÚLTIMO MOVIMIENTO + TABLA HISTORIAL -->
-      <section id="monitorView" class="monitor-view" aria-label="Panel de monitoreo y telemetría del vehículo">
+      <!-- VISTA DE MONITOREO (4.2 conservada intacta) -->
+      <section id="monitorView" class="monitor-view" aria-label="Panel de monitoreo y telemetría" hidden>
         <div class="container-fluid px-2 py-2">
-
-          <!-- NOMBRE DEL VEHÍCULO -->
           <div class="d-flex align-items-center justify-content-between gap-2 mb-2 monitor-vehicle-head">
             <div class="d-flex align-items-center gap-2 min-w-0">
-              <span class="monitor-vehicle-icon" aria-hidden="true">
-                <i class="bi bi-cargo"></i>
-              </span>
+              <span class="monitor-vehicle-icon" aria-hidden="true"><i class="bi bi-activity"></i></span>
               <div class="min-w-0">
-                <h2 class="h6 mb-0 text-white fw-bold text-truncate">Grúa RC IoT · Vehículo #1</h2>
+                <h2 class="h6 mb-0 text-white fw-bold text-truncate" id="monitorVehicleTitle">Grúa RC IoT · Vehículo #1</h2>
                 <small class="text-secondary">Panel de monitoreo · Telemetría en tiempo real</small>
               </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-info"
-                id="btnRefreshMonitor"
-                title="Actualizar datos del panel de monitoreo"
-              >
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span class="badge text-bg-dark border border-secondary text-secondary" id="monitorHardwareBadge" title="Estado físico real del ESP8266 (independiente del WSS del navegador)">Hardware ESP8266: Sin verificar</span>
+              <button type="button" class="btn btn-sm btn-outline-info" id="btnRefreshMonitor">
                 <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                 <span class="d-none d-sm-inline ms-1">Actualizar</span>
               </button>
@@ -593,12 +847,14 @@
             </div>
           </div>
 
-          <!-- TARJETA DESTACADA: ÚLTIMO MOVIMIENTO (GET al abrir / WSS en tiempo real) -->
+          <div class="alert alert-warning py-2 small mb-2" id="monitorAccessNotice" role="alert" hidden>
+            <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+            <span id="monitorAccessNoticeText"></span>
+          </div>
+
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-last-movement" id="monitorLastMovementCard">
             <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small">
-                <i class="bi bi-clock-history me-1" aria-hidden="true"></i>Último Movimiento
-              </span>
+              <span class="fw-semibold text-white small"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Último Movimiento</span>
               <span class="badge text-bg-dark border border-secondary monitor-last-status" id="monitorLastMovementStatus">Sin datos</span>
             </div>
             <div class="card-body p-2">
@@ -609,31 +865,22 @@
                 </div>
                 <div class="col-12 col-md-7">
                   <dl class="row g-2 small text-secondary mb-0 monitor-last-facts">
-                    <div class="col-6">
-                      <dt class="d-inline">Fecha:</dt>
-                      <dd class="d-inline font-monospace text-white" id="monitorLastFecha">—</dd>
-                    </div>
-                    <div class="col-6">
-                      <dt class="d-inline">Hora:</dt>
-                      <dd class="d-inline font-monospace text-white" id="monitorLastHora">—</dd>
-                    </div>
+                    <div class="col-6"><dt class="d-inline">Fecha:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastFecha">—</dd></div>
+                    <div class="col-6"><dt class="d-inline">Hora:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastHora">—</dd></div>
                   </dl>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- TABLA SEMÁNTICA DE ÚLTIMOS 10 MOVIMIENTOS INDIVIDUALES PERSISTIDOS -->
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
             <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small">
-                <i class="bi bi-list-check me-1" aria-hidden="true"></i>Historial de Movimientos
-              </span>
+              <span class="fw-semibold text-white small"><i class="bi bi-list-check me-1" aria-hidden="true"></i>Historial de Movimientos (Máx. 10)</span>
               <span class="badge text-bg-dark border border-secondary" id="monitorHistorialCount">0 movimientos</span>
             </div>
             <div class="card-body p-2">
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" id="monitorHistorialTable" aria-label="Historial de los últimos diez movimientos del vehículo">
+                <table class="table table-sm table-hover align-middle monitor-table" id="monitorHistorialTable">
                   <thead>
                     <tr>
                       <th scope="col" class="text-center" style="width: 12%;">#</th>
@@ -646,23 +893,19 @@
                 </table>
               </div>
               <div class="monitor-empty-state text-center py-3" id="monitorHistorialEmpty">
-                <span class="spinner-border spinner-border-sm text-secondary me-2" role="status" aria-hidden="true"></span>
-                <span class="small text-secondary monitor-empty-text" id="monitorHistorialEmptyText">Consultando historial de movimientos…</span>
+                <span class="small text-secondary monitor-empty-text">Consultando historial…</span>
               </div>
             </div>
           </div>
 
-          <!-- CATÁLOGO DE COMANDOS REGISTRADOS EN LA API -->
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
             <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small">
-                <i class="bi bi-cpu me-1" aria-hidden="true"></i>Catálogo de Comandos de la API
-              </span>
+              <span class="fw-semibold text-white small"><i class="bi bi-cpu me-1" aria-hidden="true"></i>Catálogo de Comandos de la Unidad</span>
               <span class="badge text-bg-dark border border-secondary" id="monitorComandosCount">0 comandos</span>
             </div>
             <div class="card-body p-2">
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" id="monitorComandosTable" aria-label="Catálogo de comandos soportados por la API">
+                <table class="table table-sm table-hover align-middle monitor-table" id="monitorComandosTable">
                   <thead>
                     <tr>
                       <th scope="col" class="text-center" style="width: 12%;">CMD</th>
@@ -675,76 +918,253 @@
                 </table>
               </div>
               <div class="monitor-empty-state text-center py-3" id="monitorComandosEmpty">
-                <span class="spinner-border spinner-border-sm text-secondary me-2" role="status" aria-hidden="true"></span>
-                <span class="small text-secondary monitor-empty-text" id="monitorComandosEmptyText">Consultando catálogo de comandos…</span>
+                <span class="small text-secondary monitor-empty-text">Consultando catálogo…</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- VISTA DE ADMINISTRACIÓN (oculta por defecto; acceso protegido por contraseña visual) -->
-      <section id="adminView" class="admin-view" aria-label="Panel de administración">
+      <!-- VISTA DE ADMINISTRACIÓN 4.3 (solo rol ADMIN autenticado por JWT) -->
+      <section id="adminView" class="admin-view" aria-label="Panel de administración" hidden>
         <div class="container-fluid px-2 py-2">
-
           <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-2">
             <div class="card-body p-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
               <div class="d-flex align-items-center gap-2">
-                <span class="monitor-vehicle-icon" aria-hidden="true"><i class="bi bi-gear-fill"></i></span>
+                <span class="monitor-vehicle-icon" aria-hidden="true"><i class="bi bi-speedometer2"></i></span>
                 <div>
-                  <h2 class="h6 mb-0 text-white fw-bold">Administración</h2>
-                  <small class="text-secondary">Vehículos, comandos, demos y pasos de demo</small>
+                  <h2 class="h6 mb-0 text-white fw-bold">Administración Comercial IoT</h2>
+                  <small class="text-secondary">Dashboard, modelos, unidades, clientes, comandos, demos y auditoría</small>
                 </div>
               </div>
               <div class="d-flex align-items-center gap-2">
-                <label for="adminVehiculoSelect" class="small text-secondary mb-0 text-nowrap">Vehículo:</label>
-                <select id="adminVehiculoSelect" class="form-select form-select-sm admin-select" aria-label="Vehículo activo para administrar"></select>
+                <label for="adminVehiculoSelect" class="small text-secondary mb-0 text-nowrap">Unidad activa:</label>
+                <select id="adminVehiculoSelect" class="form-select form-select-sm admin-select"></select>
               </div>
             </div>
           </div>
 
           <ul class="nav nav-tabs admin-tabs" role="tablist">
             <li class="nav-item" role="presentation">
-              <button class="nav-link active" id="adminTabVehiculos" data-bs-toggle="tab" data-bs-target="#adminPaneVehiculos" type="button" role="tab" aria-controls="adminPaneVehiculos" aria-selected="true">
-                <i class="bi bi-cpu me-1" aria-hidden="true"></i>Vehículos
+              <button class="nav-link active" id="adminTabDashboard" data-bs-toggle="tab" data-bs-target="#adminPaneDashboard" type="button" role="tab">
+                <i class="bi bi-graph-up me-1" aria-hidden="true"></i>Dashboard
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" id="adminTabComandos" data-bs-toggle="tab" data-bs-target="#adminPaneComandos" type="button" role="tab" aria-controls="adminPaneComandos" aria-selected="false">
+              <button class="nav-link" id="adminTabModelos" data-bs-toggle="tab" data-bs-target="#adminPaneModelos" type="button" role="tab">
+                <i class="bi bi-boxes me-1" aria-hidden="true"></i>Modelos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabVehiculos" data-bs-toggle="tab" data-bs-target="#adminPaneVehiculos" type="button" role="tab">
+                <i class="bi bi-truck me-1" aria-hidden="true"></i>Unidades
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabUsuarios" data-bs-toggle="tab" data-bs-target="#adminPaneUsuarios" type="button" role="tab">
+                <i class="bi bi-people me-1" aria-hidden="true"></i>Clientes
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabComandos" data-bs-toggle="tab" data-bs-target="#adminPaneComandos" type="button" role="tab">
                 <i class="bi bi-terminal me-1" aria-hidden="true"></i>Comandos
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" id="adminTabDemos" data-bs-toggle="tab" data-bs-target="#adminPaneDemos" type="button" role="tab" aria-controls="adminPaneDemos" aria-selected="false">
+              <button class="nav-link" id="adminTabDemos" data-bs-toggle="tab" data-bs-target="#adminPaneDemos" type="button" role="tab">
                 <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Demos
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" id="adminTabPasos" data-bs-toggle="tab" data-bs-target="#adminPanePasos" type="button" role="tab" aria-controls="adminPanePasos" aria-selected="false">
-                <i class="bi bi-list-ol me-1" aria-hidden="true"></i>Pasos de Demo
+              <button class="nav-link" id="adminTabPasos" data-bs-toggle="tab" data-bs-target="#adminPanePasos" type="button" role="tab">
+                <i class="bi bi-list-ol me-1" aria-hidden="true"></i>Pasos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="adminTabAuditoria" data-bs-toggle="tab" data-bs-target="#adminPaneAuditoria" type="button" role="tab">
+                <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Auditoría
               </button>
             </li>
           </ul>
 
           <div class="tab-content card bg-body-tertiary border-secondary-subtle border-top-0 shadow-sm">
-            <!-- SECCIÓN: VEHÍCULOS -->
-            <div class="tab-pane fade show active p-2" id="adminPaneVehiculos" role="tabpanel" aria-labelledby="adminTabVehiculos" tabindex="0">
+
+            <!-- PESTAÑA 1: DASHBOARD -->
+            <div class="tab-pane fade show active p-2" id="adminPaneDashboard" role="tabpanel">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="small text-secondary">Registros de vehículos</span>
+                <span class="small text-secondary">Métricas reales en vivo desde Amazon RDS</span>
+                <button type="button" class="btn btn-sm btn-outline-info" id="btnRefreshDashboard">
+                  <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
+                </button>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">Modelos activos</span>
+                    <strong class="kpi-value text-info" id="kpiModelosActivos">0 / 0</strong>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">Unidades total</span>
+                    <strong class="kpi-value text-white" id="kpiVehiculosTotal">0</strong>
+                    <small class="text-secondary d-block" style="font-size:0.7rem;">
+                      Disp: <span id="kpiVehDisponible">0</span> · Exh: <span id="kpiVehExhibicion">0</span> · Vend: <span id="kpiVehVendido">0</span> · Inact: <span id="kpiVehInactivo">0</span>
+                    </small>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">Clientes activos</span>
+                    <strong class="kpi-value text-success" id="kpiClientesActivos">0</strong>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">Sesiones invitado</span>
+                    <strong class="kpi-value text-primary" id="kpiSesionesInvitado">0</strong>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">Soportes vigentes</span>
+                    <strong class="kpi-value text-warning" id="kpiSoportesActivos">0</strong>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                  <div class="kpi-card p-2 rounded bg-dark border border-secondary-subtle">
+                    <span class="kpi-label">ESP8266 en línea</span>
+                    <strong class="kpi-value text-info" id="kpiDispositivosOnline">0</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row g-2">
+                <div class="col-12 col-lg-6">
+                  <div class="card bg-dark border-secondary-subtle">
+                    <div class="card-header py-2 small fw-semibold text-white">Sesiones de Invitado Activas</div>
+                    <div class="card-body p-2">
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Sesión</th><th>Unidad</th><th>Visitante</th><th class="text-center">Restante</th><th class="text-end">Acciones</th></tr></thead>
+                          <tbody id="dashSesionesBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="card bg-dark border-secondary-subtle">
+                    <div class="card-header py-2 small fw-semibold text-white">Autorizaciones de Soporte Vigentes</div>
+                    <div class="card-body p-2">
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Unidad</th><th>Propietario</th><th>Motivo</th><th class="text-center">Expira</th></tr></thead>
+                          <tbody id="dashSoportesBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="card bg-dark border-secondary-subtle">
+                    <div class="card-header py-2 small fw-semibold text-white">Últimos 10 Eventos de Auditoría</div>
+                    <div class="card-body p-2">
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Fecha/Hora</th><th class="text-center">Rol</th><th>Acción</th><th>Recurso</th><th class="text-center">Resultado</th></tr></thead>
+                          <tbody id="dashAuditoriaBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PESTAÑA 2: MODELOS Y CAPACIDADES -->
+            <div class="tab-pane fade p-2" id="adminPaneModelos" role="tabpanel">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Catálogo comercial de modelos</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="modelo">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nuevo modelo
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive mb-3">
+                <table class="table table-sm table-hover align-middle monitor-table">
+                  <thead>
+                    <tr>
+                      <th class="text-center">ID</th>
+                      <th>Código</th>
+                      <th>Nombre Comercial</th>
+                      <th>Descripción</th>
+                      <th class="text-center">Estado</th>
+                      <th class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminModelosBody"></tbody>
+                </table>
+              </div>
+
+              <div class="card bg-dark border-secondary-subtle" id="adminCapacidadesCard">
+                <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1 min-w-0">
+                    <span class="small fw-semibold text-white">Capacidades físicas del modelo:</span>
+                    <select id="adminModeloCapSelect" class="form-select form-select-sm admin-select"></select>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="btnAdminNuevaCapacidad" data-accion="nuevo" data-tipo="capacidad" disabled>
+                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva capacidad
+                  </button>
+                </div>
+                <div class="card-body p-2">
+                  <div class="table-responsive monitor-table-responsive">
+                    <table class="table table-sm table-hover align-middle monitor-table mb-0">
+                      <thead>
+                        <tr>
+                          <th class="text-center">Cód. Físico</th>
+                          <th>Nombre Base</th>
+                          <th class="text-center">Temporizado</th>
+                          <th class="text-center">Invitado Default</th>
+                          <th class="text-center">Estado</th>
+                          <th class="text-end">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody id="adminCapacidadesBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PESTAÑA 3: UNIDADES FÍSICAS (VEHÍCULOS) -->
+            <div class="tab-pane fade p-2" id="adminPaneVehiculos" role="tabpanel">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <label for="adminFiltroEstadoVehiculo" class="small text-secondary mb-0">Estado:</label>
+                  <select id="adminFiltroEstadoVehiculo" class="form-select form-select-sm admin-filter-select">
+                    <option value="">Todos</option>
+                    <option value="DISPONIBLE">DISPONIBLE</option>
+                    <option value="EXHIBICION">EXHIBICION</option>
+                    <option value="VENDIDO">VENDIDO</option>
+                    <option value="INACTIVO">INACTIVO</option>
+                  </select>
+                </div>
                 <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="vehiculo">
-                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva unidad
                 </button>
               </div>
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de vehículos">
+                <table class="table table-sm table-hover align-middle monitor-table">
                   <thead>
                     <tr>
-                      <th scope="col" class="text-center">ID</th>
-                      <th scope="col">Nombre</th>
-                      <th scope="col">Modelo</th>
-                      <th scope="col">Microcontrolador</th>
-                      <th scope="col" class="text-center">Estado</th>
-                      <th scope="col" class="text-end">Acciones</th>
+                      <th class="text-center">ID</th>
+                      <th>Nombre</th>
+                      <th>Modelo</th>
+                      <th>No. Serie</th>
+                      <th>Propietario</th>
+                      <th class="text-center">Comercial</th>
+                      <th class="text-center">Activo</th>
+                      <th class="text-end">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="adminVehiculosBody"></tbody>
@@ -752,24 +1172,50 @@
               </div>
             </div>
 
-            <!-- SECCIÓN: COMANDOS -->
-            <div class="tab-pane fade p-2" id="adminPaneComandos" role="tabpanel" aria-labelledby="adminTabComandos" tabindex="0">
+            <!-- PESTAÑA 4: CLIENTES / USUARIOS -->
+            <div class="tab-pane fade p-2" id="adminPaneUsuarios" role="tabpanel">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="small text-secondary">Comandos del vehículo seleccionado</span>
-                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="comando">
-                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                <span class="small text-secondary">Cuentas registradas (contraseñas protegidas con bcrypt)</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="usuario">
+                  <i class="bi bi-person-plus me-1" aria-hidden="true"></i>Nuevo usuario
                 </button>
               </div>
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de comandos">
+                <table class="table table-sm table-hover align-middle monitor-table">
                   <thead>
                     <tr>
-                      <th scope="col" class="text-center">ID</th>
-                      <th scope="col" class="text-center">Código</th>
-                      <th scope="col">Nombre</th>
-                      <th scope="col">Descripción</th>
-                      <th scope="col" class="text-center">Estado</th>
-                      <th scope="col" class="text-end">Acciones</th>
+                      <th class="text-center">ID</th>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th class="text-center">Rol</th>
+                      <th class="text-center">Estado</th>
+                      <th class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminUsuariosBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- PESTAÑA 5: COMANDOS V2 (BASE vs TEMPORIZADOS) -->
+            <div class="tab-pane fade p-2" id="adminPaneComandos" role="tabpanel">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Comandos de la unidad seleccionada (base continuos vs temporizados)</span>
+                <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="comando">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nuevo comando
+                </button>
+              </div>
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table">
+                  <thead>
+                    <tr>
+                      <th class="text-center">Cód. Lógico</th>
+                      <th class="text-center">Cód. Físico</th>
+                      <th>Nombre</th>
+                      <th class="text-center">Tipo / Duración</th>
+                      <th class="text-center">Invitado</th>
+                      <th class="text-center">Estado</th>
+                      <th class="text-end">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="adminComandosBody"></tbody>
@@ -777,23 +1223,24 @@
               </div>
             </div>
 
-            <!-- SECCIÓN: DEMOS -->
-            <div class="tab-pane fade p-2" id="adminPaneDemos" role="tabpanel" aria-labelledby="adminTabDemos" tabindex="0">
+            <!-- PESTAÑA 6: DEMOS DE FÁBRICA -->
+            <div class="tab-pane fade p-2" id="adminPaneDemos" role="tabpanel">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="small text-secondary">Demos del vehículo seleccionado</span>
+                <span class="small text-secondary">Demos de fábrica de la unidad (las demos PRIVADA son de solo lectura)</span>
                 <button type="button" class="btn btn-sm btn-primary" data-accion="nuevo" data-tipo="demo">
-                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva demo fábrica
                 </button>
               </div>
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de demos">
+                <table class="table table-sm table-hover align-middle monitor-table">
                   <thead>
                     <tr>
-                      <th scope="col" class="text-center">ID</th>
-                      <th scope="col">Nombre</th>
-                      <th scope="col">Descripción</th>
-                      <th scope="col" class="text-center">Estado</th>
-                      <th scope="col" class="text-end">Acciones</th>
+                      <th class="text-center">ID</th>
+                      <th>Nombre</th>
+                      <th class="text-center">Tipo</th>
+                      <th>Descripción</th>
+                      <th class="text-center">Estado</th>
+                      <th class="text-end">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="adminDemosBody"></tbody>
@@ -801,32 +1248,114 @@
               </div>
             </div>
 
-            <!-- SECCIÓN: PASOS DE DEMO -->
-            <div class="tab-pane fade p-2" id="adminPanePasos" role="tabpanel" aria-labelledby="adminTabPasos" tabindex="0">
+            <!-- PESTAÑA 7: PASOS DE DEMO -->
+            <div class="tab-pane fade p-2" id="adminPanePasos" role="tabpanel">
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2">
-                  <label for="adminDemoSelect" class="small text-secondary mb-0 text-nowrap">Demo:</label>
-                  <select id="adminDemoSelect" class="form-select form-select-sm admin-select" aria-label="Demo cuyos pasos se administran"></select>
+                <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1 min-w-0">
+                  <label for="adminDemoSelect" class="small text-secondary mb-0">Demo:</label>
+                  <select id="adminDemoSelect" class="form-select form-select-sm admin-select"></select>
                 </div>
                 <button type="button" class="btn btn-sm btn-primary" id="btnAdminNuevoPaso" data-accion="nuevo" data-tipo="paso" disabled>
-                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar nuevo
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar paso
                 </button>
               </div>
               <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" aria-label="Tabla de pasos de demo">
+                <table class="table table-sm table-hover align-middle monitor-table">
                   <thead>
                     <tr>
-                      <th scope="col" class="text-center">Orden</th>
-                      <th scope="col">Comando</th>
-                      <th scope="col" class="text-center">Duración</th>
-                      <th scope="col" class="text-center">Pausa</th>
-                      <th scope="col" class="text-end">Acciones</th>
+                      <th class="text-center">Orden</th>
+                      <th>Comando</th>
+                      <th class="text-center">Duración</th>
+                      <th class="text-center">Pausa</th>
+                      <th class="text-end">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="adminPasosBody"></tbody>
                 </table>
               </div>
             </div>
+
+            <!-- PESTAÑA 8: BITÁCORA DE AUDITORÍA -->
+            <div class="tab-pane fade p-2" id="adminPaneAuditoria" role="tabpanel">
+              <form id="formFiltrosAuditoria" class="row g-2 align-items-end mb-3">
+                <div class="col-6 col-md-2">
+                  <label for="audFechaDesde" class="form-label small text-secondary mb-1">Desde</label>
+                  <input type="date" id="audFechaDesde" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="audFechaHasta" class="form-label small text-secondary mb-1">Hasta</label>
+                  <input type="date" id="audFechaHasta" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="audRol" class="form-label small text-secondary mb-1">Rol</label>
+                  <select id="audRol" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="USUARIO">USUARIO</option>
+                    <option value="INVITADO">INVITADO</option>
+                    <option value="SISTEMA">SISTEMA</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="audResultado" class="form-label small text-secondary mb-1">Resultado</label>
+                  <select id="audResultado" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="EXITO">EXITO</option>
+                    <option value="DENEGADO">DENEGADO</option>
+                    <option value="ERROR">ERROR</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="audAccion" class="form-label small text-secondary mb-1">Acción</label>
+                  <input type="text" id="audAccion" class="form-control form-control-sm" placeholder="LOGIN, CREAR..." />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="audRecurso" class="form-label small text-secondary mb-1">Recurso</label>
+                  <select id="audRecurso" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="AUTH">AUTH</option>
+                    <option value="VEHICULO">VEHICULO</option>
+                    <option value="MODELO">MODELO</option>
+                    <option value="COMANDO">COMANDO</option>
+                    <option value="DEMO">DEMO</option>
+                    <option value="USUARIO">USUARIO</option>
+                    <option value="SESION_INVITADO">SESION_INVITADO</option>
+                    <option value="AUTORIZACION_SOPORTE">AUTORIZACION_SOPORTE</option>
+                    <option value="RBAC">RBAC</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-2 d-flex gap-1">
+                  <button type="submit" class="btn btn-sm btn-info flex-fill">Filtrar</button>
+                  <button type="button" id="btnAudLimpiar" class="btn btn-sm btn-outline-secondary">Limpiar</button>
+                </div>
+              </form>
+
+              <div class="table-responsive monitor-table-responsive">
+                <table class="table table-sm table-hover align-middle monitor-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha/Hora</th>
+                      <th>Actor</th>
+                      <th class="text-center">Rol</th>
+                      <th>Acción</th>
+                      <th>Recurso</th>
+                      <th class="text-center">Resultado</th>
+                      <th>Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminAuditoriaBody"></tbody>
+                </table>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <small class="text-secondary" id="audPaginacionInfo">0 eventos</small>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-secondary" id="btnAudPrev" disabled>Anterior</button>
+                  <button type="button" class="btn btn-outline-secondary" id="btnAudNext" disabled>Siguiente</button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
@@ -834,44 +1363,128 @@
 
     <!-- MODALES DE ADMINISTRACIÓN -->
 
-    <!-- Contraseña visual de acceso a Administración -->
-    <div class="modal fade" id="modalAdminPassword" tabindex="-1" aria-labelledby="modalAdminPasswordTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <form class="modal-content" id="formAdminPassword" novalidate>
+    <!-- Modelo -->
+    <div class="modal fade" id="modalModelo" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formModelo" novalidate>
           <div class="modal-header">
-            <h2 class="modal-title h6" id="modalAdminPasswordTitulo">Acceso a Administración</h2>
+            <h2 class="modal-title h6" id="modalModeloTitulo">Nuevo modelo</h2>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
-            <label for="adminPasswordInput" class="form-label small text-secondary">Contraseña</label>
-            <input type="password" class="form-control" id="adminPasswordInput" name="password" autocomplete="off" required />
-            <div class="invalid-feedback" id="adminPasswordError" hidden>Contraseña incorrecta.</div>
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="modeloCodigo" class="form-label small">Código de modelo <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="modeloCodigo" name="codigo_modelo" maxlength="40" required />
+            </div>
+            <div class="mb-2">
+              <label for="modeloNombre" class="form-label small">Nombre comercial <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="modeloNombre" name="nombre_comercial" maxlength="100" required />
+            </div>
+            <div class="mb-2">
+              <label for="modeloDescripcion" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="modeloDescripcion" name="descripcion" rows="2" maxlength="255"></textarea>
+            </div>
+            <div class="mb-2">
+              <label for="modeloUrlImagen" class="form-label small">URL de imagen (opcional)</label>
+              <input type="url" class="form-control form-control-sm" id="modeloUrlImagen" name="url_imagen" maxlength="512" />
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="modeloActivo" name="activo" checked />
+              <label class="form-check-label small" for="modeloActivo">Activo</label>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-primary btn-sm">Entrar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Vehículo: crear / editar -->
-    <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-labelledby="modalVehiculoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <!-- Capacidad física de modelo -->
+    <div class="modal fade" id="modalCapacidad" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formCapacidad" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalCapacidadTitulo">Nueva capacidad</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="row g-2 mb-2">
+              <div class="col-5">
+                <label for="capCodigoFisico" class="form-label small">Cód. físico <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="capCodigoFisico" name="codigo_fisico" min="1" required />
+              </div>
+              <div class="col-7">
+                <label for="capNombreBase" class="form-label small">Nombre base <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="capNombreBase" name="nombre_base" maxlength="60" required />
+              </div>
+            </div>
+            <div class="mb-2">
+              <label for="capDescripcion" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="capDescripcion" name="descripcion" rows="2" maxlength="255"></textarea>
+            </div>
+            <div class="form-check form-switch mb-1">
+              <input class="form-check-input" type="checkbox" id="capPermiteTemp" name="permite_temporizado" checked />
+              <label class="form-check-label small" for="capPermiteTemp">Admite movimientos temporizados</label>
+            </div>
+            <div class="form-check form-switch mb-1">
+              <input class="form-check-input" type="checkbox" id="capPermiteInv" name="permitido_invitado_default" />
+              <label class="form-check-label small" for="capPermiteInv">Permitido a invitados por defecto</label>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="capActivo" name="activo" checked />
+              <label class="form-check-label small" for="capActivo">Activo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Vehículo / Unidad física -->
+    <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formVehiculo" novalidate>
           <div class="modal-header">
-            <h2 class="modal-title h6" id="modalVehiculoTitulo">Nuevo vehículo</h2>
+            <h2 class="modal-title h6" id="modalVehiculoTitulo">Nueva unidad física</h2>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
             <input type="hidden" name="id" />
             <div class="mb-2">
               <label for="vehiculoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm" id="vehiculoNombre" name="nombre" maxlength="100" required />
+              <input type="text" class="form-control form-control-sm" id="vehiculoNombre" name="nombre" maxlength="80" required />
             </div>
-            <div class="mb-2">
-              <label for="vehiculoModelo" class="form-label small">Modelo <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm" id="vehiculoModelo" name="modelo" maxlength="50" required />
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label for="vehiculoIdModelo" class="form-label small">Modelo (catálogo)</label>
+                <select class="form-select form-select-sm" id="vehiculoIdModelo" name="id_modelo"></select>
+              </div>
+              <div class="col-6">
+                <label for="vehiculoModelo" class="form-label small">Etiqueta modelo</label>
+                <input type="text" class="form-control form-control-sm" id="vehiculoModelo" name="modelo" maxlength="80" />
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label for="vehiculoSerie" class="form-label small">Número de serie</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="vehiculoSerie" name="numero_serie" maxlength="64" />
+              </div>
+              <div class="col-6">
+                <label for="vehiculoEstadoComercial" class="form-label small">Estado comercial</label>
+                <select class="form-select form-select-sm" id="vehiculoEstadoComercial" name="estado_comercial">
+                  <option value="DISPONIBLE">DISPONIBLE</option>
+                  <option value="EXHIBICION">EXHIBICION</option>
+                  <option value="VENDIDO">VENDIDO</option>
+                  <option value="INACTIVO">INACTIVO</option>
+                </select>
+              </div>
             </div>
             <div class="mb-2">
               <label for="vehiculoMicro" class="form-label small">Microcontrolador</label>
@@ -879,7 +1492,7 @@
             </div>
             <div class="mb-2">
               <label for="vehiculoDescripcion" class="form-label small">Descripción</label>
-              <textarea class="form-control form-control-sm" id="vehiculoDescripcion" name="descripcion" rows="2"></textarea>
+              <textarea class="form-control form-control-sm" id="vehiculoDescripcion" name="descripcion" rows="2" maxlength="255"></textarea>
             </div>
             <div class="form-check form-switch" id="wrapActivoVehiculo">
               <input class="form-check-input" type="checkbox" id="vehiculoActivo" name="activo" />
@@ -894,9 +1507,113 @@
       </div>
     </div>
 
-    <!-- Comando: crear / editar -->
-    <div class="modal fade" id="modalComando" tabindex="-1" aria-labelledby="modalComandoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <!-- Asignar / Reasignar propietario -->
+    <div class="modal fade" id="modalAsignarPropietario" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formAsignarPropietario" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6">Asignar / Reasignar Propietario</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id_vehiculo" />
+            <p class="small text-info mb-2" id="asignarVehiculoNombre"></p>
+            <div class="mb-2">
+              <label for="asignarPropietarioSelect" class="form-label small">Cliente propietario</label>
+              <select class="form-select form-select-sm" id="asignarPropietarioSelect" name="id_nuevo_propietario"></select>
+            </div>
+            <div class="mb-2">
+              <label for="asignarEstadoComercial" class="form-label small">Nuevo estado comercial</label>
+              <select class="form-select form-select-sm" id="asignarEstadoComercial" name="nuevo_estado_comercial">
+                <option value="VENDIDO">VENDIDO</option>
+                <option value="DISPONIBLE">DISPONIBLE</option>
+                <option value="EXHIBICION">EXHIBICION</option>
+                <option value="INACTIVO">INACTIVO</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label for="asignarMotivo" class="form-label small">Motivo</label>
+              <input type="text" class="form-control form-control-sm" id="asignarMotivo" name="motivo" maxlength="255" placeholder="Venta directa / Reasignación / Devolución" />
+            </div>
+            <div class="form-text small">Al reasignar, las autorizaciones de soporte previas se revocan automáticamente y queda trazado en auditoría.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-warning btn-sm text-dark fw-semibold">Confirmar asignación</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Historial de propietarios -->
+    <div class="modal fade" id="modalPropHistorial" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalPropHistorialTitulo">Historial de propietarios</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body p-2">
+            <div class="table-responsive monitor-table-responsive">
+              <table class="table table-sm align-middle monitor-table mb-0">
+                <thead>
+                  <tr><th>Fecha</th><th>Anterior</th><th>Nuevo</th><th>Asignado por</th><th>Motivo</th></tr>
+                </thead>
+                <tbody id="adminPropHistorialBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usuario / Cliente -->
+    <div class="modal fade" id="modalUsuario" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUsuario" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUsuarioTitulo">Nuevo usuario</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="usuarioNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="usuarioNombre" name="nombre" maxlength="100" required />
+            </div>
+            <div class="mb-2">
+              <label for="usuarioCorreo" class="form-label small">Correo electrónico <span class="text-danger">*</span></label>
+              <input type="email" class="form-control form-control-sm" id="usuarioCorreo" name="correo" maxlength="150" required />
+            </div>
+            <div class="mb-2">
+              <label for="usuarioRol" class="form-label small">Rol <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="usuarioRol" name="rol">
+                <option value="USUARIO">USUARIO (Comprador)</option>
+                <option value="ADMIN">ADMIN (Empresa)</option>
+                <option value="INVITADO">INVITADO (Sistema)</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label for="usuarioPassword" class="form-label small">Contraseña</label>
+              <input type="password" class="form-control form-control-sm" id="usuarioPassword" name="password" autocomplete="new-password" />
+              <div class="form-text small" id="usuarioPasswordHint"></div>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="usuarioActivo" name="activo" checked />
+              <label class="form-check-label small" for="usuarioActivo">Activo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Comando v2 (Base vs Temporizado) -->
+    <div class="modal fade" id="modalComando" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formComando" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo comando</h2>
@@ -906,15 +1623,33 @@
             <input type="hidden" name="id" />
             <div class="mb-2">
               <label for="comandoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm" id="comandoNombre" name="nombre" maxlength="100" required />
+              <input type="text" class="form-control form-control-sm" id="comandoNombre" name="nombre" maxlength="60" required />
             </div>
-            <div class="mb-2">
-              <label for="comandoCodigo" class="form-label small">Código <span class="text-danger">*</span></label>
-              <input type="number" class="form-control form-control-sm" id="comandoCodigo" name="codigo" min="1" step="1" required />
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label for="comandoCodigo" class="form-label small">Código lógico <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="comandoCodigo" name="codigo" min="1" required />
+              </div>
+              <div class="col-6">
+                <label for="comandoCodigoFisico" class="form-label small">Código físico (HW) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="comandoCodigoFisico" name="codigo_fisico" min="1" required />
+              </div>
+            </div>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="comandoEsTemporizado" name="es_temporizado" />
+              <label class="form-check-label small" for="comandoEsTemporizado">Es movimiento temporizado (duracion_ms 1..10000)</label>
+            </div>
+            <div class="mb-2" id="wrapComandoDuracion" hidden>
+              <label for="comandoDuracionMs" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
+              <input type="number" class="form-control form-control-sm" id="comandoDuracionMs" name="duracion_ms" min="1" max="10000" />
             </div>
             <div class="mb-2">
               <label for="comandoDescripcion" class="form-label small">Descripción</label>
-              <textarea class="form-control form-control-sm" id="comandoDescripcion" name="descripcion" rows="2"></textarea>
+              <textarea class="form-control form-control-sm" id="comandoDescripcion" name="descripcion" rows="2" maxlength="255"></textarea>
+            </div>
+            <div class="form-check form-switch mb-1">
+              <input class="form-check-input" type="checkbox" id="comandoPermitidoInvitado" name="permitido_invitado" />
+              <label class="form-check-label small" for="comandoPermitidoInvitado">Permitido para sesiones de invitado</label>
             </div>
             <div class="form-check form-switch" id="wrapActivoComando">
               <input class="form-check-input" type="checkbox" id="comandoActivo" name="activo" />
@@ -929,23 +1664,23 @@
       </div>
     </div>
 
-    <!-- Demo: crear / editar -->
-    <div class="modal fade" id="modalDemo" tabindex="-1" aria-labelledby="modalDemoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <!-- Demo Fábrica -->
+    <div class="modal fade" id="modalDemo" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formDemo" novalidate>
           <div class="modal-header">
-            <h2 class="modal-title h6" id="modalDemoTitulo">Nueva demo</h2>
+            <h2 class="modal-title h6" id="modalDemoTitulo">Nueva demo de fábrica</h2>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
             <input type="hidden" name="id" />
             <div class="mb-2">
               <label for="demoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm" id="demoNombre" name="nombre" maxlength="100" required />
+              <input type="text" class="form-control form-control-sm" id="demoNombre" name="nombre" maxlength="80" required />
             </div>
             <div class="mb-2">
               <label for="demoDescripcion" class="form-label small">Descripción</label>
-              <textarea class="form-control form-control-sm" id="demoDescripcion" name="descripcion" rows="3"></textarea>
+              <textarea class="form-control form-control-sm" id="demoDescripcion" name="descripcion" rows="3" maxlength="255"></textarea>
             </div>
             <div class="form-check form-switch" id="wrapActivoDemo">
               <input class="form-check-input" type="checkbox" id="demoActivo" name="activo" />
@@ -960,9 +1695,9 @@
       </div>
     </div>
 
-    <!-- Paso de demo: crear / editar -->
-    <div class="modal fade" id="modalPaso" tabindex="-1" aria-labelledby="modalPasoTitulo" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <!-- Paso de demo -->
+    <div class="modal fade" id="modalPaso" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formPaso" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalPasoTitulo">Nuevo paso</h2>
@@ -975,20 +1710,20 @@
               <select class="form-select form-select-sm" id="pasoComando" name="id_comando" required></select>
             </div>
             <div class="row g-2">
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label for="pasoOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="pasoOrden" name="orden" min="1" step="1" required />
+                <input type="number" class="form-control form-control-sm" id="pasoOrden" name="orden" min="1" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="pasoDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="pasoDuracion" name="duracion_ms" min="100" step="1" required />
+                <input type="number" class="form-control form-control-sm" id="pasoDuracion" name="duracion_ms" min="1" max="10000" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="pasoPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="pasoPausa" name="pausa_ms" min="0" step="1" required />
+                <input type="number" class="form-control form-control-sm" id="pasoPausa" name="pausa_ms" min="0" max="10000" required />
               </div>
             </div>
-            <div class="form-text small">Orden ≥ 1 · Duración ≥ 100 ms · Pausa ≥ 0 ms (0 = siguiente paso inmediato).</div>
+            <div class="form-text small">Orden ≥ 1 · Duración 1..10000 ms · Pausa 0..10000 ms.</div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -998,20 +1733,122 @@
       </div>
     </div>
 
-    <!-- Confirmación de borrado (para cualquier acción Eliminar) -->
-    <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarTitulo" aria-hidden="true">
+    <!-- MODALES TIENDA / USUARIO (Fase 4: Temporizados propios y Editor de Demos Privadas) -->
+    <div class="modal fade" id="modalUserTimedCmd" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserTimedCmd" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserTimedCmdTitulo">Nuevo movimiento temporizado</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userTimedNombre" class="form-label small">Nombre del movimiento <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="userTimedNombre" name="nombre" maxlength="60" placeholder="Ej. Avance corto 1.5s" required />
+            </div>
+            <div class="mb-2">
+              <label for="userTimedCodigoFisico" class="form-label small">Acción física base <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="userTimedCodigoFisico" name="codigo_fisico" required></select>
+              <div class="form-text small">Solo capacidades con temporizado permitido en el modelo.</div>
+            </div>
+            <div class="mb-2">
+              <label for="userTimedDurMs" class="form-label small">Duración (1..10000 ms) <span class="text-danger">*</span></label>
+              <input type="range" class="form-range" id="userTimedDurRange" min="100" max="10000" step="100" value="1500" />
+              <input type="number" class="form-control form-control-sm font-monospace" id="userTimedDurMs" name="duracion_ms" min="1" max="10000" value="1500" required />
+            </div>
+            <div class="mb-2">
+              <label for="userTimedDesc" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="userTimedDesc" name="descripcion" rows="2" maxlength="255"></textarea>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="userTimedInvitado" name="permitido_invitado" />
+              <label class="form-check-label small" for="userTimedInvitado">Permitido para invitados en modo exhibición</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal fade" id="modalUserDemo" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserDemo" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserDemoTitulo">Nueva demo privada</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userDemoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="userDemoNombre" name="nombre" maxlength="80" placeholder="Ej. Rutina mostrador apertura" required />
+            </div>
+            <div class="mb-2">
+              <label for="userDemoDesc" class="form-label small">Descripción</label>
+              <textarea class="form-control form-control-sm" id="userDemoDesc" name="descripcion" rows="3" maxlength="255"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal fade" id="modalUserDemoStep" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form class="modal-content" id="formUserDemoStep" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="modalUserDemoStepTitulo">Agregar paso a demo</h2>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" />
+            <div class="mb-2">
+              <label for="userStepComando" class="form-label small">Comando <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="userStepComando" name="id_comando" required></select>
+            </div>
+            <div class="row g-2">
+              <div class="col-12 col-sm-4">
+                <label for="userStepOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepOrden" name="orden" min="1" required />
+              </div>
+              <div class="col-6 col-sm-4">
+                <label for="userStepDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepDuracion" name="duracion_ms" min="1" max="10000" required />
+              </div>
+              <div class="col-6 col-sm-4">
+                <label for="userStepPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control form-control-sm" id="userStepPausa" name="pausa_ms" min="0" max="10000" required />
+              </div>
+            </div>
+            <div class="form-text small">Orden ≥ 1 · Duración 1..10000 ms · Pausa 0..10000 ms.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Confirmación genérica -->
+    <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
           <div class="modal-header">
-            <h2 class="modal-title h6 text-danger" id="modalConfirmarTitulo">
-              <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Confirmar eliminación
-            </h2>
+            <h2 class="modal-title h6 text-danger" id="modalConfirmarTitulo">Confirmar acción</h2>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body small" id="confirmarTexto"></div>
           <div class="modal-footer">
             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-            <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarAccion">Eliminar</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarAccion">Confirmar</button>
           </div>
         </div>
       </div>
@@ -1024,7 +1861,7 @@
       </div>
     </footer>
 
-    <!-- CONTENEDOR DE TOASTS FLOTANTES PARA FEEDBACK VISUAL INMEDIATO -->
+    <!-- CONTENEDOR DE TOASTS -->
     <div
       class="toast-container position-fixed bottom-0 end-0 p-3"
       id="toastContainer"
@@ -1035,15 +1872,14 @@
 
   </div>
 
-  <!-- SCRIPT MODULAR PRINCIPAL (Vanilla JS ES6 Modules, sin frameworks) -->
-  <!-- Bootstrap 5.3 Bundle JS con SRI (para toasts, collapse y componentes) -->
+  <!-- Bootstrap 5.3 Bundle JS con SRI -->
   <script
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
     integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
     crossorigin="anonymous"
   ></script>
 
-  <!-- JavaScript Modular Principal (Vanilla JS ES6 Modules) -->
-  <script type="module" src="./assets/js/app.js?v=2.6"></script>
+  <!-- JavaScript Modular Principal -->
+  <script type="module" src="./assets/js/app.js?v=4.5.1"></script>
 </body>
 </html>
