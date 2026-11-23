@@ -1650,13 +1650,15 @@ async function inicializarGoogleSignIn() {
       },
     });
     container.textContent = '';
+    const availableWidth = container.clientWidth || container.parentElement?.clientWidth || 260;
+    const googleBtnWidth = Math.max(220, Math.min(280, Math.floor(availableWidth - 4)));
     window.google.accounts.id.renderButton(container, {
       theme: 'filled_black',
       size: 'large',
       text: 'continue_with',
       shape: 'rectangular',
       locale: 'es',
-      width: 280,
+      width: googleBtnWidth,
     });
     wrap.hidden = false;
   } catch (_) {

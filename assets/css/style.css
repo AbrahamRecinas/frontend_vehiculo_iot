@@ -61,24 +61,41 @@ html, body {
   overscroll-behavior-y: contain;
 }
 
-/* Scroll vertical inteligente: solo se bloquea el horizontal; el táctil se delega al joystick */
+/* Scroll vertical inteligente: clip horizontal para nunca romper position:sticky */
+html, body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 body {
   min-height: 100dvh;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   background-image:
     radial-gradient(circle at 12% 10%, rgba(6, 182, 212, 0.10), transparent 32%),
     radial-gradient(circle at 88% 14%, rgba(59, 130, 246, 0.09), transparent 34%),
     linear-gradient(180deg, #070d1c 0%, #050914 100%);
 }
 
-/* Evitar selección de texto no deseada durante el control del vehículo */
+/* Evitar selección de texto y scroll accidental durante el control táctil del vehículo */
 .joystick-wrapper,
+#joystickTrack,
+#dpadGrid,
+.dpad-btn,
+.stop-emergencia-btn,
 .btn-action,
 .status-pill {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+.joystick-wrapper,
+#joystickTrack,
+#dpadGrid,
+.dpad-btn,
+.stop-emergencia-btn {
+  touch-action: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -1842,9 +1859,9 @@ a:focus-visible,
     grid-row: 2;
     order: initial;
     width: 100%;
-    height: 42px;
+    height: 48px;
     min-width: 0;
-    min-height: 42px;
+    min-height: 48px;
     padding: 4px !important;
     border-radius: 8px;
   }
@@ -2186,10 +2203,7 @@ a:focus-visible,
    FASE 4 B2B2C: BANNER INVITADO, CONTROLES RESTRINGIDOS Y EDITOR DE DEMOS
    -------------------------------------------------------------------------- */
 .guest-session-banner {
-  position: sticky;
-  top: 0;
-  z-index: 1025;
-  background: linear-gradient(90deg, rgba(8, 28, 48, 0.96), rgba(15, 23, 42, 0.96));
+  background: linear-gradient(90deg, rgba(8, 28, 48, 0.98), rgba(15, 23, 42, 0.98));
   box-shadow: 0 4px 16px rgba(6, 182, 212, 0.18);
 }
 

@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.5" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.5" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.5.1" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.5.1" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -164,29 +164,29 @@
           </div>
         </div>
       </section>
-    </header>
 
-    <!-- BANNER FIJO DE SESIÓN EXCLUSIVA DE INVITADO (Fase 4 B2B2C) -->
-    <div
-      id="guestSessionBanner"
-      class="guest-session-banner d-none align-items-center justify-content-between gap-2 px-3 py-2 border-bottom border-info-subtle"
-      role="region"
-      aria-label="Sesión exclusiva de invitado"
-      hidden
-    >
-      <div class="d-flex align-items-center gap-2 min-w-0">
-        <span class="badge bg-info-subtle text-info border border-info-subtle text-nowrap">
-          <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Prueba Exclusiva
-        </span>
-        <strong class="small text-white text-truncate" id="guestBannerUnit">Unidad en exhibición</strong>
+      <!-- BANNER FIJO DE SESIÓN EXCLUSIVA DE INVITADO (integrado dentro de header sticky para no taparlo) -->
+      <div
+        id="guestSessionBanner"
+        class="guest-session-banner d-none align-items-center justify-content-between gap-2 px-3 py-2 border-top border-info-subtle"
+        role="region"
+        aria-label="Sesión exclusiva de invitado"
+        hidden
+      >
+        <div class="d-flex align-items-center gap-2 min-w-0">
+          <span class="badge bg-info-subtle text-info border border-info-subtle text-nowrap">
+            <i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Prueba Exclusiva
+          </span>
+          <strong class="small text-white text-truncate" id="guestBannerUnit">Unidad en exhibición</strong>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <span class="badge text-bg-dark border border-secondary font-monospace fs-6 text-info" id="guestCountdownTimer">03:00</span>
+          <button type="button" id="btnGuestFinish" class="btn btn-danger btn-sm fw-semibold">
+            <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Finalizar prueba
+          </button>
+        </div>
       </div>
-      <div class="d-flex align-items-center gap-2 flex-shrink-0">
-        <span class="badge text-bg-dark border border-secondary font-monospace fs-6 text-info" id="guestCountdownTimer">03:00</span>
-        <button type="button" id="btnGuestFinish" class="btn btn-danger btn-sm fw-semibold">
-          <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Finalizar prueba
-        </button>
-      </div>
-    </div>
+    </header>
 
     <!-- PANEL DE DIAGNÓSTICO COLAPSABLE -->
     <aside id="diagPanel" class="diag-panel bg-body-tertiary border-bottom border-secondary collapse" aria-label="Detalles de diagnóstico">
@@ -1045,10 +1045,12 @@
                   <div class="card bg-dark border-secondary-subtle">
                     <div class="card-header py-2 small fw-semibold text-white">Sesiones de Invitado Activas</div>
                     <div class="card-body p-2">
-                      <table class="table table-sm align-middle monitor-table mb-0">
-                        <thead><tr><th>Sesión</th><th>Unidad</th><th>Visitante</th><th class="text-center">Restante</th><th class="text-end">Acciones</th></tr></thead>
-                        <tbody id="dashSesionesBody"></tbody>
-                      </table>
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Sesión</th><th>Unidad</th><th>Visitante</th><th class="text-center">Restante</th><th class="text-end">Acciones</th></tr></thead>
+                          <tbody id="dashSesionesBody"></tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1056,10 +1058,12 @@
                   <div class="card bg-dark border-secondary-subtle">
                     <div class="card-header py-2 small fw-semibold text-white">Autorizaciones de Soporte Vigentes</div>
                     <div class="card-body p-2">
-                      <table class="table table-sm align-middle monitor-table mb-0">
-                        <thead><tr><th>Unidad</th><th>Propietario</th><th>Motivo</th><th class="text-center">Expira</th></tr></thead>
-                        <tbody id="dashSoportesBody"></tbody>
-                      </table>
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Unidad</th><th>Propietario</th><th>Motivo</th><th class="text-center">Expira</th></tr></thead>
+                          <tbody id="dashSoportesBody"></tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1067,10 +1071,12 @@
                   <div class="card bg-dark border-secondary-subtle">
                     <div class="card-header py-2 small fw-semibold text-white">Últimos 10 Eventos de Auditoría</div>
                     <div class="card-body p-2">
-                      <table class="table table-sm align-middle monitor-table mb-0">
-                        <thead><tr><th>Fecha/Hora</th><th class="text-center">Rol</th><th>Acción</th><th>Recurso</th><th class="text-center">Resultado</th></tr></thead>
-                        <tbody id="dashAuditoriaBody"></tbody>
-                      </table>
+                      <div class="table-responsive monitor-table-responsive">
+                        <table class="table table-sm align-middle monitor-table mb-0">
+                          <thead><tr><th>Fecha/Hora</th><th class="text-center">Rol</th><th>Acción</th><th>Recurso</th><th class="text-center">Resultado</th></tr></thead>
+                          <tbody id="dashAuditoriaBody"></tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1103,7 +1109,7 @@
 
               <div class="card bg-dark border-secondary-subtle" id="adminCapacidadesCard">
                 <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1 min-w-0">
                     <span class="small fw-semibold text-white">Capacidades físicas del modelo:</span>
                     <select id="adminModeloCapSelect" class="form-select form-select-sm admin-select"></select>
                   </div>
@@ -1134,9 +1140,9 @@
             <!-- PESTAÑA 3: UNIDADES FÍSICAS (VEHÍCULOS) -->
             <div class="tab-pane fade p-2" id="adminPaneVehiculos" role="tabpanel">
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
                   <label for="adminFiltroEstadoVehiculo" class="small text-secondary mb-0">Estado:</label>
-                  <select id="adminFiltroEstadoVehiculo" class="form-select form-select-sm" style="width:auto;">
+                  <select id="adminFiltroEstadoVehiculo" class="form-select form-select-sm admin-filter-select">
                     <option value="">Todos</option>
                     <option value="DISPONIBLE">DISPONIBLE</option>
                     <option value="EXHIBICION">EXHIBICION</option>
@@ -1246,7 +1252,7 @@
             <!-- PESTAÑA 7: PASOS DE DEMO -->
             <div class="tab-pane fade p-2" id="adminPanePasos" role="tabpanel">
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1 min-w-0">
                   <label for="adminDemoSelect" class="small text-secondary mb-0">Demo:</label>
                   <select id="adminDemoSelect" class="form-select form-select-sm admin-select"></select>
                 </div>
@@ -1360,7 +1366,7 @@
 
     <!-- Modelo -->
     <div class="modal fade" id="modalModelo" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formModelo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalModeloTitulo">Nuevo modelo</h2>
@@ -1399,7 +1405,7 @@
 
     <!-- Capacidad física de modelo -->
     <div class="modal fade" id="modalCapacidad" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formCapacidad" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalCapacidadTitulo">Nueva capacidad</h2>
@@ -1444,7 +1450,7 @@
 
     <!-- Vehículo / Unidad física -->
     <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formVehiculo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalVehiculoTitulo">Nueva unidad física</h2>
@@ -1504,7 +1510,7 @@
 
     <!-- Asignar / Reasignar propietario -->
     <div class="modal fade" id="modalAsignarPropietario" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formAsignarPropietario" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6">Asignar / Reasignar Propietario</h2>
@@ -1542,7 +1548,7 @@
 
     <!-- Historial de propietarios -->
     <div class="modal fade" id="modalPropHistorial" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
         <div class="modal-content">
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalPropHistorialTitulo">Historial de propietarios</h2>
@@ -1564,7 +1570,7 @@
 
     <!-- Usuario / Cliente -->
     <div class="modal fade" id="modalUsuario" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formUsuario" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalUsuarioTitulo">Nuevo usuario</h2>
@@ -1608,7 +1614,7 @@
 
     <!-- Comando v2 (Base vs Temporizado) -->
     <div class="modal fade" id="modalComando" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formComando" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo comando</h2>
@@ -1661,7 +1667,7 @@
 
     <!-- Demo Fábrica -->
     <div class="modal fade" id="modalDemo" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formDemo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalDemoTitulo">Nueva demo de fábrica</h2>
@@ -1692,7 +1698,7 @@
 
     <!-- Paso de demo -->
     <div class="modal fade" id="modalPaso" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formPaso" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalPasoTitulo">Nuevo paso</h2>
@@ -1705,15 +1711,15 @@
               <select class="form-select form-select-sm" id="pasoComando" name="id_comando" required></select>
             </div>
             <div class="row g-2">
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label for="pasoOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="pasoOrden" name="orden" min="1" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="pasoDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="pasoDuracion" name="duracion_ms" min="1" max="10000" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="pasoPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="pasoPausa" name="pausa_ms" min="0" max="10000" required />
               </div>
@@ -1730,7 +1736,7 @@
 
     <!-- MODALES TIENDA / USUARIO (Fase 4: Temporizados propios y Editor de Demos Privadas) -->
     <div class="modal fade" id="modalUserTimedCmd" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formUserTimedCmd" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalUserTimedCmdTitulo">Nuevo movimiento temporizado</h2>
@@ -1770,7 +1776,7 @@
     </div>
 
     <div class="modal fade" id="modalUserDemo" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formUserDemo" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalUserDemoTitulo">Nueva demo privada</h2>
@@ -1796,7 +1802,7 @@
     </div>
 
     <div class="modal fade" id="modalUserDemoStep" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formUserDemoStep" novalidate>
           <div class="modal-header">
             <h2 class="modal-title h6" id="modalUserDemoStepTitulo">Agregar paso a demo</h2>
@@ -1809,15 +1815,15 @@
               <select class="form-select form-select-sm" id="userStepComando" name="id_comando" required></select>
             </div>
             <div class="row g-2">
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label for="userStepOrden" class="form-label small">Orden <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="userStepOrden" name="orden" min="1" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="userStepDuracion" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="userStepDuracion" name="duracion_ms" min="1" max="10000" required />
               </div>
-              <div class="col-4">
+              <div class="col-6 col-sm-4">
                 <label for="userStepPausa" class="form-label small">Pausa (ms) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control form-control-sm" id="userStepPausa" name="pausa_ms" min="0" max="10000" required />
               </div>
@@ -1875,6 +1881,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.5"></script>
+  <script type="module" src="./assets/js/app.js?v=4.5.1"></script>
 </body>
 </html>
