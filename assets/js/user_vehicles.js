@@ -11,7 +11,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.4.3';
+import { UI } from './ui.js?v=4.5';
 
 const $ = (id) => document.getElementById(id);
 const esActivo = (v) => v === 1 || v === true || v === '1';
@@ -221,6 +221,15 @@ function renderTarjetasVehiculos() {
           : 'bg-warning-subtle text-warning border border-warning-subtle'
       )
     );
+    const hwOnline = v.dispositivo_conectado === true || v.dispositivo_conectado === 1;
+    badges.appendChild(
+      crearBadge(
+        hwOnline ? 'ESP8266: En línea' : 'ESP8266: Desconectado',
+        hwOnline
+          ? 'bg-success-subtle text-success border border-success-subtle'
+          : 'bg-secondary-subtle text-warning border border-warning-subtle'
+      )
+    );
     if (v.soporte_activo) {
       badges.appendChild(
         crearBadge('Soporte activo', 'bg-success-subtle text-success border border-success-subtle')
@@ -324,6 +333,9 @@ async function cargarWorkspaceUnidad(vehiculo) {
   const enExhibicion = vehiculo.estado_comercial === 'EXHIBICION';
 
   if (titulo) titulo.textContent = `${vehiculo.nombre} (#${vehiculo.id_vehiculo})`;
+  UI.setHardwareStatus(
+    vehiculo.dispositivo_conectado === undefined ? null : Boolean(vehiculo.dispositivo_conectado)
+  );
   if (estadoBadge) {
     estadoBadge.textContent = vehiculo.estado_comercial || 'VENDIDO';
     estadoBadge.className = enExhibicion

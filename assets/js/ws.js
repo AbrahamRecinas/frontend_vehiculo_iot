@@ -20,6 +20,7 @@ class WebSocketService {
     this.reconnectAttempts = 0;
     this.consecutiveHandshakeFails = 0;
     this.hasOpenedCurrent = false;
+    this.hadUnexpectedDisconnect = false;
     this.reconnectTimer = null;
     this.isExplicitlyClosed = true;
     this.state = 'closed'; // 'connecting' | 'open' | 'closed' | 'error'
@@ -84,6 +85,12 @@ class WebSocketService {
       this.reconnectTimer = null;
     }
 
+    const changedVehicle = this.vehicleId !== null && this.vehicleId !== targetId;
+    if (changedVehicle) {
+      this.reconnectAttempts = 0;
+      this.hadUnexpectedDisconnect = false;
+    }
+
     this.vehicleId = targetId;
     this.activeToken = token;
     this.displayUrl = CONFIG.buildDisplayWssUrl(targetId);
@@ -137,6 +144,7 @@ class WebSocketService {
           }
         }
 
+        this.hadUnexpectedDisconnect = true;
         this.updateState('closed', `Canal cerrado (código ${event.code})`);
         this.scheduleReconnect();
       };
@@ -163,6 +171,8 @@ class WebSocketService {
 
   disconnect(detail = 'Desconectado') {
     this.isExplicitlyClosed = true;
+    this.hadUnexpectedDisconnect = false;
+    this.reconnectAttempts = 0;
     this.activeToken = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -255,8 +265,13 @@ class WebSocketService {
   }
 
   handleOpen() {
+    const wasReconnect = this.reconnectAttempts > 0 || this.hadUnexpectedDisconnect;
     this.reconnectAttempts = 0;
+    this.hadUnexpectedDisconnect = false;
     this.updateState('open', `En línea · Unidad #${this.vehicleId}`);
+    if (wasReconnect) {
+      this.emit('reconnected', { vehicleId: this.vehicleId });
+    }
   }
 
   getState() {

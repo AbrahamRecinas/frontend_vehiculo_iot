@@ -14,7 +14,17 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.4.3';
+import { UI } from './ui.js?v=4.5';
+
+const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
+const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
+
+function resolverImgModelo(m) {
+  const url = String(m?.url_imagen || '').trim();
+  if (url) return url;
+  const txt = `${m?.codigo_modelo || ''} ${m?.nombre_comercial || ''}`.toUpperCase();
+  return txt.includes('GRUA') || txt.includes('GRÚA') ? GRUA_MODEL_IMG : DEFAULT_MODEL_IMG;
+}
 
 const $ = (id) => document.getElementById(id);
 const lista = (res) => (res?.ok && Array.isArray(res.data) ? res.data : []);
@@ -368,10 +378,31 @@ function pintarModelos() {
         id: m.id_modelo,
       })
     );
+    const tdNombreModelo = document.createElement('td');
+    const wrapMod = document.createElement('div');
+    wrapMod.className = 'd-flex align-items-center gap-2';
+    const thumb = document.createElement('img');
+    thumb.src = resolverImgModelo(m);
+    thumb.alt = m.nombre_comercial || m.codigo_modelo;
+    thumb.className = 'admin-model-thumb rounded border border-secondary-subtle';
+    thumb.width = 48;
+    thumb.height = 28;
+    thumb.loading = 'lazy';
+    thumb.addEventListener('error', () => {
+      if (!thumb.dataset.fallbackApplied) {
+        thumb.dataset.fallbackApplied = '1';
+        thumb.src = DEFAULT_MODEL_IMG;
+      }
+    });
+    const spanNom = document.createElement('span');
+    spanNom.textContent = m.nombre_comercial;
+    wrapMod.append(thumb, spanNom);
+    tdNombreModelo.appendChild(wrapMod);
+
     tr.append(
       celda(m.id_modelo, 'text-center font-monospace'),
       celda(m.codigo_modelo, 'font-monospace'),
-      celda(m.nombre_comercial),
+      tdNombreModelo,
       celda(m.descripcion, 'small text-secondary'),
       celdaEstado(m.activo),
       acciones
@@ -522,6 +553,15 @@ function pintarVehiculos() {
       const sop = crearBadge('Soporte OK', 'bg-success-subtle text-success border border-success-subtle ms-1');
       tdEstado.appendChild(sop);
     }
+    const hwOn = v.dispositivo_conectado === true || v.dispositivo_conectado === 1;
+    tdEstado.appendChild(
+      crearBadge(
+        hwOn ? 'ESP8266: En línea' : 'ESP8266: Desconectado',
+        hwOn
+          ? 'bg-success-subtle text-success border border-success-subtle ms-1'
+          : 'bg-secondary-subtle text-warning border border-warning-subtle ms-1'
+      )
+    );
 
     const propietarioTexto = v.propietario_nombre
       ? `${v.propietario_nombre} (#${v.id_propietario})`

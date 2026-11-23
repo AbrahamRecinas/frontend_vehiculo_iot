@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.4.3';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.4.3';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.4.3';
+import { UI } from './ui.js?v=4.5';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.5';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.5';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.4.3';
+} from './guest.js?v=4.5';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -45,6 +45,7 @@ const STATE = {
   busyCommands: new Set(),
   activeController: null,
   monitorHistorial: [],
+  reconcileSeq: 0,
 };
 
 window.activeController = null;
@@ -711,11 +712,17 @@ async function cargarPanelMonitoreo() {
   renderHistorial([], 'Consultando historial de movimientos…');
   renderComandosCatalogo([], 'Consultando catálogo de comandos…');
 
+  const targetVehicleId = STATE.vehicleId;
+  const seq = ++STATE.reconcileSeq;
+
   const [estadoRes, historialRes, comandosRes] = await Promise.all([
-    api.obtenerEstado(),
-    api.obtenerHistorial(),
-    api.obtenerComandos(),
+    api.obtenerEstado(targetVehicleId),
+    api.obtenerHistorial(targetVehicleId),
+    api.obtenerComandos(targetVehicleId),
   ]);
+
+  // Descartar respuesta atrasada si el usuario cambió de unidad durante la consulta
+  if (seq !== STATE.reconcileSeq || STATE.vehicleId !== targetVehicleId) return;
 
   if ((!estadoRes.ok && estadoRes.status === 403) || (!historialRes.ok && historialRes.status === 403)) {
     const msg = formatApiError(
@@ -725,10 +732,18 @@ async function cargarPanelMonitoreo() {
     mostrarAvisoMonitoreo(msg);
     UI.showToast(msg, 'warning');
     wsService.disconnect('Requiere autorización de soporte');
+    UI.setHardwareStatus(null);
     renderUltimoMovimiento({ idComando: null, comando: msg });
     renderHistorial([], msg);
     renderComandosCatalogo(Array.isArray(comandosRes?.data) ? comandosRes.data : [], msg);
     return;
+  }
+
+  if (estadoRes.ok) {
+    const estRow = Array.isArray(estadoRes.data) ? estadoRes.data[0] : estadoRes.data;
+    if (estRow && estRow.conectado !== undefined) {
+      UI.setHardwareStatus(Boolean(estRow.conectado));
+    }
   }
 
   if (comandosRes.ok) {
@@ -740,7 +755,7 @@ async function cargarPanelMonitoreo() {
   }
 
   if (historialRes.ok) {
-    const historial = aHistorial(historialRes.data);
+    const historial = ordenarYAcotarHistorial(aHistorial(historialRes.data));
     STATE.monitorHistorial = historial;
     renderHistorial(historial);
     let ultimo = historial.length > 0 ? historial[0] : null;
@@ -752,6 +767,69 @@ async function cargarPanelMonitoreo() {
     STATE.monitorHistorial = [];
     renderHistorial([], `Error al cargar historial: ${formatApiError(historialRes)}`);
     renderUltimoMovimiento(estadoRes.ok ? aEstadoInicial({ estado: estadoRes.data }) : { idComando: null });
+  }
+}
+
+function ordenarYAcotarHistorial(lista = []) {
+  const vistos = new Set();
+  const unicos = [];
+  for (const item of lista) {
+    const key = item.idRegistro
+      ? `id:${item.idRegistro}`
+      : `ts:${item.timestamp || ''}:${item.idComando || ''}`;
+    if (vistos.has(key)) continue;
+    vistos.add(key);
+    unicos.push(item);
+  }
+  unicos.sort((a, b) => {
+    if (a.idRegistro && b.idRegistro && a.idRegistro !== b.idRegistro) {
+      return b.idRegistro - a.idRegistro;
+    }
+    return String(b.timestamp || '').localeCompare(String(a.timestamp || ''));
+  });
+  return unicos.slice(0, MONITOREO_MAX_REGISTROS);
+}
+
+/**
+ * Reconciliación REST automática tras reconexión de WSS:
+ * consulta /estado y /historial, descarta respuestas atrasadas si cambió de unidad
+ * y actualiza hardware ESP8266 + historial deduplicado de máx. 10 individuales.
+ */
+async function reconciliarEstadoTrasReconexionWss(expectedVehicleId) {
+  const vid = Number(expectedVehicleId);
+  if (!auth.isAuthenticated() || !vid || STATE.vehicleId !== vid) return;
+  if (esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) return;
+
+  const seq = ++STATE.reconcileSeq;
+  const incluirHistorial = auth.getRole() !== 'INVITADO';
+  const [estadoSettled, historialSettled] = await Promise.allSettled([
+    api.obtenerEstado(vid),
+    incluirHistorial ? api.obtenerHistorial(vid) : Promise.resolve({ ok: false, skipped: true }),
+  ]);
+
+  if (seq !== STATE.reconcileSeq || STATE.vehicleId !== vid) return;
+
+  const estadoRes = estadoSettled.status === 'fulfilled' ? estadoSettled.value : null;
+  const historialRes = historialSettled.status === 'fulfilled' ? historialSettled.value : null;
+
+  if (estadoRes?.ok) {
+    const estRow = Array.isArray(estadoRes.data) ? estadoRes.data[0] : estadoRes.data;
+    if (estRow && estRow.conectado !== undefined) {
+      UI.setHardwareStatus(Boolean(estRow.conectado));
+    }
+    const movEst = aEstadoInicial({ estado: estadoRes.data });
+    if (movEst.idComando) {
+      renderUltimoMovimiento(movEst);
+    }
+  }
+
+  if (incluirHistorial && historialRes?.ok) {
+    const historial = ordenarYAcotarHistorial(aHistorial(historialRes.data));
+    STATE.monitorHistorial = historial;
+    renderHistorial(historial);
+    if (historial.length > 0) {
+      renderUltimoMovimiento(historial[0]);
+    }
   }
 }
 
@@ -770,6 +848,9 @@ async function seleccionarVehiculoActivo(vehiculo, { conectarWss = true } = {}) 
     nombre: vehiculo.nombre || '',
     estadoComercial: vehiculo.estado_comercial || '',
   });
+  UI.setHardwareStatus(
+    vehiculo.dispositivo_conectado === undefined ? null : Boolean(vehiculo.dispositivo_conectado)
+  );
 
   if (esUnidadBloqueadaParaAdmin(vehiculo)) {
     wsService.disconnect('Unidad vendida · requiere soporte');
@@ -963,6 +1044,7 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
     STATE.vehicleInfo = null;
     STATE.comandosVehiculo = [];
     STATE.fisicoToComandoId.clear();
+    UI.setHardwareStatus(null);
     if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
     if (reason === 'expired') {
       UI.showToast('Tu sesión expiró o fue revocada. Inicia sesión nuevamente.', 'warning');
@@ -1070,6 +1152,82 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
 function bindAuthEvents() {
   const formLogin = getEl('formLogin');
   const loginError = getEl('loginErrorBox');
+  const formRegister = getEl('formRegister');
+  const registerError = getEl('registerErrorBox');
+  const tabLogin = getEl('authTabLogin');
+  const tabRegister = getEl('authTabRegister');
+
+  const cambiarModoAuth = (modo) => {
+    const esRegistro = modo === 'register';
+    if (formLogin) formLogin.hidden = esRegistro;
+    if (formRegister) formRegister.hidden = !esRegistro;
+    if (loginError) loginError.hidden = true;
+    if (registerError) registerError.hidden = true;
+    if (tabLogin) {
+      tabLogin.classList.toggle('btn-primary', !esRegistro);
+      tabLogin.classList.toggle('btn-outline-secondary', esRegistro);
+      tabLogin.setAttribute('aria-pressed', String(!esRegistro));
+    }
+    if (tabRegister) {
+      tabRegister.classList.toggle('btn-primary', esRegistro);
+      tabRegister.classList.toggle('btn-outline-secondary', !esRegistro);
+      tabRegister.setAttribute('aria-pressed', String(esRegistro));
+    }
+  };
+
+  tabLogin?.addEventListener('click', () => cambiarModoAuth('login'));
+  tabRegister?.addEventListener('click', () => cambiarModoAuth('register'));
+
+  formRegister?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (registerError) registerError.hidden = true;
+
+    const nombre = String(formRegister.elements.nombre.value || '').trim();
+    const correo = String(formRegister.elements.correo.value || '').trim();
+    const password = String(formRegister.elements.password.value || '');
+    const confirmPwd = String(formRegister.elements.password_confirm.value || '');
+
+    const mostrarErrReg = (msg) => {
+      if (registerError) {
+        registerError.textContent = msg;
+        registerError.hidden = false;
+      }
+    };
+
+    if (nombre.length < 2) return mostrarErrReg('Ingresa tu nombre completo (mínimo 2 caracteres).');
+    if (!correo || !correo.includes('@')) return mostrarErrReg('Ingresa un correo electrónico válido.');
+    if (password.length < 8) return mostrarErrReg('La contraseña debe tener al menos 8 caracteres.');
+    if (password !== confirmPwd) return mostrarErrReg('Las contraseñas no coinciden.');
+
+    const btn = formRegister.querySelector('button[type="submit"]');
+    const origLabel = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Creando cuenta…';
+    }
+    let res;
+    try {
+      res = await auth.register(nombre, correo, password);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '';
+        const ico = document.createElement('i');
+        ico.className = 'bi bi-person-check me-1';
+        ico.setAttribute('aria-hidden', 'true');
+        btn.append(ico, document.createTextNode(origLabel.trim() || 'Crear cuenta de cliente'));
+      }
+    }
+
+    if (!res.ok) {
+      mostrarErrReg(res.error || 'No fue posible crear la cuenta.');
+      return;
+    }
+
+    formRegister.reset();
+    cambiarModoAuth('login');
+    UI.showToast(`Cuenta creada. ¡Bienvenido, ${res.data?.usuario?.nombre || nombre}!`, 'success');
+  });
 
   formLogin?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1132,6 +1290,7 @@ function bindAuthEvents() {
       STATE.comandosVehiculo = [];
       STATE.fisicoToComandoId.clear();
       UI.syncAuthUi(null);
+      UI.setHardwareStatus(null);
       if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
       vistaActual = 'auth';
       actualizarNavPills('auth');
@@ -1244,24 +1403,32 @@ function bindWebSocketEvents() {
     UI.demoTimelineEnd('Rutina finalizada', 'success');
   });
 
+  wsService.on('reconnected', ({ vehicleId }) => {
+    UI.showToast('Canal WSS reconectado. Reconciliando estado e historial…', 'info');
+    reconciliarEstadoTrasReconexionWss(vehicleId);
+  });
+
+  wsService.on('estado_dispositivo', (payload) => {
+    if (Number(payload?.id_vehiculo) === STATE.vehicleId && payload?.conectado !== undefined) {
+      UI.setHardwareStatus(Boolean(payload.conectado));
+    }
+  });
+
   wsService.on('estado_inicial', (payload) => {
     const mov = aEstadoInicial(payload);
     renderUltimoMovimiento(mov);
+    if (payload?.dispositivo_conectado !== undefined) {
+      UI.setHardwareStatus(Boolean(payload.dispositivo_conectado));
+    } else if (payload?.estado && payload.estado.conectado !== undefined) {
+      UI.setHardwareStatus(Boolean(payload.estado.conectado));
+    }
     syncDiagnostics();
   });
 
   wsService.on('movimiento_individual', (payload) => {
     const mov = aMovimientoIndividual(payload);
-    const duplicado = STATE.monitorHistorial.some(
-      (m) =>
-        (mov.idRegistro && m.idRegistro === mov.idRegistro) ||
-        (mov.timestamp && m.timestamp && m.timestamp === mov.timestamp)
-    );
-    if (!duplicado) {
-      STATE.monitorHistorial.unshift(mov);
-      STATE.monitorHistorial = STATE.monitorHistorial.slice(0, MONITOREO_MAX_REGISTROS);
-      renderHistorial(STATE.monitorHistorial);
-    }
+    STATE.monitorHistorial = ordenarYAcotarHistorial([mov, ...STATE.monitorHistorial]);
+    renderHistorial(STATE.monitorHistorial);
     renderUltimoMovimiento(mov);
     syncDiagnostics();
   });
@@ -1417,6 +1584,83 @@ function salirDeModoMando() {
   modoControlPreferido = false;
   if (vistaActual === 'control') {
     UI.setView('lobby');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GOOGLE IDENTITY SERVICES (GIS): CARGA DINÁMICA SOLO SI EL BACKEND LO HABILITA
+// ---------------------------------------------------------------------------
+function cargarScriptGoogleGis() {
+  if (window.google?.accounts?.id) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[data-gis-script="1"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(Boolean(window.google?.accounts?.id)), { once: true });
+      existing.addEventListener('error', () => resolve(false), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.gisScript = '1';
+    script.onload = () => resolve(Boolean(window.google?.accounts?.id));
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
+async function inicializarGoogleSignIn() {
+  const wrap = getEl('googleSignInWrap');
+  const container = getEl('googleBtnContainer');
+  if (!wrap || !container) return;
+
+  const providers = await auth.getProviders();
+  if (!providers.google_enabled || !providers.google_client_id) {
+    wrap.hidden = true;
+    return;
+  }
+
+  const loaded = await cargarScriptGoogleGis();
+  if (!loaded || !window.google?.accounts?.id) {
+    wrap.hidden = true;
+    return;
+  }
+
+  try {
+    window.google.accounts.id.initialize({
+      client_id: providers.google_client_id,
+      callback: async (response) => {
+        const credential = response?.credential;
+        if (!credential) {
+          UI.showToast('No se recibió credencial válida de Google.', 'warning');
+          return;
+        }
+        const res = await auth.loginWithGoogle(credential);
+        if (!res.ok) {
+          const errBox = getEl('loginErrorBox');
+          if (errBox) {
+            errBox.textContent = res.error || 'Error al iniciar sesión con Google.';
+            errBox.hidden = false;
+          }
+          UI.showToast(res.error || 'Error al iniciar sesión con Google.', 'danger');
+          return;
+        }
+        UI.showToast(`Bienvenido, ${res.data?.usuario?.nombre || 'Cliente'} (Google)`, 'success');
+      },
+    });
+    container.textContent = '';
+    window.google.accounts.id.renderButton(container, {
+      theme: 'filled_black',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'rectangular',
+      locale: 'es',
+      width: 280,
+    });
+    wrap.hidden = false;
+  } catch (_) {
+    wrap.hidden = true;
   }
 }
 
@@ -1672,6 +1916,7 @@ async function boot() {
       STATE.vehicleId = null;
       STATE.vehicleInfo = null;
       UI.syncAuthUi(null);
+      UI.setHardwareStatus(null);
       if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
       await entrarAVista('guest');
     },
@@ -1684,10 +1929,11 @@ async function boot() {
     verificacion.reason === 'expired' ? 'expired' : 'boot'
   );
 
-  // 2. Salud independiente AWS + RDS en paralelo
+  // 2. Salud independiente AWS + RDS y proveedor Google Sign-In en paralelo
   const healthPromise = iniciarSaludPolling();
+  const googlePromise = inicializarGoogleSignIn();
 
-  await Promise.all([authFlowPromise, healthPromise]);
+  await Promise.all([authFlowPromise, healthPromise, googlePromise]);
 }
 
 if (document.getElementById('mainContent')) {

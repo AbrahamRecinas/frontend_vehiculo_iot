@@ -2206,3 +2206,18 @@ a:focus-visible,
 .demo-step-editor-card:hover {
   border-color: rgba(6, 182, 212, 0.45) !important;
 }
+
+/* Fase 5.5: Ilustraciones locales del catálogo público y miniaturas en Admin */
+.catalog-model-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background-color: #0b1528;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.admin-model-thumb {
+  object-fit: cover;
+  background-color: #0b1528;
+  flex-shrink: 0;
+}

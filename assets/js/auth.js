@@ -132,10 +132,82 @@ class AuthService {
   }
 
   /**
+   * Consulta proveedores públicos de autenticación (Google Sign-In habilitado o no).
+   */
+  async getProviders() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`${CONFIG.BASE_URL}${CONFIG.ENDPOINTS.AUTH_PROVIDERS}`, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        return { google_enabled: false, google_client_id: null };
+      }
+      return {
+        google_enabled: Boolean(data.google_enabled && data.google_client_id),
+        google_client_id: data.google_client_id || null,
+      };
+    } catch (_) {
+      return { google_enabled: false, google_client_id: null };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
    * Inicia sesión real contra POST /api/auth/login (bcrypt + JWT).
    */
   async login(correo, password) {
     const res = await this._rawPost(CONFIG.ENDPOINTS.AUTH_LOGIN, { correo, password });
+    if (!res.ok) {
+      return res;
+    }
+
+    const data = res.data || {};
+    this.setSession(
+      {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || null,
+        usuario: data.usuario,
+        sesionInvitado: null,
+      },
+      'login'
+    );
+    return res;
+  }
+
+  /**
+   * Registro público de cliente (siempre rol USUARIO en servidor) -> inicia sesión automáticamente.
+   */
+  async register(nombre, correo, password) {
+    const res = await this._rawPost(CONFIG.ENDPOINTS.AUTH_REGISTER, { nombre, correo, password });
+    if (!res.ok) {
+      return res;
+    }
+
+    const data = res.data || {};
+    this.setSession(
+      {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || null,
+        usuario: data.usuario,
+        sesionInvitado: null,
+      },
+      'login'
+    );
+    return res;
+  }
+
+  /**
+   * Autenticación / alta con Google Identity Services (verificación criptográfica en servidor).
+   */
+  async loginWithGoogle(credential) {
+    const res = await this._rawPost(CONFIG.ENDPOINTS.AUTH_GOOGLE, { credential });
     if (!res.ok) {
       return res;
     }

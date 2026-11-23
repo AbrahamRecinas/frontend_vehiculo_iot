@@ -707,6 +707,35 @@ const UI = {
     }
   },
 
+  setHardwareStatus: (conectado) => {
+    const ids = ['controlHardwareBadge', 'monitorHardwareBadge', 'userWorkspaceHardwareBadge'];
+    let texto = 'Hardware ESP8266: Sin verificar';
+    let clase = 'badge text-bg-dark border border-secondary text-secondary';
+    let lobbyTexto = 'Sin verificar';
+
+    if (conectado === true || conectado === 1) {
+      texto = 'Hardware ESP8266: En línea';
+      clase = 'badge bg-success-subtle text-success border border-success-subtle';
+      lobbyTexto = 'En línea';
+    } else if (conectado === false || conectado === 0) {
+      texto = 'Hardware ESP8266: Desconectado';
+      clase = 'badge bg-secondary-subtle text-warning border border-warning-subtle';
+      lobbyTexto = 'Desconectado';
+    }
+
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = clase;
+      el.textContent = texto;
+    });
+
+    const lobbyEl = document.getElementById('lobbyHardwareState');
+    if (lobbyEl) {
+      lobbyEl.textContent = lobbyTexto;
+    }
+  },
+
   setJoystickState: (state) => {
     const badge = UI.elements.joystickStateBadge;
     if (badge) {

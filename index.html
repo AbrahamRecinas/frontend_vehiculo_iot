@@ -13,10 +13,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <!-- CSP estricta de producción para GitHub Pages (sin orígenes locales HTTP/WS) -->
+  <!-- Nota CSP: http://127.0.0.1:8000 ws://127.0.0.1:8000 es TEMPORAL para pruebas locales de Fase 5.5; quitar SOLO 127.0.0.1:8000 antes del merge a main para GitHub Pages -->
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org; object-src 'none'; base-uri 'self'; form-action 'self'"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://accounts.google.com/gsi/style; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://grua-abraham.duckdns.org wss://grua-abraham.duckdns.org https://accounts.google.com/gsi/ http://127.0.0.1:8000 ws://127.0.0.1:8000; object-src 'none'; base-uri 'self'; form-action 'self'"
   />
 
   <link rel="icon" type="image/svg+xml" href="./assets/icons/favicon.svg" />
@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.4.2" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.4.2" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.5" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.5" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -252,7 +252,17 @@
                   <div class="text-center mb-3">
                     <img src="./assets/icons/favicon.svg" alt="" width="48" height="48" class="mb-2" />
                     <h2 class="h5 text-white fw-bold mb-1">Acceso a la Plataforma IoT</h2>
-                    <p class="small text-secondary mb-0">Inicia sesión con tu cuenta de Administrador o Comprador</p>
+                    <p class="small text-secondary mb-0">Inicia sesión o crea tu cuenta de cliente/tienda</p>
+                  </div>
+
+                  <!-- Alternador limpio: Iniciar sesión / Crear cuenta -->
+                  <div class="btn-group w-100 mb-3" role="group" aria-label="Modo de acceso">
+                    <button type="button" class="btn btn-sm btn-primary" id="authTabLogin" aria-pressed="true">
+                      <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar sesión
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="authTabRegister" aria-pressed="false">
+                      <i class="bi bi-person-plus me-1" aria-hidden="true"></i>Crear cuenta
+                    </button>
                   </div>
 
                   <div class="alert alert-danger py-2 small" id="loginErrorBox" role="alert" hidden></div>
@@ -270,6 +280,40 @@
                       <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar Sesión
                     </button>
                   </form>
+
+                  <div class="alert alert-danger py-2 small" id="registerErrorBox" role="alert" hidden></div>
+
+                  <form id="formRegister" novalidate hidden>
+                    <div class="mb-2">
+                      <label for="regNombre" class="form-label small text-secondary">Nombre completo</label>
+                      <input type="text" class="form-control form-control-sm" id="regNombre" name="nombre" autocomplete="name" maxlength="100" placeholder="Ej. Ana López" required />
+                    </div>
+                    <div class="mb-2">
+                      <label for="regCorreo" class="form-label small text-secondary">Correo electrónico</label>
+                      <input type="email" class="form-control form-control-sm" id="regCorreo" name="correo" autocomplete="email" maxlength="150" placeholder="cliente@dominio.com" required />
+                    </div>
+                    <div class="mb-2">
+                      <label for="regPassword" class="form-label small text-secondary">Contraseña (mín. 8 caracteres)</label>
+                      <input type="password" class="form-control form-control-sm" id="regPassword" name="password" autocomplete="new-password" minlength="8" maxlength="72" required />
+                    </div>
+                    <div class="mb-3">
+                      <label for="regPasswordConfirm" class="form-label small text-secondary">Confirmar contraseña</label>
+                      <input type="password" class="form-control form-control-sm" id="regPasswordConfirm" name="password_confirm" autocomplete="new-password" minlength="8" maxlength="72" required />
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 fw-semibold">
+                      <i class="bi bi-person-check me-1" aria-hidden="true"></i>Crear cuenta de cliente
+                    </button>
+                  </form>
+
+                  <!-- Google Identity Services (solo visible si backend expone GOOGLE_CLIENT_ID) -->
+                  <div id="googleSignInWrap" class="mt-3" hidden>
+                    <div class="d-flex align-items-center gap-2 my-2">
+                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
+                      <span class="small text-secondary">o continúa con</span>
+                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
+                    </div>
+                    <div id="googleBtnContainer" class="d-flex justify-content-center"></div>
+                  </div>
 
                   <hr class="border-secondary-subtle my-3" />
 
@@ -350,6 +394,7 @@
                   <strong class="text-white small text-truncate" id="userWorkspaceTitle">Unidad seleccionada</strong>
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-2">
+                  <span class="badge text-bg-dark border border-secondary text-secondary" id="userWorkspaceHardwareBadge">Hardware ESP8266: Sin verificar</span>
                   <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="userWorkspaceEstado">VENDIDO</span>
                   <button type="button" id="btnUserWorkspaceToggleExhibicion" class="btn btn-sm btn-outline-success">
                     <i class="bi bi-shop me-1" aria-hidden="true"></i>Cambiar a EXHIBICIÓN
@@ -564,6 +609,7 @@
               <div><dt>Latencia API</dt><dd data-diag="latency">-- ms</dd></div>
               <div><dt>Último HTTP</dt><dd data-diag="httpStatus">--</dd></div>
               <div><dt>Reconexiones WS</dt><dd data-diag="wsReconnects">0</dd></div>
+              <div><dt>Hardware ESP8266</dt><dd id="lobbyHardwareState">Sin verificar</dd></div>
               <div><dt>Rutinas</dt><dd data-lobby="demoCount">--</dd></div>
             </dl>
           </div>
@@ -633,9 +679,12 @@
                   <strong class="text-light" id="activeCommandText">VEHÍCULO DETENIDO</strong>
                 </div>
               </div>
-              <div class="text-end">
-                <span class="small text-secondary d-block">Último Comando:</span>
-                <span class="badge text-bg-dark border border-secondary font-monospace" id="activeCommandId">ID: 12</span>
+              <div class="text-end d-flex flex-column align-items-end gap-1">
+                <div>
+                  <span class="small text-secondary d-block">Último Comando:</span>
+                  <span class="badge text-bg-dark border border-secondary font-monospace" id="activeCommandId">ID: 12</span>
+                </div>
+                <span class="badge text-bg-dark border border-secondary text-secondary" id="controlHardwareBadge" title="Estado físico real del ESP8266 en /ws/dispositivo (independiente del WSS del navegador)">Hardware ESP8266: Sin verificar</span>
               </div>
             </section>
 
@@ -789,7 +838,8 @@
                 <small class="text-secondary">Panel de monitoreo · Telemetría en tiempo real</small>
               </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span class="badge text-bg-dark border border-secondary text-secondary" id="monitorHardwareBadge" title="Estado físico real del ESP8266 (independiente del WSS del navegador)">Hardware ESP8266: Sin verificar</span>
               <button type="button" class="btn btn-sm btn-outline-info" id="btnRefreshMonitor">
                 <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                 <span class="d-none d-sm-inline ms-1">Actualizar</span>
@@ -1825,6 +1875,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.4.3"></script>
+  <script type="module" src="./assets/js/app.js?v=4.5"></script>
 </body>
 </html>

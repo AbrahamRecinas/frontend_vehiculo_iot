@@ -13,7 +13,32 @@
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.4.3';
+import { UI } from './ui.js?v=4.5';
+
+const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
+const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
+
+function resolverImagenModelo(obj) {
+  const url = String(obj?.url_imagen || '').trim();
+  if (url) return url;
+  const texto = `${obj?.codigo_modelo || ''} ${obj?.nombre_comercial || ''} ${obj?.nombre || ''}`.toUpperCase();
+  return texto.includes('GRUA') || texto.includes('GRÚA') ? GRUA_MODEL_IMG : DEFAULT_MODEL_IMG;
+}
+
+function crearImagenModelo(obj, altTexto) {
+  const img = document.createElement('img');
+  img.src = resolverImagenModelo(obj);
+  img.alt = altTexto || 'Vehículo RC IoT';
+  img.className = 'catalog-model-img rounded mb-2';
+  img.loading = 'lazy';
+  img.addEventListener('error', () => {
+    if (!img.dataset.fallbackApplied) {
+      img.dataset.fallbackApplied = '1';
+      img.src = DEFAULT_MODEL_IMG;
+    }
+  });
+  return img;
+}
 
 const $ = (id) => document.getElementById(id);
 const toast = (msg, tipo = 'info') => UI.showToast(msg, tipo);
@@ -120,7 +145,8 @@ export async function cargarCatalogoInvitado() {
           chip2.textContent = `${permitidas.length} habilitadas en prueba`;
           caps.append(chip1, chip2);
 
-          body.append(head, desc, caps);
+          const img = crearImagenModelo(m, m.nombre_comercial || m.codigo_modelo);
+          body.append(img, head, desc, caps);
           card.appendChild(body);
           col.appendChild(card);
           modelosWrap.appendChild(col);
@@ -196,7 +222,19 @@ export async function cargarCatalogoInvitado() {
             });
           }
 
-          body.append(top, sub, btn);
+          const img = crearImagenModelo(u, u.nombre || u.nombre_comercial);
+
+          const hwRow = document.createElement('div');
+          hwRow.className = 'd-flex flex-wrap gap-1';
+          const hwBadge = document.createElement('span');
+          const hwOnline = u.dispositivo_conectado === true || u.dispositivo_conectado === 1;
+          hwBadge.className = hwOnline
+            ? 'badge bg-success-subtle text-success border border-success-subtle'
+            : 'badge bg-secondary-subtle text-warning border border-warning-subtle';
+          hwBadge.textContent = hwOnline ? 'Hardware ESP8266: En línea' : 'Hardware ESP8266: Desconectado';
+          hwRow.appendChild(hwBadge);
+
+          body.append(img, top, hwRow, sub, btn);
           card.appendChild(body);
           col.appendChild(card);
           exhibWrap.appendChild(col);

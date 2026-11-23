@@ -101,15 +101,23 @@ class ApiService {
       }
 
       if (!response.ok) {
-        const detail =
+        const retryAfterRaw = response.headers.get('retry-after');
+        const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : null;
+        let detail =
           typeof data?.detail === 'string'
             ? data.detail
             : `Error HTTP ${response.status}: ${response.statusText || 'Error en servidor'}`;
+        if (response.status === 429 && typeof data?.detail !== 'string') {
+          detail = retryAfterSec
+            ? `Demasiadas solicitudes (429). Intenta de nuevo en ${retryAfterSec} segundos.`
+            : 'Demasiadas solicitudes (429). Espera unos segundos antes de reintentar.';
+        }
         return {
           ok: false,
           status: response.status,
           data,
           latencyMs,
+          retryAfterSec: Number.isFinite(retryAfterSec) ? retryAfterSec : null,
           error: detail,
         };
       }

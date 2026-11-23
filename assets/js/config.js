@@ -68,8 +68,11 @@ export const CONFIG = Object.freeze({
     // Salud independiente API AWS + Amazon RDS
     HEALTH: '/api/health',
 
-    // Autenticación JWT real
+    // Autenticación JWT real + Registro público + Google Sign-In
+    AUTH_PROVIDERS: '/api/auth/providers',
     AUTH_LOGIN: '/api/auth/login',
+    AUTH_REGISTER: '/api/auth/register',
+    AUTH_GOOGLE: '/api/auth/google',
     AUTH_REFRESH: '/api/auth/refresh',
     AUTH_LOGOUT: '/api/auth/logout',
     AUTH_ME: '/api/auth/me',
