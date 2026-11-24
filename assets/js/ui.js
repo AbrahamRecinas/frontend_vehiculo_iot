@@ -21,6 +21,13 @@ const ROLE_BADGE_CLASSES = Object.freeze({
   INVITADO: 'text-bg-secondary',
 });
 
+function updateDemoLiveTicker(texto = '', visible = false) {
+  const ticker = document.getElementById('demoLiveTicker');
+  const textEl = document.getElementById('demoLiveTickerText');
+  if (textEl) textEl.textContent = texto || '';
+  if (ticker) ticker.hidden = !visible;
+}
+
 const UI = {
   elements: {},
   connectivityState: {
@@ -625,6 +632,7 @@ const UI = {
     }
     panel.classList.remove('is-finished');
     panel.classList.add('is-live');
+    updateDemoLiveTicker(`Iniciando · ${name || 'Rutina'}`, true);
   },
 
   etiquetarCeldas: (tbody) => {
@@ -685,13 +693,20 @@ const UI = {
     const labelTexto = String(opts.name || meta?.label || (cmdId ? `Comando ${cmdId}` : 'Movimiento'));
     name.appendChild(document.createTextNode(labelTexto));
 
-    const yaTieneDuracion = /\(\d+(?:\.\d+)?s\)\s*$/i.test(labelTexto);
-    if (!yaTieneDuracion && opts.duracionMs && Number(opts.duracionMs) > 0) {
+    const yaTieneDuracion = /\(\s*\d+(?:[.,]\d+)?\s*s\s*\)/i.test(labelTexto);
+    const durTexto =
+      !yaTieneDuracion && opts.duracionMs && Number(opts.duracionMs) > 0
+        ? ` (${(Number(opts.duracionMs) / 1000).toFixed(1)}s)`
+        : '';
+    if (durTexto) {
       const dur = document.createElement('small');
       dur.className = 'text-secondary ms-1';
-      dur.textContent = `(${(Number(opts.duracionMs) / 1000).toFixed(1)}s)`;
+      dur.textContent = durTexto.trim();
       name.appendChild(dur);
     }
+
+    const pasoPrefijo = opts.orden ? `Paso ${opts.orden} · ` : '';
+    updateDemoLiveTicker(`${pasoPrefijo}${labelTexto}${durTexto}`, true);
 
     const chip = document.createElement('span');
     chip.className = 'demo-step-id font-monospace';
@@ -732,6 +747,7 @@ const UI = {
 
     panel.classList.remove('is-live');
     panel.classList.add('is-finished');
+    updateDemoLiveTicker('', false);
   },
 
   setDemoStatus: (isActive) => {
@@ -743,6 +759,9 @@ const UI = {
     }
     if (card) {
       card.classList.toggle('is-running', Boolean(isActive));
+    }
+    if (!isActive) {
+      updateDemoLiveTicker('', false);
     }
   },
 

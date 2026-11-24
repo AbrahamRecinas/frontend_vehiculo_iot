@@ -10,6 +10,7 @@
   <meta name="description" content="Aplicación Mobile First para control, monitoreo y administración de la grúa RC IoT con FastAPI, WSS, JWT y Amazon RDS." />
   <meta name="author" content="Abraham Falcon Recinas" />
   <meta name="theme-color" content="#0a0f1d" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -36,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.2" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.2" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.3" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.3" />
 </head>
 <body>
   <div class="app-wrapper d-flex flex-column h-100">
@@ -315,37 +316,41 @@
 
       <!-- VISTA CATÁLOGO PÚBLICO / EXHIBICIÓN (Fase 4: reserva exclusiva temporal de invitado) -->
       <section id="guestView" class="guest-view" aria-label="Catálogo público y exhibición" hidden>
-        <div class="container-fluid px-2 py-2">
-          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mb-3">
-            <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-              <div>
-                <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-shop me-1 text-info" aria-hidden="true"></i>Prueba nuestros vehículos IoT</h2>
-                <small class="text-secondary">Catálogo público y reserva exclusiva temporal en unidades habilitadas en EXHIBICIÓN</small>
+        <div class="container-fluid px-2 py-2 guest-shell">
+          <div class="guest-topbar mb-2">
+            <div class="guest-topbar-title min-w-0">
+              <h2 class="h6 text-white fw-bold mb-0"><i class="bi bi-shop me-1 text-info" aria-hidden="true"></i>Catálogo IoT en Exhibición</h2>
+              <small class="text-secondary d-block text-truncate">Modelos disponibles y reserva temporal en vivo</small>
+            </div>
+            <div class="guest-topbar-controls">
+              <div class="d-flex align-items-center gap-1">
+                <label for="guestDuracionSelect" class="small text-secondary mb-0 text-nowrap">Prueba:</label>
+                <select id="guestDuracionSelect" class="form-select form-select-sm" style="width: auto;">
+                  <option value="60">1 min (60 s)</option>
+                  <option value="180" selected>3 min (180 s)</option>
+                  <option value="300">5 min (300 s)</option>
+                </select>
               </div>
-              <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="d-flex align-items-center gap-1">
-                  <label for="guestDuracionSelect" class="small text-secondary mb-0 text-nowrap">Duración prueba:</label>
-                  <select id="guestDuracionSelect" class="form-select form-select-sm" style="width: auto;">
-                    <option value="60">1 min (60 s)</option>
-                    <option value="180" selected>3 min (180 s)</option>
-                    <option value="300">5 min (300 s)</option>
-                  </select>
-                </div>
-                <button type="button" id="btnRefreshGuestCatalog" class="btn btn-sm btn-outline-info">
-                  <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
-                </button>
-                <button type="button" id="btnBackToLogin" class="btn btn-sm btn-outline-secondary">
-                  <i class="bi bi-person-lock me-1" aria-hidden="true"></i>Ingresar
-                </button>
-              </div>
+              <button type="button" id="btnRefreshGuestCatalog" class="btn btn-sm btn-outline-info">
+                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualizar
+              </button>
+              <button type="button" id="btnBackToLogin" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-person-lock me-1" aria-hidden="true"></i>Ingresar
+              </button>
             </div>
           </div>
 
-          <h3 class="h6 text-info mb-2">Modelos Disponibles</h3>
-          <div class="row g-2 mb-3" id="guestModelosGrid"></div>
+          <div class="guest-catalog-grid">
+            <section class="guest-catalog-section" aria-label="Modelos disponibles">
+              <h3 class="h6 text-info mb-2">Modelos Disponibles</h3>
+              <div class="row g-2" id="guestModelosGrid"></div>
+            </section>
 
-          <h3 class="h6 text-info mb-2">Unidades en Exhibición</h3>
-          <div class="row g-2" id="guestExhibicionGrid"></div>
+            <section class="guest-catalog-section" aria-label="Unidades en exhibición">
+              <h3 class="h6 text-info mb-2">Unidades en Exhibición</h3>
+              <div class="row g-2" id="guestExhibicionGrid"></div>
+            </section>
+          </div>
         </div>
       </section>
 
@@ -792,6 +797,11 @@
                     <ol id="demoTimelineList" class="demo-timeline-list"></ol>
                     <p id="demoTimelineEmpty" class="demo-timeline-empty">Esperando pasos del vehículo...</p>
                   </section>
+                  <div id="demoLiveTicker" class="demo-live-ticker" role="status" aria-live="polite" title="Toca para ver historial completo de pasos" hidden>
+                    <span class="demo-live-dot" aria-hidden="true"></span>
+                    <span id="demoLiveTickerText" class="demo-live-text text-truncate"></span>
+                    <span class="demo-live-more">Pasos</span>
+                  </div>
                   <div class="demo-actions">
                     <button type="button" class="btn demo-btn demo-btn--start" id="btnIniciarDemo">
                       <i class="bi bi-play-fill" aria-hidden="true"></i><span>Ejecutar</span>
@@ -835,7 +845,7 @@
 
       <!-- VISTA DE MONITOREO (4.2 conservada intacta) -->
       <section id="monitorView" class="monitor-view" aria-label="Panel de monitoreo y telemetría" hidden>
-        <div class="container-fluid px-2 py-2">
+        <div class="container-fluid px-2 py-2 monitor-shell">
           <div class="d-flex align-items-center justify-content-between gap-2 mb-2 monitor-vehicle-head">
             <div class="d-flex align-items-center gap-2 min-w-0">
               <span class="monitor-vehicle-icon" aria-hidden="true"><i class="bi bi-activity"></i></span>
@@ -859,73 +869,79 @@
             <span id="monitorAccessNoticeText"></span>
           </div>
 
-          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-last-movement" id="monitorLastMovementCard">
-            <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Último Movimiento</span>
-              <span class="badge text-bg-dark border border-secondary monitor-last-status" id="monitorLastMovementStatus">Sin datos</span>
-            </div>
-            <div class="card-body p-2">
-              <div class="row align-items-center g-2">
-                <div class="col-12 col-md-5 d-flex flex-column align-items-center text-center">
-                  <span class="monitor-last-command" id="monitorLastCommand">—</span>
-                  <small class="text-secondary d-block" id="monitorLastMeta">Consultando estado del vehículo…</small>
+          <div class="monitor-grid">
+            <div class="monitor-col-left">
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-last-movement mb-0" id="monitorLastMovementCard">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold text-white small"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Último Movimiento</span>
+                  <span class="badge text-bg-dark border border-secondary monitor-last-status" id="monitorLastMovementStatus">Sin datos</span>
                 </div>
-                <div class="col-12 col-md-7">
-                  <dl class="row g-2 small text-secondary mb-0 monitor-last-facts">
-                    <div class="col-6"><dt class="d-inline">Fecha:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastFecha">—</dd></div>
-                    <div class="col-6"><dt class="d-inline">Hora:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastHora">—</dd></div>
-                  </dl>
+                <div class="card-body p-2">
+                  <div class="row align-items-center g-2">
+                    <div class="col-12 col-md-5 d-flex flex-column align-items-center text-center">
+                      <span class="monitor-last-command" id="monitorLastCommand">—</span>
+                      <small class="text-secondary d-block" id="monitorLastMeta">Consultando estado del vehículo…</small>
+                    </div>
+                    <div class="col-12 col-md-7">
+                      <dl class="row g-2 small text-secondary mb-0 monitor-last-facts">
+                        <div class="col-6"><dt class="d-inline">Fecha:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastFecha">—</dd></div>
+                        <div class="col-6"><dt class="d-inline">Hora:</dt> <dd class="d-inline font-monospace text-white" id="monitorLastHora">—</dd></div>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-catalog-card mb-0">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold text-white small"><i class="bi bi-cpu me-1" aria-hidden="true"></i>Catálogo de Comandos de la Unidad</span>
+                  <span class="badge text-bg-dark border border-secondary" id="monitorComandosCount">0 comandos</span>
+                </div>
+                <div class="card-body p-2">
+                  <div class="table-responsive monitor-table-responsive">
+                    <table class="table table-sm table-hover align-middle monitor-table" id="monitorComandosTable">
+                      <thead>
+                        <tr>
+                          <th scope="col" class="text-center" style="width: 12%;">CMD</th>
+                          <th scope="col">Nombre</th>
+                          <th scope="col">Descripción</th>
+                          <th scope="col" class="text-center">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody id="monitorComandosBody"></tbody>
+                    </table>
+                  </div>
+                  <div class="monitor-empty-state text-center py-3" id="monitorComandosEmpty">
+                    <span class="small text-secondary monitor-empty-text">Consultando catálogo…</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
-            <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small"><i class="bi bi-list-check me-1" aria-hidden="true"></i>Historial de Movimientos (Máx. 10)</span>
-              <span class="badge text-bg-dark border border-secondary" id="monitorHistorialCount">0 movimientos</span>
-            </div>
-            <div class="card-body p-2">
-              <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" id="monitorHistorialTable">
-                  <thead>
-                    <tr>
-                      <th scope="col" class="text-center" style="width: 12%;">#</th>
-                      <th scope="col">Movimiento</th>
-                      <th scope="col" class="text-center">Fecha</th>
-                      <th scope="col" class="text-center">Hora</th>
-                    </tr>
-                  </thead>
-                  <tbody id="monitorHistorialBody"></tbody>
-                </table>
-              </div>
-              <div class="monitor-empty-state text-center py-3" id="monitorHistorialEmpty">
-                <span class="small text-secondary monitor-empty-text">Consultando historial…</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="card bg-body-tertiary border-secondary-subtle shadow-sm mt-2">
-            <div class="card-header py-2 d-flex justify-content-between align-items-center">
-              <span class="fw-semibold text-white small"><i class="bi bi-cpu me-1" aria-hidden="true"></i>Catálogo de Comandos de la Unidad</span>
-              <span class="badge text-bg-dark border border-secondary" id="monitorComandosCount">0 comandos</span>
-            </div>
-            <div class="card-body p-2">
-              <div class="table-responsive monitor-table-responsive">
-                <table class="table table-sm table-hover align-middle monitor-table" id="monitorComandosTable">
-                  <thead>
-                    <tr>
-                      <th scope="col" class="text-center" style="width: 12%;">CMD</th>
-                      <th scope="col">Nombre</th>
-                      <th scope="col">Descripción</th>
-                      <th scope="col" class="text-center">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody id="monitorComandosBody"></tbody>
-                </table>
-              </div>
-              <div class="monitor-empty-state text-center py-3" id="monitorComandosEmpty">
-                <span class="small text-secondary monitor-empty-text">Consultando catálogo…</span>
+            <div class="monitor-col-right">
+              <div class="card bg-body-tertiary border-secondary-subtle shadow-sm monitor-history-card mb-0">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold text-white small"><i class="bi bi-list-check me-1" aria-hidden="true"></i>Historial de Movimientos (Máx. 10)</span>
+                  <span class="badge text-bg-dark border border-secondary" id="monitorHistorialCount">0 movimientos</span>
+                </div>
+                <div class="card-body p-2">
+                  <div class="table-responsive monitor-table-responsive">
+                    <table class="table table-sm table-hover align-middle monitor-table" id="monitorHistorialTable">
+                      <thead>
+                        <tr>
+                          <th scope="col" class="text-center" style="width: 12%;">#</th>
+                          <th scope="col">Movimiento</th>
+                          <th scope="col" class="text-center">Fecha</th>
+                          <th scope="col" class="text-center">Hora</th>
+                        </tr>
+                      </thead>
+                      <tbody id="monitorHistorialBody"></tbody>
+                    </table>
+                  </div>
+                  <div class="monitor-empty-state text-center py-3" id="monitorHistorialEmpty">
+                    <span class="small text-secondary monitor-empty-text">Consultando historial…</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1869,6 +1885,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3.2"></script>
+  <script type="module" src="./assets/js/app.js?v=4.3.3"></script>
 </body>
 </html>
