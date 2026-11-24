@@ -13,7 +13,7 @@
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.2';
+import { UI } from './ui.js?v=4.3.3';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -29,7 +29,7 @@ function crearImagenModelo(obj, altTexto) {
   const img = document.createElement('img');
   img.src = resolverImagenModelo(obj);
   img.alt = altTexto || 'Vehículo RC IoT';
-  img.className = 'catalog-model-img rounded mb-2';
+  img.className = 'catalog-model-img rounded';
   img.loading = 'lazy';
   img.addEventListener('error', () => {
     if (!img.dataset.fallbackApplied) {
@@ -112,25 +112,28 @@ export async function cargarCatalogoInvitado() {
       } else {
         modelos.forEach((m) => {
           const col = document.createElement('div');
-          col.className = 'col-12 col-md-6';
+          col.className = 'col-12';
 
           const card = document.createElement('div');
-          card.className = 'card bg-dark border-secondary-subtle h-100';
+          card.className = 'card bg-dark border-secondary-subtle guest-item-card';
           const body = document.createElement('div');
-          body.className = 'card-body p-3';
+          body.className = 'card-body p-2 guest-card-media';
+
+          const info = document.createElement('div');
+          info.className = 'guest-card-body min-w-0 flex-grow-1';
 
           const head = document.createElement('div');
           head.className = 'd-flex justify-content-between align-items-start gap-2 mb-1';
           const h3 = document.createElement('h3');
-          h3.className = 'h6 text-white fw-bold mb-0';
+          h3.className = 'h6 text-white fw-bold mb-0 text-truncate';
           h3.textContent = m.nombre_comercial || m.codigo_modelo;
           const code = document.createElement('span');
-          code.className = 'badge text-bg-dark border border-secondary font-monospace';
+          code.className = 'badge text-bg-dark border border-secondary font-monospace flex-shrink-0';
           code.textContent = m.codigo_modelo;
           head.append(h3, code);
 
           const desc = document.createElement('p');
-          desc.className = 'small text-secondary mb-2';
+          desc.className = 'small text-secondary mb-1 guest-card-desc';
           desc.textContent = m.descripcion || 'Vehículo RC IoT oficial.';
 
           const caps = document.createElement('div');
@@ -139,14 +142,15 @@ export async function cargarCatalogoInvitado() {
           const permitidas = listaCaps.filter((c) => c.permitido_invitado_default === 1 || c.permitido_invitado_default === true);
           const chip1 = document.createElement('span');
           chip1.className = 'badge bg-info-subtle text-info border border-info-subtle';
-          chip1.textContent = `${listaCaps.length} funciones físicas`;
+          chip1.textContent = `${listaCaps.length} funciones`;
           const chip2 = document.createElement('span');
           chip2.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
-          chip2.textContent = `${permitidas.length} habilitadas en prueba`;
+          chip2.textContent = `${permitidas.length} en prueba`;
           caps.append(chip1, chip2);
 
           const img = crearImagenModelo(m, m.nombre_comercial || m.codigo_modelo);
-          body.append(img, head, desc, caps);
+          info.append(head, desc, caps);
+          body.append(img, info);
           card.appendChild(body);
           col.appendChild(card);
           modelosWrap.appendChild(col);
@@ -173,30 +177,33 @@ export async function cargarCatalogoInvitado() {
         const durSelect = $('guestDuracionSelect');
         unidades.forEach((u) => {
           const col = document.createElement('div');
-          col.className = 'col-12 col-md-6';
+          col.className = 'col-12';
 
           const card = document.createElement('div');
-          card.className = `card bg-dark h-100 ${u.disponible_ahora ? 'border-success-subtle' : 'border-warning-subtle'}`;
+          card.className = `card bg-dark guest-item-card ${u.disponible_ahora ? 'border-success-subtle' : 'border-warning-subtle'}`;
           const body = document.createElement('div');
-          body.className = 'card-body p-3 d-flex flex-column gap-2';
+          body.className = 'card-body p-2 guest-card-media';
+
+          const info = document.createElement('div');
+          info.className = 'guest-card-body min-w-0 flex-grow-1 d-flex flex-column gap-1';
 
           const top = document.createElement('div');
           top.className = 'd-flex justify-content-between align-items-center gap-2';
           const title = document.createElement('strong');
-          title.className = 'text-white';
+          title.className = 'text-white small text-truncate';
           title.textContent = `${u.nombre} (#${u.id_vehiculo})`;
 
           const badge = document.createElement('span');
           badge.className = u.disponible_ahora
-            ? 'badge bg-success-subtle text-success border border-success-subtle'
-            : 'badge bg-warning-subtle text-warning border border-warning-subtle';
+            ? 'badge bg-success-subtle text-success border border-success-subtle flex-shrink-0'
+            : 'badge bg-warning-subtle text-warning border border-warning-subtle flex-shrink-0';
           badge.textContent = u.disponible_ahora
-            ? 'Disponible para prueba'
-            : `Ocupado en prueba (${formatMMSS(u.segundos_ocupacion)})`;
+            ? 'Disponible'
+            : `Ocupado (${formatMMSS(u.segundos_ocupacion)})`;
           top.append(title, badge);
 
           const sub = document.createElement('small');
-          sub.className = 'text-secondary';
+          sub.className = 'text-secondary guest-card-desc';
           sub.textContent = `${u.nombre_comercial || u.modelo || 'Unidad de exhibición'}${
             u.descripcion ? ` · ${u.descripcion}` : ''
           }`;
@@ -204,15 +211,15 @@ export async function cargarCatalogoInvitado() {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = u.disponible_ahora
-            ? 'btn btn-success btn-sm fw-semibold mt-auto'
-            : 'btn btn-outline-secondary btn-sm mt-auto';
+            ? 'btn btn-success btn-sm fw-semibold mt-1 align-self-start'
+            : 'btn btn-outline-secondary btn-sm mt-1 align-self-start';
           btn.disabled = !u.disponible_ahora;
           const ico = document.createElement('i');
           ico.className = `bi ${u.disponible_ahora ? 'bi-play-circle-fill' : 'bi-lock-fill'} me-1`;
           ico.setAttribute('aria-hidden', 'true');
           btn.append(
             ico,
-            document.createTextNode(u.disponible_ahora ? 'Probar ahora (reserva exclusiva)' : 'En uso por otro visitante')
+            document.createTextNode(u.disponible_ahora ? 'Probar ahora' : 'En uso por otro visitante')
           );
 
           if (u.disponible_ahora) {
@@ -225,16 +232,18 @@ export async function cargarCatalogoInvitado() {
           const img = crearImagenModelo(u, u.nombre || u.nombre_comercial);
 
           const hwRow = document.createElement('div');
-          hwRow.className = 'd-flex flex-wrap gap-1';
-          const hwBadge = document.createElement('span');
+          hwRow.className = 'd-flex flex-wrap align-items-center gap-2';
+          const hwIndicator = document.createElement('span');
           const hwOnline = u.dispositivo_conectado === true || u.dispositivo_conectado === 1;
-          hwBadge.className = hwOnline
-            ? 'badge bg-success-subtle text-success border border-success-subtle'
-            : 'badge bg-secondary-subtle text-warning border border-warning-subtle';
-          hwBadge.textContent = hwOnline ? 'Hardware ESP8266: En línea' : 'Hardware ESP8266: Desconectado';
-          hwRow.appendChild(hwBadge);
+          hwIndicator.className = `hw-indicator ${hwOnline ? 'hw-indicator--online' : 'hw-indicator--offline'}`;
+          const hwDot = document.createElement('span');
+          hwDot.className = 'hw-dot';
+          hwDot.setAttribute('aria-hidden', 'true');
+          hwIndicator.append(hwDot, document.createTextNode(hwOnline ? 'Hardware en línea' : 'Hardware sin enlace'));
+          hwRow.appendChild(hwIndicator);
 
-          body.append(img, top, hwRow, sub, btn);
+          info.append(top, hwRow, sub, btn);
+          body.append(img, info);
           card.appendChild(body);
           col.appendChild(card);
           exhibWrap.appendChild(col);

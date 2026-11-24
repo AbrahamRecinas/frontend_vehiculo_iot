@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.3.2';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.2';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.2';
+import { UI } from './ui.js?v=4.3.3';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.3';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.3';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.3.2';
+} from './guest.js?v=4.3.3';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -1703,6 +1703,7 @@ async function boot() {
     window.activeController = null;
     UI.setControllerLock(null);
     UI.setStopButtonState(true);
+    UI.setDemoStatus(false);
 
     if (STATE.demoActive) {
       UI.showToast('Cancelando rutina autónoma y deteniendo...', 'warning');
@@ -1785,12 +1786,21 @@ async function boot() {
     getEl('mandoDrawerBackdrop')?.classList.remove('is-visible');
     getEl('btnToggleDemoDrawer')?.setAttribute('aria-expanded', 'false');
   };
-  getEl('btnToggleDemoDrawer')?.addEventListener('click', () => {
+  const toggleDemoDrawer = () => {
     const card = getEl('demoCard');
     if (!card) return;
     const abierto = card.classList.toggle('is-drawer-open');
     getEl('mandoDrawerBackdrop')?.classList.toggle('is-visible', abierto);
     getEl('btnToggleDemoDrawer')?.setAttribute('aria-expanded', String(abierto));
+  };
+  getEl('btnToggleDemoDrawer')?.addEventListener('click', toggleDemoDrawer);
+  getEl('demoLiveTicker')?.addEventListener('click', () => {
+    const isLandscapeDrawerMode = window.matchMedia(
+      '(max-height: 520px) and (orientation: landscape), (hover: none) and (pointer: coarse) and (orientation: landscape)'
+    ).matches;
+    if (isLandscapeDrawerMode && !getEl('demoCard')?.classList.contains('is-drawer-open')) {
+      toggleDemoDrawer();
+    }
   });
   getEl('btnCloseDemoDrawer')?.addEventListener('click', cerrarDemoDrawer);
   getEl('mandoDrawerBackdrop')?.addEventListener('click', cerrarDemoDrawer);
