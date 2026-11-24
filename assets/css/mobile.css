@@ -559,7 +559,10 @@ body.app-view-control .app-footer {
   }
 
   .monitor-table-responsive {
+    max-height: clamp(220px, 42dvh, 460px);
     overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .monitor-table {
@@ -745,8 +748,8 @@ body.app-view-control .app-footer {
   }
 
   .timed-cmd-btn {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 48px;
+    min-width: 48px;
     width: 100%;
     display: inline-flex;
     align-items: center;
@@ -819,5 +822,311 @@ body.app-view-control .app-footer {
   .demo-step-editor-card .btn {
     min-height: 0;
     min-width: 0;
+  }
+}
+
+/* ---------- 10. App-Shell 100dvh, Navegación Compacta y Mando Móvil Ergonómico ---------- */
+.app-nav .app-nav-pills {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  gap: 0.3rem;
+  padding: 0.28rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-nav .app-nav-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.app-nav .nav-item {
+  flex: 0 0 auto;
+}
+
+.app-nav .app-nav-link {
+  white-space: nowrap;
+  min-height: 38px;
+  padding: 0.32rem 0.72rem;
+}
+
+/* Barra superior, semáforos y navegación ultra compactos en 360px - 430px */
+@media (max-width: 575.98px) {
+  .app-nav > .container-fluid {
+    padding-left: 0.45rem !important;
+    padding-right: 0.45rem !important;
+  }
+
+  .app-nav .app-nav-link {
+    font-size: 0.74rem;
+    padding: 0.28rem 0.62rem;
+    gap: 0.3rem;
+    min-height: 36px;
+  }
+
+  .connectivity-bar .row {
+    --bs-gutter-x: 0.35rem;
+  }
+
+  .connectivity-bar .status-pill {
+    min-height: 32px;
+    padding: 0.18rem 0.28rem;
+  }
+
+  .connectivity-bar .status-led {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+  }
+
+  .guest-session-banner {
+    padding: 0.3rem 0.5rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .guest-session-banner .btn {
+    min-height: 38px;
+    font-size: 0.76rem;
+    padding: 0.25rem 0.55rem;
+  }
+
+  /* En móvil dentro de Modo Mando ocultamos el footer para maximizar el área táctil */
+  body.app-view-control .app-footer {
+    display: none !important;
+  }
+}
+
+/* MODO MANDO EN MÓVIL / TABLET VERTICAL: Joystick + D-Pad arriba + DETENER inmediato debajo */
+@media (max-width: 991.98px) and (orientation: portrait) {
+  :root {
+    --joystick-size: clamp(134px, 38vw, 184px);
+  }
+
+  body.app-view-control .main-content {
+    padding: 0.35rem !important;
+  }
+
+  .mando-view.is-visible {
+    display: flex !important;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .mando-status-bar {
+    display: none !important;
+  }
+
+  #mandoLayout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0.45rem;
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: clip;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding-bottom: calc(0.5rem + var(--safe-bottom));
+  }
+
+  #joystickPanel {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 0 !important;
+  }
+
+  #dpadPanel {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 0 !important;
+  }
+
+  #centerPanel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0 !important;
+    overflow: visible;
+  }
+
+  #joystickPanel .card,
+  #dpadPanel .card {
+    height: 100%;
+    border-radius: 16px;
+  }
+
+  #joystickPanel .card-header,
+  #dpadPanel .card-header {
+    padding: 0.3rem 0.5rem !important;
+  }
+
+  #joystickPanel .card-header .badge,
+  #dpadPanel .card-header .badge {
+    font-size: 0.62rem;
+    padding: 0.18rem 0.38rem;
+  }
+
+  #joystickPanel .card-body {
+    padding: 0.4rem 0.25rem !important;
+  }
+
+  #joystickPanel .joystick-hint,
+  #joystickPanel .command-banner {
+    display: none !important;
+  }
+
+  #dpadPanel .card-body {
+    padding: 0.35rem 0.2rem !important;
+  }
+
+  .dpad-container {
+    --dpad-btn-size: clamp(48px, 13.2vw, 58px);
+    grid-template-columns: repeat(3, var(--dpad-btn-size));
+    grid-template-rows: repeat(3, var(--dpad-btn-size));
+    gap: 5px;
+    min-height: 0;
+    height: auto;
+    width: auto;
+  }
+
+  .dpad-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 0.2rem !important;
+    border-radius: 13px;
+    gap: 2px;
+  }
+
+  .dpad-btn .btn-icon {
+    font-size: 1.35rem;
+  }
+
+  .dpad-label {
+    font-size: 0.52rem;
+  }
+
+  /* Centro: DETENER en fila 1 (al alcance inmediato del pulgar sin scroll) + 4 acciones abajo */
+  #centerPanel .mando-center-scroll {
+    overflow: visible;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  #centerPanel .card {
+    border-radius: 16px;
+  }
+
+  #centerPanel .card-header {
+    padding: 0.35rem 0.65rem !important;
+  }
+
+  #centerPanel .card-body {
+    padding: 0.5rem !important;
+  }
+
+  #energyCommandGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
+
+  #energyCommandGrid .stop-emergencia-btn {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    width: 100%;
+    min-height: 54px;
+    height: 54px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.96rem;
+    border-radius: 14px;
+    box-shadow: 0 8px 22px rgba(220, 38, 38, 0.42);
+  }
+
+  #energyCommandGrid .stop-label {
+    display: inline;
+    font-size: 0.92rem;
+    letter-spacing: 0.08em;
+  }
+
+  #energyCommandGrid .btn-action {
+    grid-row: 2;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-width: 48px;
+    min-height: 54px;
+    aspect-ratio: auto;
+    padding: 0.4rem 0.2rem !important;
+    border-radius: 13px;
+  }
+
+  #energyCommandGrid .btn-action .btn-icon {
+    font-size: 1.25rem;
+    margin-bottom: 2px !important;
+  }
+
+  #energyCommandGrid .btn-action .action-name {
+    font-size: 0.64rem;
+    letter-spacing: 0.02em;
+  }
+
+  #timedCommandsCard .timed-cmd-btn,
+  #btnIniciarDemo,
+  #btnCancelarDemo {
+    min-height: 48px;
+  }
+
+  body.app-view-control #toastContainer {
+    margin-bottom: 12px !important;
+  }
+}
+
+/* Pantallas muy angostas (360px): compactar encabezados de tarjetas de control para ganar verticalidad */
+@media (max-width: 400px) and (orientation: portrait) {
+  #joystickPanel .card-header,
+  #dpadPanel .card-header {
+    display: none !important;
+  }
+
+  .dpad-container {
+    --dpad-btn-size: 48px;
+    gap: 4px;
+  }
+}
+
+/* Móvil horizontal ultra compacto (landscape): mantener botones >= 48px */
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  body.mando-control .dpad-container {
+    --dpad-size: clamp(48px, 17dvh, 62px);
+    gap: 5px;
+  }
+
+  body.mando-control .dpad-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  body.mando-control #energyCommandGrid .btn-action {
+    min-width: 48px;
+    min-height: 48px;
+    max-width: 64px;
+  }
+
+  body.mando-control #energyCommandGrid .stop-emergencia-btn {
+    grid-row: 1;
+    min-height: 50px;
+    height: 50px;
+  }
+
+  body.mando-control #energyCommandGrid .btn-action {
+    grid-row: 2;
   }
 }

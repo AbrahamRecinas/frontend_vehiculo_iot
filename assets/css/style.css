@@ -51,39 +51,36 @@
 html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overflow-x: clip;
   background-color: var(--app-bg);
   color: #f1f5f9;
   font-family: var(--font-sans);
-  min-height: 100vh;
-  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overscroll-behavior-y: contain;
-}
-
-/* Scroll vertical inteligente: clip horizontal para nunca romper position:sticky */
-html, body {
-  max-width: 100%;
-  overflow-x: clip;
+  overscroll-behavior: none;
 }
 
 body {
-  min-height: 100dvh;
-  overflow-y: auto;
-  overflow-x: clip;
   background-image:
     radial-gradient(circle at 12% 10%, rgba(6, 182, 212, 0.10), transparent 32%),
     radial-gradient(circle at 88% 14%, rgba(59, 130, 246, 0.09), transparent 34%),
     linear-gradient(180deg, #070d1c 0%, #050914 100%);
 }
 
-/* Evitar selección de texto y scroll accidental durante el control táctil del vehículo */
+/* Evitar selección de texto, menús emergentes y doble-tap zoom en controles táctiles */
 .joystick-wrapper,
 #joystickTrack,
 #dpadGrid,
 .dpad-btn,
 .stop-emergencia-btn,
 .btn-action,
+.timed-cmd-btn,
 .status-pill {
   user-select: none;
   -webkit-user-select: none;
@@ -91,11 +88,16 @@ body {
 }
 
 .joystick-wrapper,
-#joystickTrack,
+#joystickTrack {
+  touch-action: none;
+}
+
 #dpadGrid,
 .dpad-btn,
-.stop-emergencia-btn {
-  touch-action: none;
+.btn-action,
+.stop-emergencia-btn,
+.timed-cmd-btn {
+  touch-action: manipulation;
 }
 
 /* --------------------------------------------------------------------------
@@ -1198,24 +1200,10 @@ body {
    8.5 LOBBY Y MODO MANDO - ARQUITECTURA "ESTACION DE MANDO"
    ========================================================================== */
 
-/* Lobby: vista inicial (movil) - oculto en PC */
-.lobby-view {
-  display: none !important;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  min-height: 0;
-  padding: 0.5rem;
-}
-
+/* Antigua sala de espera (lobby): retirada del flujo activo en móvil y PC */
+.lobby-view,
 .lobby-view.is-visible {
-  display: flex !important;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .lobby-view {
-    display: none !important;
-  }
+  display: none !important;
 }
 
 /* Modo Mando: vista fullscreen del controlador */
@@ -1409,11 +1397,28 @@ a:focus-visible,
    -------------------------------------------------------------------------- */
 .app-wrapper {
   background: transparent;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diag-panel {
+  flex: 0 0 auto;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .main-content {
-  flex-grow: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
 }
 
 .card {
@@ -1552,35 +1557,22 @@ a:focus-visible,
 }
 
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-  .card-header {
+  .mando-status-bar {
     display: none;
   }
-
-  /* La barra compacta del modo mando conserva los LEDs y la salida al ocultar el encabezado */
-  .mando-status-bar {
-    display: flex;
-  }
 }
 
-/* Móvil táctil: en Control el encabezado se oculta; Monitoreo y Administración lo muestran */
-@media (hover: none) and (pointer: coarse) {
-  body.app-view-control .app-header,
-  body.app-view-control #diagPanel {
-    display: none !important;
-  }
-}
-
-/* PC con ratón o trackpad: estación expandida con detalles técnicos */
+/* PC con ratón o trackpad: estación expandida con App-Shell 100dvh y scroll solo en columna central */
 @media (hover: hover) and (pointer: fine) and (orientation: landscape) {
   :root {
-    --joystick-size: min(270px, 34vh);
+    --joystick-size: min(260px, 32dvh);
   }
 
   .main-content {
     max-width: 1320px;
     margin: 0 auto;
     width: 100%;
-    padding: 0.75rem 1rem !important;
+    padding: 0.6rem 1rem !important;
   }
 
   .app-header {
@@ -1592,7 +1584,7 @@ a:focus-visible,
   }
 
   .status-pill {
-    padding: 0.45rem 0.85rem;
+    padding: 0.42rem 0.8rem;
     font-size: 0.8rem;
   }
 
@@ -1605,41 +1597,54 @@ a:focus-visible,
   }
 
   .mando-view.is-visible {
-    display: flex;
+    display: flex !important;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .mando-layout {
     flex-direction: row;
     align-items: stretch;
     gap: 0.75rem;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   #mandoLayout {
-    height: auto;
-    overflow: visible;
+    height: 100%;
+    overflow: hidden;
     touch-action: auto;
   }
 
   .mando-col {
     padding: 0 !important;
+    min-height: 0;
   }
 
   .mando-col-left,
   .mando-col-right {
     flex: 1 1 0;
+    overflow: hidden;
   }
 
   .mando-col-center {
     flex: 1.15 1 0;
+    overflow: hidden;
   }
 
   .mando-center-scroll {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0;
-    overflow: visible;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    padding: 0 0.25rem 0.25rem 0;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
   }
 
   #energyCommandGrid {
@@ -2142,18 +2147,51 @@ a:focus-visible,
 
 
 /* --------------------------------------------------------------------------
-   FASE 4.3: AUTH, CATÁLOGO PÚBLICO, MIS VEHÍCULOS Y DASHBOARD ADMIN
+   FASE 4.3 + APP-SHELL 100dvh: VISTAS CON SCROLL EXCLUSIVAMENTE INTERNO
    -------------------------------------------------------------------------- */
 .auth-view,
 .guest-view,
-.user-vehicles-view {
-  display: none;
+.user-vehicles-view,
+.monitor-view,
+.admin-view {
+  display: none !important;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .auth-view.is-visible,
 .guest-view.is-visible,
-.user-vehicles-view.is-visible {
-  display: block;
+.user-vehicles-view.is-visible,
+.monitor-view.is-visible,
+.admin-view.is-visible {
+  display: flex !important;
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.auth-view.is-visible > .container {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+@media (min-width: 768px) {
+  .monitor-table-responsive {
+    max-height: clamp(220px, 42dvh, 460px);
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+  }
+
+  .monitor-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #0c1426;
+  }
 }
 
 .auth-card {
