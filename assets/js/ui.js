@@ -168,6 +168,10 @@ const UI = {
         ? `${label} · ${estadoComercial}`
         : label;
     }
+    const mandoUnit = document.getElementById('mandoUnitName');
+    if (mandoUnit) {
+      mandoUnit.textContent = label;
+    }
     if (UI.elements.monitorVehicleBadge) {
       UI.elements.monitorVehicleBadge.textContent = `ID: ${vid}`;
     }
@@ -185,12 +189,40 @@ const UI = {
     let ledClass = 'led-gray';
     if (state === 'online' || state === 'open') {
       ledClass = 'led-green';
-    } else if (state === 'connecting') {
+    } else if (state === 'connecting' || state === 'standby') {
       ledClass = 'led-amber';
     } else if (state === 'error' || state === 'offline' || state === 'closed') {
       ledClass = 'led-red';
     }
     dot.className = `status-led ${ledClass}`;
+  },
+
+  _shortWssLabel: (state, detail = '') => {
+    const txt = String(detail || '').toLowerCase();
+    if (state === 'online' || state === 'open') return 'En línea';
+    if (state === 'connecting') return 'Conectando';
+    if (txt.includes('soporte') || txt.includes('vendida')) return 'Soporte req.';
+    if (txt.includes('espera') || txt.includes('sesión') || txt.includes('selecciona') || txt.includes('sin unidades')) {
+      return 'En espera';
+    }
+    return 'Off';
+  },
+
+  _shortAwsLabel: (aws = {}) => {
+    if (aws.state === 'online') {
+      return Number.isFinite(aws.latencyMs) ? `${aws.latencyMs}ms` : 'OK';
+    }
+    if (aws.state === 'connecting') return '...';
+    return 'Off';
+  },
+
+  _shortRdsLabel: (rds = {}) => {
+    if (rds.state === 'online') {
+      const m = String(rds.detail || '').match(/(\d+\s*ms)/i);
+      return m ? m[1].replace(/\s+/g, '') : 'OK';
+    }
+    if (rds.state === 'connecting') return '...';
+    return 'Off';
   },
 
   setConnectivity: (params) => {
@@ -200,19 +232,29 @@ const UI = {
     const rds = params?.rds ? { ...current.rds, ...params.rds } : current.rds;
     UI.connectivityState = { wss, aws, rds };
 
+    const wssDetail = String(wss?.detail || '');
+    const isStandbyWss =
+      wss?.state !== 'online' &&
+      wss?.state !== 'open' &&
+      wss?.state !== 'connecting' &&
+      (/soporte|vendida|espera|sesión|selecciona|sin unidades/i.test(wssDetail));
+    const wssVisualState = isStandbyWss ? 'standby' : String(wss?.state || 'closed');
+
     if (UI.elements.pillWss) {
-      UI.elements.pillWss.className = 'status-pill status-pill--' + String(wss?.state || 'closed');
-      UI.elements.pillWss.title = wss?.detail || 'WSS';
-      UI.applyLedClass(UI.elements.pillWss, wss?.state);
-      if (UI.elements.descWss) UI.elements.descWss.textContent = wss?.detail || '--';
+      UI.elements.pillWss.className = 'status-pill status-pill--' + wssVisualState;
+      UI.elements.pillWss.title = `WSS: ${wssDetail || 'Desconectado'}`;
+      UI.applyLedClass(UI.elements.pillWss, wssVisualState);
+      if (UI.elements.descWss) {
+        UI.elements.descWss.textContent = UI._shortWssLabel(wss?.state, wssDetail);
+      }
     }
 
     if (UI.elements.pillAws) {
       UI.elements.pillAws.className = 'status-pill status-pill--' + String(aws?.state || 'closed');
-      UI.elements.pillAws.title = `API: ${aws?.detail || '--'}`;
+      UI.elements.pillAws.title = `Servidor AWS: ${aws?.detail || '--'}`;
       UI.applyLedClass(UI.elements.pillAws, aws?.state);
       if (UI.elements.descAws) {
-        UI.elements.descAws.textContent = aws?.detail || '--';
+        UI.elements.descAws.textContent = UI._shortAwsLabel(aws);
         UI.elements.descAws.title =
           aws?.state === 'online'
             ? `HTTP OK · Latencia: ${aws?.latencyMs ?? '--'} ms`
@@ -224,10 +266,12 @@ const UI = {
       UI.elements.pillRds.className = 'status-pill status-pill--' + String(rds?.state || 'unverified');
       UI.elements.pillRds.title = `Amazon RDS: ${rds?.detail || 'Sin verificar'}`;
       UI.applyLedClass(UI.elements.pillRds, rds?.state);
-      if (UI.elements.descRds) UI.elements.descRds.textContent = rds?.detail || 'Sin verificar';
+      if (UI.elements.descRds) {
+        UI.elements.descRds.textContent = UI._shortRdsLabel(rds);
+      }
     }
 
-    UI.syncMandoLeds({ wss, aws, rds });
+    UI.syncMandoLeds({ wss: { ...wss, state: wssVisualState }, aws, rds });
     UI.syncLobby({ wss, aws, rds });
 
     return { wss, aws, rds };
@@ -356,6 +400,7 @@ const UI = {
     });
 
     const showMando = targetView === 'mando';
+    document.body.dataset.view = targetView;
     document.body.classList.toggle('mando-mode', showMando);
     document.body.classList.toggle('mando-control', showMando);
     document.body.classList.toggle('app-view-control', showMando);
@@ -637,10 +682,11 @@ const UI = {
       ico.className = `bi ${meta.icon} me-1`;
       name.appendChild(ico);
     }
-    const labelTexto = opts.name || meta?.label || (cmdId ? `Comando ${cmdId}` : 'Movimiento');
+    const labelTexto = String(opts.name || meta?.label || (cmdId ? `Comando ${cmdId}` : 'Movimiento'));
     name.appendChild(document.createTextNode(labelTexto));
 
-    if (opts.duracionMs && Number(opts.duracionMs) > 0) {
+    const yaTieneDuracion = /\(\d+(?:\.\d+)?s\)\s*$/i.test(labelTexto);
+    if (!yaTieneDuracion && opts.duracionMs && Number(opts.duracionMs) > 0) {
       const dur = document.createElement('small');
       dur.className = 'text-secondary ms-1';
       dur.textContent = `(${(Number(opts.duracionMs) / 1000).toFixed(1)}s)`;
@@ -710,25 +756,29 @@ const UI = {
 
   setHardwareStatus: (conectado) => {
     const ids = ['controlHardwareBadge', 'monitorHardwareBadge', 'userWorkspaceHardwareBadge'];
-    let texto = 'Hardware ESP8266: Sin verificar';
-    let clase = 'badge text-bg-dark border border-secondary text-secondary';
+    let texto = 'Sin verificar';
+    let clase = 'hw-indicator hw-indicator--unknown';
     let lobbyTexto = 'Sin verificar';
 
     if (conectado === true || conectado === 1) {
-      texto = 'Hardware ESP8266: En línea';
-      clase = 'badge bg-success-subtle text-success border border-success-subtle';
+      texto = 'En línea';
+      clase = 'hw-indicator hw-indicator--online';
       lobbyTexto = 'En línea';
     } else if (conectado === false || conectado === 0) {
-      texto = 'Hardware ESP8266: Desconectado';
-      clase = 'badge bg-secondary-subtle text-warning border border-warning-subtle';
-      lobbyTexto = 'Desconectado';
+      texto = 'Sin señal';
+      clase = 'hw-indicator hw-indicator--offline';
+      lobbyTexto = 'Sin señal';
     }
 
     ids.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
       el.className = clase;
-      el.textContent = texto;
+      el.textContent = '';
+      const dot = document.createElement('span');
+      dot.className = 'hw-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      el.append(dot, document.createTextNode(`ESP8266 · ${texto}`));
     });
 
     const lobbyEl = document.getElementById('lobbyHardwareState');

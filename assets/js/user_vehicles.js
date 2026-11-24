@@ -11,7 +11,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.6.0';
+import { UI } from './ui.js?v=4.3.2';
 
 const $ = (id) => document.getElementById(id);
 const esActivo = (v) => v === 1 || v === true || v === '1';
@@ -39,6 +39,18 @@ let callbacks = {
 };
 
 let confirmActionPending = null;
+let vistaListaActiva = false;
+
+function crearIndicadorHardware(conectado) {
+  const hwOnline = conectado === true || conectado === 1;
+  const span = document.createElement('span');
+  span.className = `hw-indicator ${hwOnline ? 'hw-indicator--online' : 'hw-indicator--offline'}`;
+  const dot = document.createElement('span');
+  dot.className = 'hw-dot';
+  dot.setAttribute('aria-hidden', 'true');
+  span.append(dot, document.createTextNode(hwOnline ? 'ESP8266 · En línea' : 'ESP8266 · Sin señal'));
+  return span;
+}
 
 function mostrarAlertaTienda(mensaje = '') {
   const box = $('userVehiclesAlert');
@@ -147,17 +159,23 @@ function formatearFechaHora(raw) {
 export async function cargarMisVehiculosModulo(preferVehicleId = null) {
   const grid = $('userVehiclesGrid');
   const workspace = $('userUnitWorkspace');
-  if (grid) pintarEstadoVacio(grid, 'Cargando tus vehículos asignados…');
+  if (grid) {
+    grid.hidden = false;
+    pintarEstadoVacio(grid, 'Cargando tus vehículos asignados…');
+  }
 
   const res = await api.obtenerVehiculos();
   if (!res.ok) {
     STORE.vehiculos = [];
     STORE.vehiculoActivo = null;
     if (workspace) workspace.hidden = true;
-    pintarEstadoVacio(grid, `Error al cargar tus vehículos: ${formatApiError(res)}`, {
-      tono: 'danger',
-      onRetry: () => cargarMisVehiculosModulo(preferVehicleId),
-    });
+    if (grid) {
+      grid.hidden = false;
+      pintarEstadoVacio(grid, `Error al cargar tus vehículos: ${formatApiError(res)}`, {
+        tono: 'danger',
+        onRetry: () => cargarMisVehiculosModulo(preferVehicleId),
+      });
+    }
     return [];
   }
 
@@ -165,10 +183,13 @@ export async function cargarMisVehiculosModulo(preferVehicleId = null) {
   if (!STORE.vehiculos.length) {
     STORE.vehiculoActivo = null;
     if (workspace) workspace.hidden = true;
-    pintarEstadoVacio(
-      grid,
-      'Aún no tienes vehículos asignados a tu cuenta. Solicita a la fábrica la asignación de tus unidades.'
-    );
+    if (grid) {
+      grid.hidden = false;
+      pintarEstadoVacio(
+        grid,
+        'Aún no tienes vehículos asignados a tu cuenta. Solicita a la fábrica la asignación de tus unidades.'
+      );
+    }
     return [];
   }
 
@@ -176,8 +197,25 @@ export async function cargarMisVehiculosModulo(preferVehicleId = null) {
   STORE.vehiculoActivo =
     STORE.vehiculos.find((v) => v.id_vehiculo === Number(targetId)) || STORE.vehiculos[0];
 
-  renderTarjetasVehiculos();
-  await cargarWorkspaceUnidad(STORE.vehiculoActivo);
+  // Vista enfocada sin tarjetas duplicadas: con 1 unidad entra directo al workspace unificado;
+  // con > 1 unidad solo muestra la lista cuando el usuario pulsa "← Unidades".
+  if (STORE.vehiculos.length === 1) {
+    vistaListaActiva = false;
+  }
+  const btnBack = $('btnUserBackToList');
+  if (btnBack) btnBack.hidden = STORE.vehiculos.length <= 1;
+
+  if (vistaListaActiva && STORE.vehiculos.length > 1) {
+    if (grid) grid.hidden = false;
+    if (workspace) workspace.hidden = true;
+    renderTarjetasVehiculos();
+  } else {
+    if (grid) {
+      grid.hidden = true;
+      grid.textContent = '';
+    }
+    await cargarWorkspaceUnidad(STORE.vehiculoActivo);
+  }
   return STORE.vehiculos;
 }
 
@@ -221,15 +259,7 @@ function renderTarjetasVehiculos() {
           : 'bg-warning-subtle text-warning border border-warning-subtle'
       )
     );
-    const hwOnline = v.dispositivo_conectado === true || v.dispositivo_conectado === 1;
-    badges.appendChild(
-      crearBadge(
-        hwOnline ? 'ESP8266: En línea' : 'ESP8266: Desconectado',
-        hwOnline
-          ? 'bg-success-subtle text-success border border-success-subtle'
-          : 'bg-secondary-subtle text-warning border border-warning-subtle'
-      )
-    );
+    badges.appendChild(crearIndicadorHardware(v.dispositivo_conectado));
     if (v.soporte_activo) {
       badges.appendChild(
         crearBadge('Soporte activo', 'bg-success-subtle text-success border border-success-subtle')
@@ -261,11 +291,15 @@ function renderTarjetasVehiculos() {
       }),
       crearBoton({
         icono: 'bi-sliders',
-        texto: seleccionado ? 'Gestionando' : 'Gestionar',
-        clase: seleccionado ? 'btn-info text-dark fw-semibold flex-fill' : 'btn-outline-light flex-fill',
+        texto: 'Gestionar',
+        clase: 'btn-outline-light flex-fill',
         onClick: async () => {
           STORE.vehiculoActivo = v;
-          renderTarjetasVehiculos();
+          vistaListaActiva = false;
+          if ($('userVehiclesGrid')) {
+            $('userVehiclesGrid').hidden = true;
+            $('userVehiclesGrid').textContent = '';
+          }
           await cargarWorkspaceUnidad(v);
         },
       }),
@@ -1114,6 +1148,21 @@ export function initUserVehicles(cbs = {}) {
     if (!STORE.vehiculoActivo) return;
     const habilitar = STORE.vehiculoActivo.estado_comercial !== 'EXHIBICION';
     solicitarCambioExhibicion(STORE.vehiculoActivo, habilitar);
+  });
+  $('btnUserWorkspaceControl')?.addEventListener('click', () => {
+    if (STORE.vehiculoActivo) callbacks.onSelectForControl?.(STORE.vehiculoActivo);
+  });
+  $('btnUserWorkspaceMonitor')?.addEventListener('click', () => {
+    if (STORE.vehiculoActivo) callbacks.onSelectForMonitor?.(STORE.vehiculoActivo);
+  });
+  $('btnUserBackToList')?.addEventListener('click', () => {
+    if (STORE.vehiculos.length <= 1) return;
+    vistaListaActiva = true;
+    const workspace = $('userUnitWorkspace');
+    const grid = $('userVehiclesGrid');
+    if (workspace) workspace.hidden = true;
+    if (grid) grid.hidden = false;
+    renderTarjetasVehiculos();
   });
 
   // Chips rápidos de duración de soporte
