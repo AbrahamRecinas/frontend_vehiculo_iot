@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.5';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.5';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.5';
+import { UI } from './ui.js?v=4.6.0';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.6.0';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.6.0';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.5';
+} from './guest.js?v=4.6.0';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -1010,9 +1010,11 @@ function salirDeMonitor() {
     return;
   }
   vistaActual = 'control';
+  mandoActivo = true;
+  modoControlPreferido = true;
   actualizarNavPills('control');
   wsService.connect(STATE.vehicleId);
-  UI.setView(modoControlPreferido ? 'mando' : 'lobby');
+  UI.setView('mando');
 }
 
 function bindViewNavigation() {
@@ -1565,8 +1567,9 @@ async function entrarAModoMando() {
 }
 
 function salirDeModoMando() {
+  const estabaFullscreen = Boolean(document.fullscreenElement);
   try {
-    if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+    if (estabaFullscreen && typeof document.exitFullscreen === 'function') {
       document.exitFullscreen().catch(() => {});
     }
   } catch (_) {}
@@ -1580,10 +1583,12 @@ function salirDeModoMando() {
   STATE.activeController = null;
   window.activeController = null;
   UI.setControllerLock(null);
-  mandoActivo = false;
-  modoControlPreferido = false;
-  if (vistaActual === 'control') {
-    UI.setView('lobby');
+
+  // Sin sala de espera: al salir de mando en móvil regresa a la vista principal del rol
+  if (!estabaFullscreen && vistaActual === 'control') {
+    const rol = auth.getRole();
+    const destino = rol === 'ADMIN' ? 'admin' : rol === 'USUARIO' ? 'user-vehicles' : 'guest';
+    entrarAVista(destino);
   }
 }
 
@@ -1672,15 +1677,13 @@ async function inicializarGoogleSignIn() {
 async function boot() {
   UI.init();
 
-  const esPC = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  mandoActivo = esPC;
-  modoControlPreferido = esPC;
+  // Acceso directo al Modo Mando en móvil y escritorio (sin sala de espera)
+  mandoActivo = true;
+  modoControlPreferido = true;
 
-  document.addEventListener('fullscreenchange', () => {
-    if (document.fullscreenElement || esPC) return;
-    if (vistaActual !== 'control') return;
-    if (!document.body.classList.contains('mando-control')) return;
-    salirDeModoMando();
+  // Bloquear menú contextual al mantener pulsados controles táctiles en Android/iOS
+  ['dpadGrid', 'joystickTrack', 'energyCommandGrid'].forEach((id) => {
+    getEl(id)?.addEventListener('contextmenu', (e) => e.preventDefault());
   });
 
   // Botón de paro de emergencia DETENER (prioridad absoluta)

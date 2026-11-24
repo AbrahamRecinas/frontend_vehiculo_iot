@@ -14,7 +14,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.5';
+import { UI } from './ui.js?v=4.6.0';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';

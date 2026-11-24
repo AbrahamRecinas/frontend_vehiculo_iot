@@ -333,8 +333,10 @@ const UI = {
 
   /**
    * Exclusión mutua atómica: exactamente UNA sola vista visible a la vez.
+   * La antigua sala de espera ('lobby') redirige siempre directo a 'mando'.
    */
   setView: (viewName) => {
+    const targetView = viewName === 'lobby' ? 'mando' : viewName;
     const viewMap = {
       auth: document.getElementById('authView'),
       guest: document.getElementById('guestView'),
@@ -348,23 +350,22 @@ const UI = {
     ALL_VIEWS.forEach((key) => {
       const el = viewMap[key];
       if (!el) return;
-      const active = key === viewName;
+      const active = key === targetView && key !== 'lobby';
       el.classList.toggle('is-visible', active);
       el.hidden = !active;
     });
 
-    const showMando = viewName === 'mando';
-    const showLobby = viewName === 'lobby';
+    const showMando = targetView === 'mando';
     document.body.classList.toggle('mando-mode', showMando);
     document.body.classList.toggle('mando-control', showMando);
-    document.body.classList.toggle('app-view-control', showLobby || showMando);
+    document.body.classList.toggle('app-view-control', showMando);
 
-    return viewName;
+    return targetView;
   },
 
-  setMandoMode: (isActive) => UI.setView(isActive ? 'mando' : 'lobby'),
+  setMandoMode: () => UI.setView('mando'),
 
-  setMonitorView: (isActive) => UI.setView(isActive ? 'monitor' : 'lobby'),
+  setMonitorView: (isActive) => UI.setView(isActive ? 'monitor' : 'mando'),
 
   setControllerLock: (controller) => {
     const joystickPanel = document.getElementById('joystickPanel');
