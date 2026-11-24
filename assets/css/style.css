@@ -7,38 +7,82 @@
    1. VARIABLES DE TEMA Y DESIGN TOKENS
    -------------------------------------------------------------------------- */
 :root {
-  --app-bg: #050914;
-  --surface-bg: #0c1426;
-  --surface-border: rgba(148, 163, 184, 0.16);
-  --surface-active: #16233c;
-  --surface-elevated: rgba(15, 23, 42, 0.86);
-  
-  --accent-cyan: #06b6d4;
+  /* Regla 80/15/5 + 3 Capas de profundidad (Canvas -> Surface -> Elevated) */
+  --bg-canvas: #070b14;
+  --bg-surface: #0f172a;
+  --bg-elevated: #162033;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent-primary: #0ea5e9;
+  --accent-bright: #38bdf8;
+  --accent-soft: rgba(14, 165, 233, 0.14);
+
+  --sem-ok: #22c55e;
+  --sem-warn: #f59e0b;
+  --sem-danger: #ef4444;
+
+  /* Compatibilidad con tokens previos */
+  --app-bg: var(--bg-canvas);
+  --surface-bg: var(--bg-surface);
+  --surface-border: var(--border-subtle);
+  --surface-active: var(--bg-elevated);
+  --surface-elevated: rgba(15, 23, 42, 0.92);
+
+  --accent-cyan: var(--accent-primary);
   --accent-blue: #3b82f6;
-  --accent-green: #22c55e;
-  --accent-amber: #f59e0b;
-  --accent-red: #ef4444;
-  --accent-gray: #64748b;
-  
-  --led-green: #22c55e;
-  --led-amber: #f59e0b;
-  --led-red: #ef4444;
-  --led-gray: #64748b;
+  --accent-green: var(--sem-ok);
+  --accent-amber: var(--sem-warn);
+  --accent-red: var(--sem-danger);
+  --accent-gray: var(--text-muted);
+
+  --led-green: var(--sem-ok);
+  --led-amber: var(--sem-warn);
+  --led-red: var(--sem-danger);
+  --led-gray: var(--text-muted);
 
   --joystick-track-bg: #0c1322;
   --joystick-ring: #1e293b;
   --joystick-knob-bg: #1e293b;
-  --joystick-knob-core: #06b6d4;
+  --joystick-knob-core: var(--accent-bright);
   --joystick-size: min(64vw, 240px);
 
   --stop-btn-bg: #dc2626;
   --stop-btn-hover: #b91c1c;
   --stop-btn-active: #991b1b;
-  
+
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  
+
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Scrollbars estilizadas discretas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.26);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.44);
 }
 
 /* --------------------------------------------------------------------------
@@ -101,104 +145,133 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   3. HEADER Y BARRA DE CONECTIVIDAD (3 SEMÁFOROS)
+   3. HEADER DE 2 ZONAS Y BARRA DE CONECTIVIDAD COMPACTA (3 PÍLDORAS)
    -------------------------------------------------------------------------- */
 .app-header {
-  background: rgba(8, 13, 26, 0.9);
+  background: rgba(9, 14, 26, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  border-color: var(--border-subtle) !important;
   z-index: 1020;
   flex-shrink: 0;
 }
 
-.app-header > .container-fluid {
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
+.header-top-row {
+  padding-top: 0.42rem !important;
+  padding-bottom: 0.42rem !important;
 }
 
 .brand-lockup h1 {
-  letter-spacing: 0.02em;
+  letter-spacing: 0.015em;
+  font-size: clamp(0.92rem, 1.2vw, 1.02rem);
+}
+
+.unit-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 190px;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+/* En Administración ya existe el selector único en el sidebar; evitar duplicado arriba */
+body[data-view="admin"] #vehicleBadge {
+  display: none;
 }
 
 .diag-toggle {
   border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  border-color: rgba(6, 182, 212, 0.38);
-  color: #67e8f9;
+  padding: 0.28rem 0.7rem;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: rgba(22, 32, 51, 0.65);
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 
+.diag-toggle:hover,
 .diag-toggle[aria-expanded="true"] {
-  background: rgba(6, 182, 212, 0.18);
-  border-color: var(--accent-cyan);
+  background: var(--accent-soft);
+  border-color: rgba(56, 189, 248, 0.45);
   color: #ffffff;
 }
 
 .header-logo {
-  filter: drop-shadow(0 2px 4px rgba(6, 182, 212, 0.3));
-}
-
-.vehicle-badge {
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  padding: 0.2rem 0.5rem;
+  filter: drop-shadow(0 2px 4px rgba(14, 165, 233, 0.25));
 }
 
 .connectivity-bar {
-  background: #090e1a !important;
+  background: rgba(7, 11, 20, 0.86) !important;
+  border-color: var(--border-subtle) !important;
+  padding-top: 0.24rem !important;
+  padding-bottom: 0.24rem !important;
+}
+
+.connectivity-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .status-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 9999px;
-  background: #0f172a;
-  border: 1px solid var(--surface-border);
-  transition: all 0.25s ease;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 180ms ease, background-color 180ms ease;
   font-size: 0.72rem;
-  min-height: 38px;
+  min-height: 28px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .status-pill .status-title {
   font-weight: 700;
-  color: #cbd5e1;
-  line-height: 1.1;
-  font-size: 0.72rem;
+  color: var(--text-primary);
+  line-height: 1;
+  font-size: 0.7rem;
 }
 
 .status-pill .status-desc {
-  color: #94a3b8;
-  font-size: 0.65rem;
-  display: block;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
   line-height: 1;
+  font-family: var(--font-mono);
 }
 
 /* Semáforos LED con pulso óptico */
 .status-led {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .led-green {
   background-color: var(--led-green);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  box-shadow: 0 0 7px rgba(34, 197, 94, 0.7);
 }
 
 .led-amber {
   background-color: var(--led-amber);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 7px rgba(245, 158, 11, 0.65);
   animation: ledPulse 1.8s infinite ease-in-out;
 }
 
 .led-red {
   background-color: var(--led-red);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 7px rgba(239, 68, 68, 0.7);
 }
 
 .led-gray {
@@ -212,22 +285,74 @@ body {
   50% { opacity: 0.45; transform: scale(0.85); }
 }
 
-/* Modificadores de píldora */
+/* Modificadores de píldora (solo colores semánticos cuando corresponde) */
 .status-pill--online {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.06);
 }
-.status-pill--connecting {
-  border-color: rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.08);
+.status-pill--connecting,
+.status-pill--standby {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.05);
 }
 .status-pill--offline {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.28);
   background: rgba(239, 68, 68, 0.08);
 }
 .status-pill--unverified {
-  border-color: rgba(100, 116, 139, 0.3);
-  background: rgba(100, 116, 139, 0.08);
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+/* En Administración los avisos de WSS en espera son discretos para no distraer */
+body[data-view="admin"] .status-pill--standby {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+}
+body[data-view="admin"] .status-pill--standby .status-led {
+  animation: none;
+  background-color: var(--text-muted);
+  box-shadow: none;
+}
+
+/* Indicador sobrio de hardware ESP8266 (reemplaza píldoras naranjas repetitivas) */
+.hw-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.hw-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.hw-indicator--online {
+  color: #86efac;
+}
+
+.hw-indicator--online .hw-dot {
+  background: var(--sem-ok);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+.hw-indicator--offline {
+  color: var(--text-secondary);
+}
+
+.hw-indicator--offline .hw-dot {
+  background: var(--text-muted);
+}
+
+.hw-indicator--unknown {
+  color: var(--text-muted);
 }
 
 /* --------------------------------------------------------------------------
@@ -455,9 +580,16 @@ body {
   text-align: center; /* <--- NUEVO: Asegura que si el texto baja no se desalinee */
 }
 
-.btn-action:active {
+.btn-action:active,
+.dpad-btn:active,
+.timed-cmd-btn:active {
+  transform: scale(0.95);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.stop-emergencia-btn:active {
   transform: scale(0.96);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  filter: brightness(1.1);
 }
 
 .btn-action .btn-icon {
@@ -1258,19 +1390,52 @@ body {
   padding: 0.25rem;
 }
 
-/* Barra de estado compacta del Modo Mando (movil): 3 LEDs + salida */
-.mando-status-bar {
+/* Barra superior fija en flujo normal del Modo Mando (sin superponerse sobre DETENER) */
+.mando-topbar {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  background: rgba(9, 14, 26, 0.95);
-  border-bottom: 1px solid var(--surface-border);
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: 40px;
+  padding: 0 0.55rem;
+  background: rgba(9, 14, 26, 0.96);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 20;
 }
 
-.mando-exit-btn {
+.mando-topbar-left,
+.mando-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.mando-unit-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  max-width: 120px;
+}
+
+.mando-leds-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.mando-exit-btn,
+.mando-top-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -1278,17 +1443,34 @@ body {
   position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #0f172a;
-  border: 1px solid var(--surface-border);
+  gap: 0.22rem;
+  padding: 0.14rem 0.36rem;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
 }
 
 .mando-led .status-led {
-  width: 11px;
-  height: 11px;
+  width: 8px;
+  height: 8px;
+}
+
+.mando-led-tag {
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.mando-drawer-backdrop,
+.mando-drawer-close {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mando-topbar {
+    display: none;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1557,13 +1739,30 @@ a:focus-visible,
 }
 
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-  .mando-status-bar {
-    display: none;
+  .mando-topbar {
+    display: flex !important;
   }
 }
 
+/* En Modo Mando y en pantallas de baja altura (móvil horizontal), ocultar footer global */
+body.app-view-control .app-footer {
+  display: none !important;
+}
+
+@media (max-height: 520px) {
+  .app-footer {
+    display: none !important;
+  }
+}
+
+/* En Administración escritorio, usar el 100% del ancho útil para el sidebar + workspace */
+body[data-view="admin"] .main-content {
+  max-width: none !important;
+  padding: 0 !important;
+}
+
 /* PC con ratón o trackpad: estación expandida con App-Shell 100dvh y scroll solo en columna central */
-@media (hover: hover) and (pointer: fine) and (orientation: landscape) {
+@media (hover: hover) and (pointer: fine) and (orientation: landscape) and (min-height: 521px) {
   :root {
     --joystick-size: min(260px, 32dvh);
   }
@@ -1757,46 +1956,59 @@ a:focus-visible,
   body.mando-control .card-header,
   body.mando-control #joystickPanel .command-banner,
   body.mando-control #joystickPanel .joystick-hint,
-  body.mando-control #demosListContainer {
+  body.mando-control #demosListContainer,
+  body.mando-control #demoTimeline {
     display: none !important;
   }
 
-  /* Telemetría flotante: no participa en el flujo ni altera las columnas */
-  body.mando-control .mando-status-bar {
+  /* Barra superior fija en flujo normal (jamás encima de DETENER) */
+  body.mando-control .mando-topbar {
+    display: flex !important;
+    height: 38px;
+    padding: 0 0.45rem;
+  }
+
+  /* Cajón desplegable de Rutinas cuando el usuario pulsa "Rutinas" en la barra superior */
+  body.mando-control .mando-drawer-backdrop.is-visible {
+    display: block;
     position: fixed;
-    top: max(4px, env(safe-area-inset-top, 0px));
-    left: 50%;
-    z-index: 1050;
-    display: flex;
-    width: auto;
-    max-width: calc(100% - 16px);
-    margin: 0;
-    padding: 3px 6px;
-    gap: 8px;
-    transform: translateX(-50%);
-    background: rgba(9, 14, 26, 0.78);
-    border: 1px solid var(--surface-border);
-    border-radius: 999px;
-    backdrop-filter: blur(6px);
+    inset: 0;
+    z-index: 1055;
+    background: rgba(3, 7, 18, 0.72);
+    backdrop-filter: blur(4px);
   }
 
-  body.mando-control .mando-led {
-    width: 14px;
-    height: 14px;
-    background: transparent;
-    border: 0;
+  body.mando-control #demoCard.is-drawer-open {
+    position: fixed;
+    inset: 14px;
+    z-index: 1060;
+    display: flex !important;
+    flex-direction: column;
+    max-width: 580px;
+    margin: auto !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+    border-color: rgba(56, 189, 248, 0.35) !important;
   }
 
-  body.mando-control .mando-led .status-led {
-    width: 10px;
-    height: 10px;
+  body.mando-control #demoCard.is-drawer-open .card-header {
+    display: flex !important;
   }
 
-  body.mando-control .mando-exit-btn {
-    width: 26px;
-    height: 26px;
-    margin-left: 2px;
-    padding: 0 !important;
+  body.mando-control #demoCard.is-drawer-open .mando-drawer-close {
+    display: inline-block;
+  }
+
+  body.mando-control #demoCard.is-drawer-open .card-body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.65rem !important;
+    gap: 0.6rem;
+  }
+
+  body.mando-control #demoCard.is-drawer-open #demosListContainer,
+  body.mando-control #demoCard.is-drawer-open #demoTimeline {
+    display: flex !important;
   }
 
   /* Joystick protagonista */
@@ -1950,61 +2162,273 @@ a:focus-visible,
    12. MÓDULO DE MONITOREO — VISTA DE TELEMETRÍA Y HISTORIAL DE MOVIMIENTOS
    ========================================================================== */
 
-/* Barra de navegación superior: alternar Vista de Control <-> Vista de Monitoreo */
+/* Barra de navegación integrada en Header */
 .app-nav {
-  background: rgba(8, 13, 26, 0.92);
-  border-bottom: 1px solid var(--surface-border);
+  background: transparent;
+  border: 0;
   flex-shrink: 0;
 }
 
 .app-nav .app-nav-pills {
   display: flex;
+  gap: 0.25rem;
 }
 
 .app-nav .app-nav-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.95rem;
+  gap: 0.38rem;
+  padding: 0.3rem 0.78rem;
   border-radius: 999px;
   border: 1px solid transparent;
-  color: #94a3b8 !important;
+  color: var(--text-secondary) !important;
   font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
 }
 
 .app-nav .app-nav-link:hover {
-  color: #e2e8f0 !important;
-  background: rgba(15, 23, 42, 0.9);
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .app-nav .app-nav-link.active {
-  color: #67e8f9 !important;
-  background: rgba(6, 182, 212, 0.14);
-  border-color: rgba(6, 182, 212, 0.4);
+  color: var(--accent-bright) !important;
+  background: var(--accent-soft);
+  border-color: rgba(56, 189, 248, 0.35);
 }
 
-/* Vista de Administración: oculta por defecto, mismo patrón que Monitoreo */
+/* Vista de Administración: App-Shell con Sidebar izquierdo en >= 1024px */
 .admin-view {
   display: none !important;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .admin-view.is-visible {
   display: flex !important;
 }
 
-.admin-select {
-  min-width: 200px;
-  max-width: 320px;
+.admin-shell {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
 }
 
-.admin-tabs .nav-link {
-  font-size: 0.85rem;
+.admin-sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.85rem 0.7rem;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.admin-sidebar-unit {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-nav-group-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 0.45rem 0.55rem 0.15rem;
+}
+
+.admin-sidebar .admin-tabs {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+  border-bottom: 0;
+  overflow: visible;
+}
+
+.admin-sidebar .admin-tabs .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.48rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: transparent;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.admin-sidebar .admin-tabs .nav-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-sidebar .admin-tabs .nav-link.active {
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+  border-color: rgba(56, 189, 248, 0.2);
+  border-left-color: var(--accent-primary);
+}
+
+.admin-workspace {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior: contain;
+  padding: 0.75rem 1rem;
+  background: var(--bg-canvas);
+}
+
+.admin-tab-content {
+  border: 0;
+  background: transparent;
+}
+
+.admin-select {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Botones de tabla limpios (sin exceso de bordes chillones) */
+.btn-table-action {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.28rem 0.58rem;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.btn-table-action:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border-strong);
+}
+
+.btn-table-action-accent {
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+.btn-table-action-accent:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(14, 165, 233, 0.24);
+  border-color: rgba(56, 189, 248, 0.55);
+}
+
+.btn-table-action-danger {
+  color: var(--text-secondary);
+}
+
+.btn-table-action-danger:hover:not(:disabled),
+.btn-table-action-danger:focus-visible:not(:disabled) {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.48);
+}
+
+.btn-ghost-more {
+  padding: 0.28rem 0.48rem;
+}
+
+.admin-action-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
+  border-radius: 12px;
+  padding: 0.3rem;
+  font-size: 0.8rem;
+  z-index: 1080;
+}
+
+.admin-action-menu .dropdown-item {
+  border-radius: 8px;
+  padding: 0.42rem 0.65rem;
+}
+
+/* Responsive Admin < 1024px: sidebar colapsa en barra superior compacta */
+@media (max-width: 1023.98px) {
+  .admin-shell {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0.55rem 0.65rem;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  .admin-sidebar-unit {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .admin-sidebar-unit .admin-nav-group-label {
+    padding: 0;
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+
+  .admin-nav-group-label {
+    display: none !important;
+  }
+
+  .admin-sidebar .admin-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    gap: 0.35rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-sidebar .admin-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-sidebar .admin-tabs .nav-link {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    border-left: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0.34rem 0.72rem;
+    font-size: 0.78rem;
+  }
+
+  .admin-workspace {
+    padding: 0.6rem;
+  }
 }
 
 /* Vista: oculta por defecto, se muestra con el modificador .is-visible
@@ -2097,7 +2521,7 @@ a:focus-visible,
 
 .monitor-table th,
 .monitor-table td {
-  padding: 0.5rem 0.6rem;
+  padding: 0.62rem 0.72rem;
   vertical-align: middle;
 }
 
@@ -2164,13 +2588,56 @@ a:focus-visible,
 .auth-view.is-visible,
 .guest-view.is-visible,
 .user-vehicles-view.is-visible,
-.monitor-view.is-visible,
-.admin-view.is-visible {
+.monitor-view.is-visible {
   display: flex !important;
   overflow-y: auto;
   overflow-x: clip;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Admin usa .admin-workspace para su scroll interno manteniendo el sidebar fijo */
+.admin-view.is-visible {
+  display: flex !important;
+  overflow: hidden;
+}
+
+/* Subpestañas segmentadas en 3 columnas iguales para Mis Vehículos */
+.uv-segmented-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  border-bottom: 0;
+  background: var(--bg-surface);
+  padding: 0.25rem;
+  border-radius: 12px 12px 0 0;
+  border: 1px solid var(--border-subtle);
+  border-bottom: 0;
+}
+
+.uv-segmented-tabs .nav-item {
+  min-width: 0;
+}
+
+.uv-segmented-tabs .nav-link {
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px !important;
+  border: 1px solid transparent !important;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.4rem;
+  white-space: nowrap;
+}
+
+.uv-segmented-tabs .nav-link.active {
+  color: var(--accent-bright) !important;
+  background: var(--accent-soft) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
 }
 
 .auth-view.is-visible > .container {

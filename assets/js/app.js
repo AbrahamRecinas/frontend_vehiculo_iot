@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.6.0';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.6.0';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.6.0';
+import { UI } from './ui.js?v=4.3.2';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.2';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.2';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.6.0';
+} from './guest.js?v=4.3.2';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -980,7 +980,9 @@ async function entrarAMonitor() {
   vistaActual = 'monitor';
   UI.setView('monitor');
   actualizarNavPills('monitor');
-  wsService.connect(STATE.vehicleId);
+  if (wsService.getState() !== 'open') {
+    wsService.resetAndReconnect(STATE.vehicleId);
+  }
   await cargarPanelMonitoreo();
 }
 
@@ -1013,7 +1015,9 @@ function salirDeMonitor() {
   mandoActivo = true;
   modoControlPreferido = true;
   actualizarNavPills('control');
-  wsService.connect(STATE.vehicleId);
+  if (wsService.getState() !== 'open') {
+    wsService.resetAndReconnect(STATE.vehicleId);
+  }
   UI.setView('mando');
 }
 
@@ -1445,8 +1449,13 @@ function bindWebSocketEvents() {
     if (!UI.demoTimelineIsLive()) {
       UI.demoTimelineStart({ name: 'Rutina en curso' });
     }
+    const rawBaseName =
+      payload?.comando ||
+      payload?.nombre_comando ||
+      (cf ? CONFIG.COMMAND_META?.[cf]?.label : null) ||
+      'Movimiento';
     UI.demoTimelineAddStep(cf, {
-      name: mov.comando,
+      name: rawBaseName,
       cmdId: cf,
       orden: payload?.orden,
       duracionMs: payload?.duracion_ms,
@@ -1726,6 +1735,14 @@ async function boot() {
   getEl('btnRunDiag')?.addEventListener('click', async () => {
     UI.showToast('Ejecutando diagnóstico de enlace...', 'info');
     await actualizarSaludApi({ showToast: true });
+    if (
+      auth.isAuthenticated() &&
+      STATE.vehicleId &&
+      !esUnidadBloqueadaParaAdmin(STATE.vehicleInfo) &&
+      wsService.getState() !== 'open'
+    ) {
+      wsService.resetAndReconnect(STATE.vehicleId);
+    }
   });
   getEl('btnCloseDiag')?.addEventListener('click', () => {
     bootstrap.Collapse.getOrCreateInstance(getEl('diagPanel')).hide();
@@ -1734,6 +1751,66 @@ async function boot() {
     syncDiagnostics();
     bootstrap.Collapse.getOrCreateInstance(getEl('diagPanel')).toggle();
   });
+
+  // Botón de Pantalla Completa y Cajón de Rutinas en barra superior del Modo Mando
+  const actualizarIconoFullscreen = () => {
+    const btnFs = getEl('btnToggleFullscreen');
+    if (!btnFs) return;
+    const activo = Boolean(document.fullscreenElement);
+    const ico = btnFs.querySelector('i');
+    if (ico) ico.className = activo ? 'bi bi-fullscreen-exit' : 'bi bi-fullscreen';
+    btnFs.setAttribute('aria-pressed', String(activo));
+    btnFs.title = activo ? 'Salir de pantalla completa' : 'Pantalla completa';
+  };
+  document.addEventListener('fullscreenchange', actualizarIconoFullscreen);
+
+  getEl('btnToggleFullscreen')?.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) {
+        if (typeof document.exitFullscreen === 'function') await document.exitFullscreen();
+      } else if (typeof document.documentElement.requestFullscreen === 'function') {
+        await document.documentElement.requestFullscreen();
+      } else {
+        UI.showToast('Tu navegador no admite pantalla completa automática.', 'info');
+      }
+    } catch (_) {
+      UI.showToast('No se pudo alternar pantalla completa en este dispositivo.', 'info');
+    } finally {
+      actualizarIconoFullscreen();
+    }
+  });
+
+  const cerrarDemoDrawer = () => {
+    getEl('demoCard')?.classList.remove('is-drawer-open');
+    getEl('mandoDrawerBackdrop')?.classList.remove('is-visible');
+    getEl('btnToggleDemoDrawer')?.setAttribute('aria-expanded', 'false');
+  };
+  getEl('btnToggleDemoDrawer')?.addEventListener('click', () => {
+    const card = getEl('demoCard');
+    if (!card) return;
+    const abierto = card.classList.toggle('is-drawer-open');
+    getEl('mandoDrawerBackdrop')?.classList.toggle('is-visible', abierto);
+    getEl('btnToggleDemoDrawer')?.setAttribute('aria-expanded', String(abierto));
+  });
+  getEl('btnCloseDemoDrawer')?.addEventListener('click', cerrarDemoDrawer);
+  getEl('mandoDrawerBackdrop')?.addEventListener('click', cerrarDemoDrawer);
+
+  // Reconexión automática de WSS al regresar a primer plano o recuperar red en móvil
+  const reconectarWssSiNecesario = () => {
+    if (
+      auth.isAuthenticated() &&
+      STATE.vehicleId &&
+      !esUnidadBloqueadaParaAdmin(STATE.vehicleInfo) &&
+      wsService.getState() !== 'open' &&
+      wsService.getState() !== 'connecting'
+    ) {
+      wsService.resetAndReconnect(STATE.vehicleId);
+    }
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') reconectarWssSiNecesario();
+  });
+  window.addEventListener('online', reconectarWssSiNecesario);
 
   // Botones de acción por data-cmd (conservando cableado D-Pad 3/4 intacto)
   const ejecutarComandoBoton = async (btn) => {

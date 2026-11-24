@@ -19,6 +19,7 @@ class WebSocketService {
     this.listeners = new Map();
     this.reconnectAttempts = 0;
     this.consecutiveHandshakeFails = 0;
+    this.authRefreshAttempted = false;
     this.hasOpenedCurrent = false;
     this.hadUnexpectedDisconnect = false;
     this.reconnectTimer = null;
@@ -86,9 +87,12 @@ class WebSocketService {
     }
 
     const changedVehicle = this.vehicleId !== null && this.vehicleId !== targetId;
-    if (changedVehicle) {
+    const changedToken = this.activeToken !== null && this.activeToken !== token;
+    if (changedVehicle || changedToken) {
       this.reconnectAttempts = 0;
+      this.consecutiveHandshakeFails = 0;
       this.hadUnexpectedDisconnect = false;
+      if (changedVehicle) this.authRefreshAttempted = false;
     }
 
     this.vehicleId = targetId;
@@ -107,6 +111,7 @@ class WebSocketService {
         if (this.socket !== sock) return;
         this.hasOpenedCurrent = true;
         this.consecutiveHandshakeFails = 0;
+        this.authRefreshAttempted = false;
         this.handleOpen();
       };
 
@@ -129,6 +134,23 @@ class WebSocketService {
           return;
         }
 
+        // Si el access_token expiró (4401), intentar 1 refresh silencioso antes de fallar
+        if (event.code === 4401 && !this.authRefreshAttempted && auth.getRefreshToken()) {
+          this.authRefreshAttempted = true;
+          this.updateState('connecting', 'Renovando sesión WSS...');
+          auth.refresh({ silent: true }).then((ok) => {
+            if (ok && !this.isExplicitlyClosed && this.vehicleId) {
+              this.consecutiveHandshakeFails = 0;
+              this.connect(this.vehicleId);
+            } else {
+              const reason = event.reason || 'Sesión expirada (4401)';
+              this.updateState('closed', reason);
+              this.emit('authError', { code: event.code, reason, vehicleId: this.vehicleId });
+            }
+          });
+          return;
+        }
+
         if (NO_RECONNECT_CODES.has(event.code)) {
           const reason = event.reason || `Acceso WSS cerrado (${event.code})`;
           this.updateState('closed', reason);
@@ -138,8 +160,19 @@ class WebSocketService {
 
         if (!this.hasOpenedCurrent) {
           this.consecutiveHandshakeFails += 1;
+          if (this.consecutiveHandshakeFails === 2 && !this.authRefreshAttempted && auth.getRefreshToken()) {
+            this.authRefreshAttempted = true;
+            this.updateState('connecting', 'Verificando token WSS...');
+            auth.refresh({ silent: true }).then((ok) => {
+              if (!this.isExplicitlyClosed && this.vehicleId && auth.isAuthenticated()) {
+                if (ok) this.consecutiveHandshakeFails = 0;
+                this.connect(this.vehicleId);
+              }
+            });
+            return;
+          }
           if (this.consecutiveHandshakeFails >= 3) {
-            this.updateState('closed', 'No autorizado o canal WSS no disponible');
+            this.updateState('closed', 'Canal WSS no disponible');
             return;
           }
         }
@@ -173,6 +206,8 @@ class WebSocketService {
     this.isExplicitlyClosed = true;
     this.hadUnexpectedDisconnect = false;
     this.reconnectAttempts = 0;
+    this.consecutiveHandshakeFails = 0;
+    this.authRefreshAttempted = false;
     this.activeToken = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -180,6 +215,15 @@ class WebSocketService {
     }
     this._closeCurrentSocket(detail);
     this.updateState('closed', detail);
+  }
+
+  resetAndReconnect(vehicleId = this.vehicleId) {
+    this.consecutiveHandshakeFails = 0;
+    this.authRefreshAttempted = false;
+    this.reconnectAttempts = 0;
+    if (vehicleId) {
+      this.connect(vehicleId);
+    }
   }
 
   handleMessage(rawText) {

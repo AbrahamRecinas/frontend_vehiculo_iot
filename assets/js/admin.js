@@ -14,7 +14,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.6.0';
+import { UI } from './ui.js?v=4.3.2';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -176,6 +176,77 @@ function badgeEstadoComercial(estado) {
     INACTIVO: 'bg-secondary-subtle text-secondary border border-secondary-subtle',
   };
   return crearBadge(estado || '—', map[estado] || 'text-bg-secondary');
+}
+
+function crearIndicadorHardware(conectado) {
+  const hwOn = conectado === true || conectado === 1;
+  const span = document.createElement('span');
+  span.className = `hw-indicator ${hwOn ? 'hw-indicator--online' : 'hw-indicator--offline'}`;
+  span.title = hwOn ? 'ESP8266 en línea vía WebSocket' : 'ESP8266 sin señal activa';
+  const dot = document.createElement('span');
+  dot.className = 'hw-dot';
+  dot.setAttribute('aria-hidden', 'true');
+  span.append(dot, document.createTextNode(hwOn ? 'En línea' : 'Sin señal'));
+  return span;
+}
+
+function crearMenuAcciones(items = []) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dropdown d-inline-block';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn btn-sm btn-table-action btn-ghost-more';
+  toggle.dataset.bsToggle = 'dropdown';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', 'Más acciones');
+  toggle.title = 'Más acciones';
+  const dots = document.createElement('i');
+  dots.className = 'bi bi-three-dots';
+  dots.setAttribute('aria-hidden', 'true');
+  toggle.appendChild(dots);
+
+  const menu = document.createElement('ul');
+  menu.className = 'dropdown-menu dropdown-menu-dark dropdown-menu-end admin-action-menu';
+
+  items.forEach((item) => {
+    const li = document.createElement('li');
+    if (item.divider) {
+      li.setAttribute('role', 'separator');
+      const hr = document.createElement('hr');
+      hr.className = 'dropdown-divider';
+      li.appendChild(hr);
+      menu.appendChild(li);
+      return;
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `dropdown-item d-flex align-items-center gap-2${item.danger ? ' text-danger' : ''}`;
+    btn.dataset.accion = item.accion;
+    if (item.tipo) btn.dataset.tipo = item.tipo;
+    if (item.id !== undefined && item.id !== null) btn.dataset.id = String(item.id);
+    if (item.disabled) btn.disabled = true;
+    if (item.title) btn.title = item.title;
+
+    if (item.icono) {
+      const ico = document.createElement('i');
+      ico.className = `bi ${item.icono}`;
+      ico.setAttribute('aria-hidden', 'true');
+      btn.appendChild(ico);
+    }
+    const label = document.createElement('span');
+    label.textContent = item.texto;
+    btn.appendChild(label);
+    li.appendChild(btn);
+    menu.appendChild(li);
+  });
+
+  wrap.append(toggle, menu);
+  if (window.bootstrap?.Dropdown) {
+    new window.bootstrap.Dropdown(toggle, { popperConfig: { strategy: 'fixed' } });
+  }
+  return wrap;
 }
 
 function pintarMensajeEnTbody(tbodyId, texto, tono = 'secondary') {
@@ -356,7 +427,7 @@ function pintarModelos() {
       crearBoton({
         icono: 'bi-sliders',
         texto: 'Capacidades',
-        clase: 'btn-outline-secondary',
+        clase: 'btn-table-action',
         accion: 'ver-capacidades',
         tipo: 'modelo',
         id: m.id_modelo,
@@ -364,7 +435,7 @@ function pintarModelos() {
       crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'modelo',
         id: m.id_modelo,
@@ -372,7 +443,7 @@ function pintarModelos() {
       crearBoton({
         icono: 'bi-trash',
         texto: 'Eliminar',
-        clase: 'btn-outline-danger',
+        clase: 'btn-table-action btn-table-action-danger',
         accion: 'eliminar',
         tipo: 'modelo',
         id: m.id_modelo,
@@ -478,7 +549,7 @@ async function cargarCapacidades() {
       crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'capacidad',
         id: c.id_capacidad,
@@ -486,7 +557,7 @@ async function cargarCapacidades() {
       crearBoton({
         icono: 'bi-trash',
         texto: 'Eliminar',
-        clase: 'btn-outline-danger',
+        clase: 'btn-table-action btn-table-action-danger',
         accion: 'eliminar',
         tipo: 'capacidad',
         id: c.id_capacidad,
@@ -545,23 +616,19 @@ function pintarVehiculos() {
     const tr = document.createElement('tr');
     const tdEstado = document.createElement('td');
     tdEstado.className = 'text-center';
-    tdEstado.appendChild(badgeEstadoComercial(v.estado_comercial));
+    const estadoWrap = document.createElement('div');
+    estadoWrap.className = 'd-inline-flex flex-wrap align-items-center justify-content-center gap-2';
+    estadoWrap.appendChild(badgeEstadoComercial(v.estado_comercial));
     const esUnidadPropiedadCliente =
       v.estado_comercial === 'VENDIDO' || (v.id_propietario !== null && v.id_propietario !== undefined);
 
     if (esUnidadPropiedadCliente && v.soporte_activo) {
-      const sop = crearBadge('Soporte OK', 'bg-success-subtle text-success border border-success-subtle ms-1');
-      tdEstado.appendChild(sop);
+      estadoWrap.appendChild(
+        crearBadge('Soporte OK', 'bg-success-subtle text-success border border-success-subtle')
+      );
     }
-    const hwOn = v.dispositivo_conectado === true || v.dispositivo_conectado === 1;
-    tdEstado.appendChild(
-      crearBadge(
-        hwOn ? 'ESP8266: En línea' : 'ESP8266: Desconectado',
-        hwOn
-          ? 'bg-success-subtle text-success border border-success-subtle ms-1'
-          : 'bg-secondary-subtle text-warning border border-warning-subtle ms-1'
-      )
-    );
+    estadoWrap.appendChild(crearIndicadorHardware(v.dispositivo_conectado));
+    tdEstado.appendChild(estadoWrap);
 
     const propietarioTexto = v.propietario_nombre
       ? `${v.propietario_nombre} (#${v.id_propietario})`
@@ -578,7 +645,7 @@ function pintarVehiculos() {
       crearBoton({
         icono: 'bi-controller',
         texto: 'Operar',
-        clase: puedeOperar ? 'btn-outline-success' : 'btn-outline-secondary',
+        clase: puedeOperar ? 'btn-table-action btn-table-action-accent' : 'btn-table-action',
         accion: 'operar-vehiculo',
         tipo: 'vehiculo',
         id: v.id_vehiculo,
@@ -587,38 +654,38 @@ function pintarVehiculos() {
           : 'Unidad VENDIDO sin soporte vigente o inactiva (403)',
       }),
       crearBoton({
-        icono: 'bi-person-check',
-        texto: 'Asignar',
-        clase: 'btn-outline-warning',
-        accion: 'asignar-propietario',
-        tipo: 'vehiculo',
-        id: v.id_vehiculo,
-      }),
-      crearBoton({
-        icono: 'bi-clock-history',
-        texto: '',
-        clase: 'btn-outline-secondary',
-        accion: 'ver-historial-propietarios',
-        tipo: 'vehiculo',
-        id: v.id_vehiculo,
-        title: 'Historial de propietarios',
-      }),
-      crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'vehiculo',
         id: v.id_vehiculo,
       }),
-      crearBoton({
-        icono: 'bi-trash',
-        texto: 'Baja',
-        clase: 'btn-outline-danger',
-        accion: 'eliminar',
-        tipo: 'vehiculo',
-        id: v.id_vehiculo,
-      })
+      crearMenuAcciones([
+        {
+          icono: 'bi-person-check',
+          texto: 'Asignar propietario',
+          accion: 'asignar-propietario',
+          tipo: 'vehiculo',
+          id: v.id_vehiculo,
+        },
+        {
+          icono: 'bi-clock-history',
+          texto: 'Historial de propietarios',
+          accion: 'ver-historial-propietarios',
+          tipo: 'vehiculo',
+          id: v.id_vehiculo,
+        },
+        { divider: true },
+        {
+          icono: 'bi-trash',
+          texto: 'Dar de baja',
+          accion: 'eliminar',
+          tipo: 'vehiculo',
+          id: v.id_vehiculo,
+          danger: true,
+        },
+      ])
     );
 
     tr.append(
@@ -699,7 +766,7 @@ function pintarUsuarios() {
       crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'usuario',
         id: u.id_usuario,
@@ -707,7 +774,7 @@ function pintarUsuarios() {
       crearBoton({
         icono: 'bi-person-slash',
         texto: 'Desactivar',
-        clase: 'btn-outline-danger',
+        clase: 'btn-table-action btn-table-action-danger',
         accion: 'desactivar-usuario',
         tipo: 'usuario',
         id: u.id_usuario,
@@ -788,7 +855,7 @@ async function cargarComandos() {
       crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'comando',
         id: c.id_comando,
@@ -796,7 +863,7 @@ async function cargarComandos() {
       crearBoton({
         icono: 'bi-trash',
         texto: 'Eliminar',
-        clase: 'btn-outline-danger',
+        clase: 'btn-table-action btn-table-action-danger',
         accion: 'eliminar',
         tipo: 'comando',
         id: c.id_comando,
@@ -849,7 +916,7 @@ async function cargarDemos() {
         crearBoton({
           icono: 'bi-list-ol',
           texto: 'Pasos',
-          clase: 'btn-outline-secondary',
+          clase: 'btn-table-action btn-table-action-accent',
           accion: 'ver-pasos',
           tipo: 'demo',
           id: d.id_demo,
@@ -857,7 +924,7 @@ async function cargarDemos() {
         crearBoton({
           icono: 'bi-pencil-square',
           texto: 'Editar',
-          clase: 'btn-outline-info',
+          clase: 'btn-table-action',
           accion: 'editar',
           tipo: 'demo',
           id: d.id_demo,
@@ -867,7 +934,7 @@ async function cargarDemos() {
         crearBoton({
           icono: 'bi-trash',
           texto: 'Eliminar',
-          clase: 'btn-outline-danger',
+          clase: 'btn-table-action btn-table-action-danger',
           accion: 'eliminar',
           tipo: 'demo',
           id: d.id_demo,
@@ -957,7 +1024,7 @@ async function cargarPasos() {
       crearBoton({
         icono: 'bi-arrow-up',
         texto: '',
-        clase: 'btn-outline-secondary',
+        clase: 'btn-table-action',
         accion: 'subir-paso',
         tipo: 'paso',
         id: p.id_demo_movimiento,
@@ -967,7 +1034,7 @@ async function cargarPasos() {
       crearBoton({
         icono: 'bi-arrow-down',
         texto: '',
-        clase: 'btn-outline-secondary',
+        clase: 'btn-table-action',
         accion: 'bajar-paso',
         tipo: 'paso',
         id: p.id_demo_movimiento,
@@ -977,7 +1044,7 @@ async function cargarPasos() {
       crearBoton({
         icono: 'bi-pencil-square',
         texto: 'Editar',
-        clase: 'btn-outline-info',
+        clase: 'btn-table-action',
         accion: 'editar',
         tipo: 'paso',
         id: p.id_demo_movimiento,
@@ -986,7 +1053,7 @@ async function cargarPasos() {
       crearBoton({
         icono: 'bi-trash',
         texto: 'Eliminar',
-        clase: 'btn-outline-danger',
+        clase: 'btn-table-action btn-table-action-danger',
         accion: 'eliminar',
         tipo: 'paso',
         id: p.id_demo_movimiento,
@@ -1535,7 +1602,12 @@ export function initAdmin({ onOperarVehiculo } = {}) {
 
   $('adminView')?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-accion]');
-    if (btn) manejarAccion(btn);
+    if (!btn) return;
+    const ddToggle = btn.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+    if (ddToggle && window.bootstrap?.Dropdown) {
+      window.bootstrap.Dropdown.getInstance(ddToggle)?.hide();
+    }
+    manejarAccion(btn);
   });
 
   $('btnRefreshDashboard')?.addEventListener('click', () => cargarDashboard());
