@@ -13,7 +13,7 @@
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.3';
+import { UI } from './ui.js?v=4.3.4';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -394,10 +394,6 @@ export function applyGuestControlRestrictions(comandosPermitidos = []) {
     const cf = Number(c.codigo_fisico ?? c.codigo);
     if (Number.isInteger(cf)) permitidosFisicos.add(cf);
   });
-
-  // Ocultar tarjeta de rutinas DEMO para invitados
-  const demoCard = $('demoCard');
-  if (demoCard) demoCard.hidden = true;
 
   // Filtrar botones con data-cmd (energía, accesorios y D-Pad)
   document.querySelectorAll('#mandoView [data-cmd]').forEach((btn) => {

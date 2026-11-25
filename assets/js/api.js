@@ -223,7 +223,10 @@ class ApiService {
       (Number(idComando) === CONFIG.COMMANDS.DETENER ? 4000 : CONFIG.TIMING.MOVEMENT_TIMEOUT_MS);
     return this.post(
       CONFIG.ENDPOINTS.MOVIMIENTO(vid),
-      { id_comando: Number(idComando) },
+      {
+        id_comando: Number(idComando),
+        ...(opts.esEmergencia ? { es_emergencia: true } : {}),
+      },
       { keepalive: opts.keepalive, timeoutMs: timeout }
     );
   }
