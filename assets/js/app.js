@@ -10,9 +10,9 @@ import { auth } from './auth.js';
 import { api, formatApiError } from './api.js';
 import { wsService } from './ws.js';
 import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.3.3';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.3';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.3';
+import { UI } from './ui.js?v=4.3.4';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.4';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.4';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.3.3';
+} from './guest.js?v=4.3.4';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -273,7 +273,7 @@ async function handleMovimiento(codigoFisicoInput) {
   return false;
 }
 
-async function detenerVehiculo() {
+async function detenerVehiculo(opts = {}) {
   if (!STATE.vehicleId) return;
   STATE.movementSequence += 1;
 
@@ -284,12 +284,13 @@ async function detenerVehiculo() {
   }
 
   const idDetener = resolverIdComandoDesdeFisico(CONFIG.COMMANDS.DETENER);
-  await enviarParo(idDetener);
+  await enviarParo(idDetener, opts);
 }
 
-async function enviarParo(idComandoDetener) {
+async function enviarParo(idComandoDetener, opts = {}) {
   if (!STATE.vehicleId) return false;
-  const res = await api.enviarMovimiento(idComandoDetener, { keepalive: true, timeoutMs: 5000 });
+  const reqOpts = { keepalive: true, timeoutMs: 5000, esEmergencia: Boolean(opts.esEmergencia) };
+  const res = await api.enviarMovimiento(idComandoDetener, reqOpts);
   if (res.ok) {
     STATE.lastSentCommand = CONFIG.COMMANDS.DETENER;
     UI.setCommandState(idComandoDetener, 'VEHÍCULO DETENIDO');
@@ -301,10 +302,7 @@ async function enviarParo(idComandoDetener) {
 
   return new Promise((resolve) => {
     setTimeout(async () => {
-      const retryRes = await api.enviarMovimiento(idComandoDetener, {
-        keepalive: true,
-        timeoutMs: 5000,
-      });
+      const retryRes = await api.enviarMovimiento(idComandoDetener, reqOpts);
       resolve(retryRes.ok);
     }, 600);
   });
@@ -351,7 +349,7 @@ async function iniciarDemo(explicitIdDemo = null) {
   }
 }
 
-async function cancelarDemo() {
+async function cancelarDemo(opts = {}) {
   if (!STATE.vehicleId) return;
   UI.setActionButtonBusy('btnCancelarDemo', true);
   const res = await api.cancelarDemo();
@@ -365,11 +363,11 @@ async function cancelarDemo() {
     UI.setPulseState('active-stopped');
     UI.showToast('Demo cancelada y hardware detenido', 'info');
     UI.demoTimelineEnd('Rutina cancelada desde la app', 'info');
-    await enviarParo(idDetener);
+    await enviarParo(idDetener, opts);
   } else {
     UI.showToast(formatApiError(res, 'Error al cancelar demo'), 'danger');
     if (res.status !== 403 && res.status !== 401) {
-      await enviarParo(idDetener);
+      await enviarParo(idDetener, opts);
     }
   }
 }
@@ -877,10 +875,12 @@ async function seleccionarVehiculoActivo(vehiculo, { conectarWss = true } = {}) 
 }
 
 async function cargarCatalogoDemos() {
-  if (!STATE.vehicleId || !auth.isAuthenticated() || auth.getRole() === 'INVITADO') {
+  const demoCard = getEl('demoCard');
+  if (!STATE.vehicleId || !auth.isAuthenticated()) {
     STATE.demos = [];
     UI.renderDemos([]);
     UI.renderDemoSelect([]);
+    if (demoCard && auth.getRole() === 'INVITADO') demoCard.hidden = true;
     return;
   }
   const res = await api.obtenerDemos(STATE.vehicleId);
@@ -889,7 +889,15 @@ async function cargarCatalogoDemos() {
     STATE.demos = demos;
     UI.renderDemos(demos);
     UI.renderDemoSelect(demos);
+    if (demoCard) {
+      demoCard.hidden = auth.getRole() === 'INVITADO' && demos.length === 0;
+    }
   } else {
+    if (auth.getRole() === 'INVITADO') {
+      STATE.demos = [];
+      if (demoCard) demoCard.hidden = true;
+      return;
+    }
     UI.renderDemoError(`Error al cargar demos: ${formatApiError(res)}`);
   }
 }
@@ -1663,18 +1671,43 @@ async function inicializarGoogleSignIn() {
         UI.showToast(`Bienvenido, ${res.data?.usuario?.nombre || 'Cliente'} (Google)`, 'success');
       },
     });
-    container.textContent = '';
-    const availableWidth = container.clientWidth || container.parentElement?.clientWidth || 260;
-    const googleBtnWidth = Math.max(220, Math.min(280, Math.floor(availableWidth - 4)));
-    window.google.accounts.id.renderButton(container, {
-      theme: 'filled_black',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'rectangular',
-      locale: 'es',
-      width: googleBtnWidth,
-    });
     wrap.hidden = false;
+    let ultimoAnchoGoogle = 0;
+    let googleResizeTimer = null;
+
+    const renderizarBotonGoogle = (forzar = false) => {
+      if (!window.google?.accounts?.id) return;
+      const formWidth =
+        getEl('formLogin')?.clientWidth ||
+        getEl('formRegister')?.clientWidth ||
+        wrap.clientWidth ||
+        320;
+      const googleBtnWidth = Math.max(200, Math.min(400, Math.round(formWidth)));
+      if (!forzar && Math.abs(googleBtnWidth - ultimoAnchoGoogle) < 4) return;
+      ultimoAnchoGoogle = googleBtnWidth;
+      container.textContent = '';
+      window.google.accounts.id.renderButton(container, {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'continue_with',
+        logo_alignment: 'center',
+        shape: 'rectangular',
+        locale: 'es',
+        width: googleBtnWidth,
+      });
+    };
+
+    renderizarBotonGoogle(true);
+
+    if (typeof ResizeObserver === 'function' && !wrap.dataset.gisObserverAttached) {
+      wrap.dataset.gisObserverAttached = '1';
+      const ro = new ResizeObserver(() => {
+        if (getEl('authView')?.hidden) return;
+        clearTimeout(googleResizeTimer);
+        googleResizeTimer = setTimeout(() => renderizarBotonGoogle(false), 120);
+      });
+      ro.observe(wrap);
+    }
   } catch (_) {
     wrap.hidden = true;
   }
@@ -1707,10 +1740,10 @@ async function boot() {
 
     if (STATE.demoActive) {
       UI.showToast('Cancelando rutina autónoma y deteniendo...', 'warning');
-      await cancelarDemo();
+      await cancelarDemo({ esEmergencia: true });
     } else {
       UI.showToast('Enviando paro de emergencia (DETENER 12)...', 'warning');
-      await detenerVehiculo();
+      await detenerVehiculo({ esEmergencia: true });
     }
     UI.setStopButtonState(false);
   });

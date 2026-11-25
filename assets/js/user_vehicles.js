@@ -11,7 +11,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.3';
+import { UI } from './ui.js?v=4.3.4';
 
 const $ = (id) => document.getElementById(id);
 const esActivo = (v) => v === 1 || v === true || v === '1';

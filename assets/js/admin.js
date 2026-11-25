@@ -14,7 +14,7 @@
 
 import { CONFIG } from './config.js';
 import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.3';
+import { UI } from './ui.js?v=4.3.4';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -382,9 +382,9 @@ async function cargarDashboard() {
               : 'bg-danger-subtle text-danger border border-danger-subtle';
         tr.append(
           celda(formatearFechaHora(e.fecha_hora), 'font-monospace small'),
-          celdaBadge(e.rol_actor, 'text-bg-dark border border-secondary'),
+          celdaBadge(e.rol_actor, claseRolAuditoria(e.rol_actor)),
           celda(e.accion, 'font-monospace small'),
-          celda(`${e.recurso_tipo}${e.recurso_id ? ` #${e.recurso_id}` : ''}`, 'small'),
+          celda(formatearRecursoAuditoria(e), 'small'),
           celdaBadge(e.resultado, tono)
         );
         audBody.appendChild(tr);
@@ -753,6 +753,7 @@ function pintarUsuarios() {
   }
   ESTADO.usuarios.forEach((u) => {
     const tr = document.createElement('tr');
+    const esCuentaInvitado = u.rol === 'INVITADO';
     const rolClase =
       u.rol === 'ADMIN'
         ? 'bg-warning-subtle text-warning border border-warning-subtle'
@@ -762,30 +763,40 @@ function pintarUsuarios() {
 
     const acciones = document.createElement('td');
     acciones.className = 'text-end text-nowrap';
-    acciones.append(
-      crearBoton({
-        icono: 'bi-pencil-square',
-        texto: 'Editar',
-        clase: 'btn-table-action',
-        accion: 'editar',
-        tipo: 'usuario',
-        id: u.id_usuario,
-      }),
-      crearBoton({
-        icono: 'bi-person-slash',
-        texto: 'Desactivar',
-        clase: 'btn-table-action btn-table-action-danger',
-        accion: 'desactivar-usuario',
-        tipo: 'usuario',
-        id: u.id_usuario,
-        disabled: !esActivo(u.activo),
-      })
-    );
+    if (esCuentaInvitado) {
+      const lockBadge = document.createElement('span');
+      lockBadge.className = 'badge bg-dark text-secondary border border-secondary-subtle';
+      const icoLock = document.createElement('i');
+      icoLock.className = 'bi bi-lock-fill me-1';
+      icoLock.setAttribute('aria-hidden', 'true');
+      lockBadge.append(icoLock, document.createTextNode('Cuenta de sistema'));
+      acciones.appendChild(lockBadge);
+    } else {
+      acciones.append(
+        crearBoton({
+          icono: 'bi-pencil-square',
+          texto: 'Editar',
+          clase: 'btn-table-action',
+          accion: 'editar',
+          tipo: 'usuario',
+          id: u.id_usuario,
+        }),
+        crearBoton({
+          icono: 'bi-person-slash',
+          texto: 'Desactivar',
+          clase: 'btn-table-action btn-table-action-danger',
+          accion: 'desactivar-usuario',
+          tipo: 'usuario',
+          id: u.id_usuario,
+          disabled: !esActivo(u.activo),
+        })
+      );
+    }
     tr.append(
       celda(u.id_usuario, 'text-center font-monospace'),
       celda(u.nombre),
       celda(u.correo, 'font-monospace small'),
-      celdaBadge(u.rol, rolClase),
+      celdaBadge(esCuentaInvitado ? 'INVITADO · Sistema' : u.rol, rolClase),
       celdaEstado(u.activo),
       acciones
     );
@@ -1091,6 +1102,67 @@ async function moverPaso(idMov, delta) {
 // ---------------------------------------------------------------------------
 // 6. BITÁCORA DE AUDITORÍA (filtrable y paginada)
 // ---------------------------------------------------------------------------
+function claseRolAuditoria(rol) {
+  if (rol === 'INVITADO') return 'bg-info-subtle text-info border border-info-subtle';
+  if (rol === 'ADMIN') return 'bg-warning-subtle text-warning border border-warning-subtle';
+  if (rol === 'USUARIO') return 'bg-primary-subtle text-primary border border-primary-subtle';
+  return 'text-bg-dark border border-secondary';
+}
+
+function formatearActorAuditoria(a) {
+  const det = a.detalle_json && typeof a.detalle_json === 'object' ? a.detalle_json : null;
+  if (a.rol_actor === 'INVITADO') {
+    if (det?.id_sesion) return `Invitado · Sesión #${det.id_sesion}`;
+    if (det?.identificador) return `Invitado (${det.identificador})`;
+    return 'Invitado (Exhibición)';
+  }
+  if (a.nombre_actor) return `${a.nombre_actor} (#${a.id_actor})`;
+  return a.id_actor ? `Usuario #${a.id_actor}` : 'Sistema';
+}
+
+function formatearRecursoAuditoria(a) {
+  const det = a.detalle_json && typeof a.detalle_json === 'object' ? a.detalle_json : null;
+  const vid = a.vehiculo_id ?? det?.id_vehiculo ?? null;
+  const vnom = a.vehiculo_nombre || det?.vehiculo || null;
+  const unidadTexto = vnom ? (vid ? `${vnom} (#${vid})` : vnom) : vid ? `Vehículo #${vid}` : '';
+  if (a.recurso_tipo === 'VEHICULO' && unidadTexto) return unidadTexto;
+  const base = `${a.recurso_tipo}${a.recurso_id ? ` #${a.recurso_id}` : ''}`;
+  return unidadTexto ? `${base} · ${unidadTexto}` : base;
+}
+
+function formatearDetalleAuditoria(a) {
+  const det = a.detalle_json && typeof a.detalle_json === 'object' ? a.detalle_json : null;
+  if (!det) return typeof a.detalle_json === 'string' && a.detalle_json ? a.detalle_json : '—';
+  const partes = [];
+  if (det.vehiculo || det.id_vehiculo) {
+    partes.push(`Unidad: ${det.vehiculo || `#${det.id_vehiculo}`}`);
+  }
+  if (det.comando) {
+    partes.push(
+      `Comando: ${det.comando}${det.codigo_fisico !== undefined ? ` (fís. ${det.codigo_fisico})` : ''}`
+    );
+  }
+  if (det.nombre_demo) partes.push(`Demo: ${det.nombre_demo}`);
+  if (det.id_sesion) partes.push(`Sesión #${det.id_sesion}`);
+  if (det.motivo) partes.push(`Motivo: ${det.motivo}`);
+  const omitir = new Set([
+    'vehiculo',
+    'id_vehiculo',
+    'comando',
+    'codigo_fisico',
+    'nombre_demo',
+    'id_sesion',
+    'motivo',
+    'identificador',
+    'id_comando',
+  ]);
+  Object.entries(det).forEach(([k, v]) => {
+    if (omitir.has(k) || v === null || v === undefined || v === '') return;
+    partes.push(`${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+  });
+  return partes.length ? partes.join(' · ') : '—';
+}
+
 async function cargarAuditoria(resetOffset = false) {
   if (resetOffset) ESTADO.auditoria.offset = 0;
 
@@ -1145,11 +1217,7 @@ async function cargarAuditoria(resetOffset = false) {
 
   ESTADO.auditoria.items.forEach((a) => {
     const tr = document.createElement('tr');
-    const actor = a.nombre_actor
-      ? `${a.nombre_actor} (#${a.id_actor})`
-      : a.id_actor
-        ? `Usuario #${a.id_actor}`
-        : 'Sistema';
+    const actor = formatearActorAuditoria(a);
     const resClase =
       a.resultado === 'EXITO'
         ? 'bg-success-subtle text-success border border-success-subtle'
@@ -1157,23 +1225,14 @@ async function cargarAuditoria(resetOffset = false) {
           ? 'bg-warning-subtle text-warning border border-warning-subtle'
           : 'bg-danger-subtle text-danger border border-danger-subtle';
 
-    let detalleTexto = '—';
-    if (a.detalle_json && typeof a.detalle_json === 'object') {
-      detalleTexto = Object.entries(a.detalle_json)
-        .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-        .join(' · ');
-    } else if (typeof a.detalle_json === 'string') {
-      detalleTexto = a.detalle_json;
-    }
-
     tr.append(
       celda(formatearFechaHora(a.fecha_hora), 'font-monospace small'),
       celda(actor, 'small'),
-      celdaBadge(a.rol_actor, 'text-bg-dark border border-secondary'),
+      celdaBadge(a.rol_actor, claseRolAuditoria(a.rol_actor)),
       celda(a.accion, 'font-monospace small'),
-      celda(`${a.recurso_tipo}${a.recurso_id ? ` #${a.recurso_id}` : ''}`, 'small'),
+      celda(formatearRecursoAuditoria(a), 'small'),
       celdaBadge(a.resultado, resClase),
-      celda(detalleTexto, 'small text-secondary text-break')
+      celda(formatearDetalleAuditoria(a), 'small text-secondary text-break')
     );
     tbody.appendChild(tr);
   });

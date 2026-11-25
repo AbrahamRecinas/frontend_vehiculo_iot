@@ -37,10 +37,10 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.3" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.3" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.4" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.4" />
 </head>
-<body>
+<body data-view="auth">
   <div class="app-wrapper d-flex flex-column h-100">
 
     <!-- HEADER / BARRA SUPERIOR (2 zonas limpias: barra de mando/nav + píldoras compactas) -->
@@ -228,15 +228,17 @@
 
       <!-- VISTA 0: LOGIN REAL (JWT + bcrypt) -->
       <section id="authView" class="auth-view is-visible" aria-label="Inicio de sesión">
-        <div class="container py-4">
+        <div class="container py-3">
           <div class="row justify-content-center">
             <div class="col-12 col-sm-10 col-md-7 col-lg-5">
               <div class="card bg-body-tertiary border-secondary-subtle shadow-lg auth-card">
                 <div class="card-body p-4">
-                  <div class="text-center mb-3">
-                    <img src="./assets/icons/favicon.svg" alt="" width="48" height="48" class="mb-2" />
-                    <h2 class="h5 text-white fw-bold mb-1">Acceso a la Plataforma IoT</h2>
-                    <p class="small text-secondary mb-0">Inicia sesión o crea tu cuenta de cliente/tienda</p>
+                  <div class="auth-brand-head">
+                    <img src="./assets/icons/favicon.svg" alt="" width="34" height="34" class="auth-brand-logo" />
+                    <div class="min-w-0">
+                      <h2 class="auth-brand-title mb-0">Acceso a la Plataforma IoT</h2>
+                      <small class="auth-brand-sub text-truncate">Control, telemetría y gestión en la nube</small>
+                    </div>
                   </div>
 
                   <!-- Alternador limpio: Iniciar sesión / Crear cuenta -->
@@ -252,11 +254,11 @@
                   <div class="alert alert-danger py-2 small" id="loginErrorBox" role="alert" hidden></div>
 
                   <form id="formLogin" novalidate>
-                    <div class="mb-3">
+                    <div class="auth-field">
                       <label for="loginCorreo" class="form-label small text-secondary">Correo electrónico</label>
                       <input type="email" class="form-control" id="loginCorreo" name="correo" autocomplete="username" placeholder="usuario@dominio.com" required />
                     </div>
-                    <div class="mb-3">
+                    <div class="auth-field">
                       <label for="loginPassword" class="form-label small text-secondary">Contraseña</label>
                       <input type="password" class="form-control" id="loginPassword" name="password" autocomplete="current-password" required />
                     </div>
@@ -268,19 +270,19 @@
                   <div class="alert alert-danger py-2 small" id="registerErrorBox" role="alert" hidden></div>
 
                   <form id="formRegister" novalidate hidden>
-                    <div class="mb-2">
+                    <div class="auth-field">
                       <label for="regNombre" class="form-label small text-secondary">Nombre completo</label>
                       <input type="text" class="form-control form-control-sm" id="regNombre" name="nombre" autocomplete="name" maxlength="100" placeholder="Ej. Ana López" required />
                     </div>
-                    <div class="mb-2">
+                    <div class="auth-field">
                       <label for="regCorreo" class="form-label small text-secondary">Correo electrónico</label>
                       <input type="email" class="form-control form-control-sm" id="regCorreo" name="correo" autocomplete="email" maxlength="150" placeholder="cliente@dominio.com" required />
                     </div>
-                    <div class="mb-2">
+                    <div class="auth-field">
                       <label for="regPassword" class="form-label small text-secondary">Contraseña (mín. 8 caracteres)</label>
                       <input type="password" class="form-control form-control-sm" id="regPassword" name="password" autocomplete="new-password" minlength="8" maxlength="72" required />
                     </div>
-                    <div class="mb-3">
+                    <div class="auth-field">
                       <label for="regPasswordConfirm" class="form-label small text-secondary">Confirmar contraseña</label>
                       <input type="password" class="form-control form-control-sm" id="regPasswordConfirm" name="password_confirm" autocomplete="new-password" minlength="8" maxlength="72" required />
                     </div>
@@ -290,21 +292,18 @@
                   </form>
 
                   <!-- Google Identity Services (solo visible si backend expone GOOGLE_CLIENT_ID) -->
-                  <div id="googleSignInWrap" class="mt-3" hidden>
-                    <div class="d-flex align-items-center gap-2 my-2">
-                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
-                      <span class="small text-secondary">o continúa con</span>
-                      <hr class="flex-grow-1 border-secondary-subtle my-0" />
+                  <div id="googleSignInWrap" class="auth-google-wrap" hidden>
+                    <div class="auth-divider" role="separator">
+                      <span>o continuar con</span>
                     </div>
-                    <div id="googleBtnContainer" class="d-flex justify-content-center"></div>
+                    <div class="google-btn-shell">
+                      <div id="googleBtnContainer" class="google-btn-inner"></div>
+                    </div>
                   </div>
 
-                  <hr class="border-secondary-subtle my-3" />
-
-                  <div class="text-center">
-                    <p class="small text-secondary mb-2">¿Aún no eres cliente? Explora los modelos y prueba en vivo las unidades en exhibición.</p>
-                    <button type="button" id="btnGoGuestCatalog" class="btn btn-outline-info btn-sm w-100">
-                      <i class="bi bi-shop me-1" aria-hidden="true"></i>Probar vehículos como Invitado
+                  <div class="auth-guest-footer">
+                    <button type="button" id="btnGoGuestCatalog" class="btn btn-outline-info btn-sm w-100 auth-guest-btn">
+                      <i class="bi bi-shop me-1" aria-hidden="true"></i>Probar vehículos en Exhibición (Invitado)
                     </button>
                   </div>
                 </div>
@@ -1595,7 +1594,6 @@
               <select class="form-select form-select-sm" id="usuarioRol" name="rol">
                 <option value="USUARIO">USUARIO (Comprador)</option>
                 <option value="ADMIN">ADMIN (Empresa)</option>
-                <option value="INVITADO">INVITADO (Sistema)</option>
               </select>
             </div>
             <div class="mb-2">
@@ -1885,6 +1883,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3.3"></script>
+  <script type="module" src="./assets/js/app.js?v=4.3.4"></script>
 </body>
 </html>
