@@ -8,7 +8,7 @@
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 
-const NO_RECONNECT_CODES = new Set([1000, 1008, 4401, 4403, 4404]);
+const NO_RECONNECT_CODES = new Set([1000, 1008, 4401, 4403, 4404, 4410]);
 
 class WebSocketService {
   constructor() {
@@ -266,6 +266,26 @@ class WebSocketService {
 
       if (evento === 'SESION_INVITADO_EXPIRADA' || evento === 'SESION_INVITADO_ESTADO') {
         this.emit('sesion_invitado', payload);
+      }
+
+      if (evento === 'COMANDOS_ACTUALIZADOS') {
+        this.emit('comandos_actualizados', payload);
+      }
+
+      if (evento === 'DEMOS_ACTUALIZADAS') {
+        this.emit('demos_actualizadas', payload);
+      }
+
+      if (evento === 'DEMO_INTERRUMPIDA') {
+        this.emit('demo_interrumpida', payload);
+      }
+
+      if (evento === 'ACCESO_REVOCADO') {
+        this.emit('acceso_revocado', payload);
+      }
+
+      if (evento === 'ERROR_COMANDO') {
+        this.emit('error_comando', payload);
       }
 
       // Contrato congelado: priorizar codigo_fisico / codigo para feedback físico

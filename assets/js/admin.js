@@ -13,8 +13,8 @@
  */
 
 import { CONFIG } from './config.js';
-import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.4';
+import { api, formatApiError } from './api.js?v=4.3.5';
+import { UI } from './ui.js?v=4.3.5';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -54,8 +54,15 @@ const ESTADO = {
 };
 
 let onOperarVehiculoCallback = null;
+let onCommandsChangedCallback = null;
 let accionPendiente = null;
 let generacionPasos = 0;
+
+function esComandoDetenerProtegido(c) {
+  const cf = Number(c?.codigo_fisico ?? c?.codigo);
+  const esBase = c?.duracion_ms === null || c?.duracion_ms === undefined;
+  return cf === CONFIG.COMMANDS.DETENER && esBase;
+}
 
 // ---------------------------------------------------------------------------
 // API DE ADMINISTRACIÓN (con JWT automático en api.js)
@@ -483,7 +490,7 @@ function pintarModelos() {
   UI.etiquetarCeldas(tbody);
 }
 
-function poblarSelectModelos() {
+function poblarSelectModelos({ soloActivosVehiculo = false, modeloActualId = null } = {}) {
   const selectCap = $('adminModeloCapSelect');
   const selectVeh = $('vehiculoIdModelo');
 
@@ -512,9 +519,17 @@ function poblarSelectModelos() {
     selectVeh.textContent = '';
     selectVeh.appendChild(new Option('— Sin modelo catalogado —', ''));
     ESTADO.modelos.forEach((m) => {
-      selectVeh.appendChild(new Option(`${m.nombre_comercial} (${m.codigo_modelo})`, String(m.id_modelo)));
+      const mAct = esActivo(m.activo);
+      const esActual = modeloActualId !== null && Number(m.id_modelo) === Number(modeloActualId);
+      if (soloActivosVehiculo && !mAct && !esActual) return;
+      const label = mAct
+        ? `${m.nombre_comercial} (${m.codigo_modelo})`
+        : `${m.nombre_comercial} (${m.codigo_modelo}) · Inactivo`;
+      selectVeh.appendChild(new Option(label, String(m.id_modelo)));
     });
-    if (prev) selectVeh.value = prev;
+    if (prev && Array.from(selectVeh.options).some((o) => o.value === prev)) {
+      selectVeh.value = prev;
+    }
   }
 }
 
@@ -856,6 +871,7 @@ async function cargarComandos() {
   ESTADO.comandos.forEach((c) => {
     const tr = document.createElement('tr');
     const esTemporizado = c.duracion_ms !== null && c.duracion_ms !== undefined && Number(c.duracion_ms) > 0;
+    const esDetenerProtegido = esComandoDetenerProtegido(c);
     const tipoBadge = esTemporizado
       ? celdaBadge(`Temporizado · ${c.duracion_ms} ms`, 'bg-info-subtle text-info border border-info-subtle')
       : celdaBadge('Base · continuo', 'bg-dark text-light border border-secondary');
@@ -870,16 +886,29 @@ async function cargarComandos() {
         accion: 'editar',
         tipo: 'comando',
         id: c.id_comando,
-      }),
-      crearBoton({
-        icono: 'bi-trash',
-        texto: 'Eliminar',
-        clase: 'btn-table-action btn-table-action-danger',
-        accion: 'eliminar',
-        tipo: 'comando',
-        id: c.id_comando,
       })
     );
+    if (esDetenerProtegido) {
+      const shield = document.createElement('span');
+      shield.className = 'badge bg-danger-subtle text-danger border border-danger-subtle ms-1';
+      shield.title = 'El paro de emergencia (12) no puede desactivarse ni eliminarse';
+      const ico = document.createElement('i');
+      ico.className = 'bi bi-shield-lock-fill me-1';
+      ico.setAttribute('aria-hidden', 'true');
+      shield.append(ico, document.createTextNode('Seguridad · Siempre activo'));
+      acciones.appendChild(shield);
+    } else {
+      acciones.appendChild(
+        crearBoton({
+          icono: 'bi-trash',
+          texto: 'Eliminar',
+          clase: 'btn-table-action btn-table-action-danger',
+          accion: 'eliminar',
+          tipo: 'comando',
+          id: c.id_comando,
+        })
+      );
+    }
 
     tr.append(
       celda(c.codigo, 'text-center font-monospace'),
@@ -1289,9 +1318,12 @@ function abrirModalCapacidad(item = null) {
 }
 
 function abrirModalVehiculo(item = null) {
-  poblarSelectModelos();
-  const form = $('formVehiculo');
   const editando = Boolean(item);
+  poblarSelectModelos({
+    soloActivosVehiculo: true,
+    modeloActualId: editando ? item.id_modelo ?? null : null,
+  });
+  const form = $('formVehiculo');
   form.reset();
   form.elements.id.value = editando ? String(item.id_vehiculo) : '';
   $('modalVehiculoTitulo').textContent = editando ? 'Editar unidad física' : 'Nueva unidad física';
@@ -1383,20 +1415,28 @@ function abrirModalComando(item = null) {
   }
   const form = $('formComando');
   const editando = Boolean(item);
+  const esDetener = editando && esComandoDetenerProtegido(item);
   form.reset();
   form.elements.id.value = editando ? String(item.id_comando) : '';
-  $('modalComandoTitulo').textContent = editando ? 'Editar comando' : 'Nuevo comando';
+  $('modalComandoTitulo').textContent = esDetener
+    ? 'Editar comando · DETENER (Seguridad)'
+    : editando
+      ? 'Editar comando'
+      : 'Nuevo comando';
   form.elements.nombre.value = editando ? item.nombre || '' : '';
   form.elements.codigo.value = editando ? String(item.codigo) : '';
   form.elements.codigo_fisico.value = editando ? String(item.codigo_fisico ?? item.codigo) : '';
+  form.elements.codigo_fisico.readOnly = esDetener;
   form.elements.descripcion.value = editando ? item.descripcion || '' : '';
 
   const esTemp = editando && item.duracion_ms !== null && item.duracion_ms !== undefined && Number(item.duracion_ms) > 0;
   form.elements.es_temporizado.checked = esTemp;
+  form.elements.es_temporizado.disabled = esDetener;
   form.elements.duracion_ms.value = esTemp ? String(item.duracion_ms) : '';
   form.elements.permitido_invitado.checked = editando ? esActivo(item.permitido_invitado) : false;
   $('wrapActivoComando').hidden = !editando;
-  form.elements.activo.checked = editando ? esActivo(item.activo) : true;
+  form.elements.activo.checked = esDetener ? true : editando ? esActivo(item.activo) : true;
+  form.elements.activo.disabled = esDetener;
   sincronizarTipoComandoForm();
 
   bootstrap.Modal.getOrCreateInstance($('modalComando')).show();
@@ -1554,11 +1594,16 @@ function manejarAccion(btn) {
       );
     }
     if (tipo === 'comando') {
+      const cmdObj = ESTADO.comandos.find((x) => x.id_comando === id);
+      if (cmdObj && esComandoDetenerProtegido(cmdObj)) {
+        return toast('El paro de emergencia DETENER (12) no puede eliminarse por seguridad.', 'warning');
+      }
       return pedirConfirmacion('¿Eliminar este comando de la unidad?', async () => {
         const res = await adminApi.comandos.eliminar(id);
         if (!res.ok) return toast(formatApiError(res), 'danger');
         toast('Comando eliminado.', 'success');
         await cargarComandos();
+        onCommandsChangedCallback?.(ESTADO.vehiculoId);
       });
     }
     if (tipo === 'demo') {
@@ -1656,8 +1701,9 @@ export async function alEntrarAdmin() {
   ]);
 }
 
-export function initAdmin({ onOperarVehiculo } = {}) {
+export function initAdmin({ onOperarVehiculo, onCommandsChanged } = {}) {
   onOperarVehiculoCallback = onOperarVehiculo || null;
+  onCommandsChangedCallback = onCommandsChanged || null;
 
   $('adminView')?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-accion]');
@@ -1875,9 +1921,12 @@ export function initAdmin({ onOperarVehiculo } = {}) {
       descripcion: leerTexto(form, 'descripcion') || null,
       permitido_invitado: form.elements.permitido_invitado.checked,
     };
-    if (editando) datos.activo = form.elements.activo.checked;
-
     const id = Number(form.elements.id.value);
+    if (editando) {
+      const actualCmd = ESTADO.comandos.find((c) => Number(c.id_comando) === id);
+      datos.activo = actualCmd && esComandoDetenerProtegido(actualCmd) ? true : form.elements.activo.checked;
+    }
+
     enviarFormulario(
       form,
       () =>
@@ -1886,7 +1935,10 @@ export function initAdmin({ onOperarVehiculo } = {}) {
           : adminApi.comandos.crear(ESTADO.vehiculoId, datos),
       'modalComando',
       'Comando guardado.',
-      cargarComandos
+      async () => {
+        await cargarComandos();
+        onCommandsChangedCallback?.(ESTADO.vehiculoId);
+      }
     );
   });
 

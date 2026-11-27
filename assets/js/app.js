@@ -7,12 +7,12 @@
 
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
-import { api, formatApiError } from './api.js';
-import { wsService } from './ws.js';
-import { JoystickController } from './joystick.js';
-import { UI } from './ui.js?v=4.3.4';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.4';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.4';
+import { api, formatApiError } from './api.js?v=4.3.5';
+import { wsService } from './ws.js?v=4.3.5';
+import { JoystickController } from './joystick.js?v=4.3.5';
+import { UI } from './ui.js?v=4.3.5';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.5';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.5';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.3.4';
+} from './guest.js?v=4.3.5';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -35,7 +35,9 @@ const STATE = {
   vehicleId: null,
   vehicleInfo: null,
   comandosVehiculo: [],
+  baseComandosByFisico: new Map(),
   fisicoToComandoId: new Map(),
+  disabledFisicos: new Set(),
   lastSentCommand: CONFIG.COMMANDS.DETENER,
   movementInFlight: null,
   movementSequence: 0,
@@ -68,21 +70,65 @@ function esUnidadBloqueadaParaAdmin(vehiculo) {
 // ---------------------------------------------------------------------------
 // RESOLUCIÓN DINÁMICA: codigo_fisico (hardware 1..14) -> id_comando real de la unidad
 // ---------------------------------------------------------------------------
-function reconstruirMapaComandos(comandos = []) {
-  STATE.comandosVehiculo = Array.isArray(comandos) ? comandos : [];
-  const mapa = new Map();
-  STATE.comandosVehiculo.forEach((c) => {
-    const activo = c.activo === 1 || c.activo === true;
-    const cf = Number(c.codigo_fisico ?? c.codigo);
-    const idCmd = Number(c.id_comando);
-    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
-    if (!activo || !Number.isInteger(cf) || !Number.isInteger(idCmd)) return;
-    if (!mapa.has(cf) || esBase) {
-      mapa.set(cf, idCmd);
+function esActivoFlag(v) {
+  return v === 1 || v === true || v === '1';
+}
+
+function esComandoBaseInactivo(codigoFisico) {
+  const cf = Number(codigoFisico);
+  if (cf === CONFIG.COMMANDS.DETENER) return false;
+  const base = STATE.baseComandosByFisico.get(cf);
+  return Boolean(base && !esActivoFlag(base.activo));
+}
+
+function sincronizarControlesMando() {
+  document.querySelectorAll('#mandoView [data-cmd]').forEach((el) => {
+    const cf = Number(el.dataset.cmd);
+    if (el.id === 'btnEmergencyStop' || cf === CONFIG.COMMANDS.DETENER) {
+      el.disabled = false;
+      el.classList.remove('cmd-disabled-admin', 'guest-cmd-blocked');
+      el.removeAttribute('aria-disabled');
+      return;
+    }
+
+    const bloqueadoAdmin = STATE.disabledFisicos.has(cf);
+    el.classList.toggle('cmd-disabled-admin', bloqueadoAdmin);
+    if (bloqueadoAdmin) {
+      el.disabled = true;
+      el.setAttribute('aria-disabled', 'true');
+      el.title = 'Comando deshabilitado por administración';
+    } else if (!el.classList.contains('guest-cmd-blocked')) {
+      el.disabled = false;
+      el.removeAttribute('aria-disabled');
+      if (el.title === 'Comando deshabilitado por administración') {
+        el.removeAttribute('title');
+      }
     }
   });
-  STATE.fisicoToComandoId = mapa;
-  renderMovimientosTemporizadosControl();
+
+  const joystickGuides = {
+    [CONFIG.COMMANDS.AVANZAR]: getEl('joystickGuideN'),
+    [CONFIG.COMMANDS.RETROCEDER]: getEl('joystickGuideS'),
+    [CONFIG.COMMANDS.DIAGONAL_DERECHA]: getEl('joystickGuideE'),
+    [CONFIG.COMMANDS.DIAGONAL_IZQUIERDA]: getEl('joystickGuideW'),
+  };
+  Object.entries(joystickGuides).forEach(([cfStr, guideEl]) => {
+    if (guideEl) {
+      guideEl.classList.toggle('is-disabled', STATE.disabledFisicos.has(Number(cfStr)));
+    }
+  });
+
+  const allJoyDisabled = [
+    CONFIG.COMMANDS.AVANZAR,
+    CONFIG.COMMANDS.RETROCEDER,
+    CONFIG.COMMANDS.DIAGONAL_DERECHA,
+    CONFIG.COMMANDS.DIAGONAL_IZQUIERDA,
+  ].every((cf) => STATE.disabledFisicos.has(cf));
+  getEl('joystickPanel')?.classList.toggle('cmd-disabled-admin', allJoyDisabled);
+
+  if (joystickController && typeof joystickController.setDisabledCommands === 'function') {
+    joystickController.setDisabledCommands(STATE.disabledFisicos);
+  }
 
   if (auth.getRole() === 'INVITADO') {
     applyGuestControlRestrictions(STATE.comandosVehiculo);
@@ -91,12 +137,51 @@ function reconstruirMapaComandos(comandos = []) {
   }
 }
 
+function reconstruirMapaComandos(comandos = []) {
+  STATE.comandosVehiculo = Array.isArray(comandos) ? comandos : [];
+  const baseMap = new Map();
+  const mapa = new Map();
+  const disabledFisicos = new Set();
+
+  STATE.comandosVehiculo.forEach((c) => {
+    const cf = Number(c.codigo_fisico ?? c.codigo);
+    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
+    if (esBase && Number.isInteger(cf) && !baseMap.has(cf)) {
+      baseMap.set(cf, c);
+      if (cf !== CONFIG.COMMANDS.DETENER && !esActivoFlag(c.activo)) {
+        disabledFisicos.add(cf);
+      }
+    }
+  });
+
+  STATE.comandosVehiculo.forEach((c) => {
+    const activo = esActivoFlag(c.activo);
+    const cf = Number(c.codigo_fisico ?? c.codigo);
+    const idCmd = Number(c.id_comando);
+    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
+    if (!Number.isInteger(cf) || !Number.isInteger(idCmd)) return;
+    if (cf !== CONFIG.COMMANDS.DETENER && (!activo || disabledFisicos.has(cf))) return;
+    if (!mapa.has(cf) || esBase) {
+      mapa.set(cf, idCmd);
+    }
+  });
+
+  STATE.baseComandosByFisico = baseMap;
+  STATE.fisicoToComandoId = mapa;
+  STATE.disabledFisicos = disabledFisicos;
+  renderMovimientosTemporizadosControl();
+  sincronizarControlesMando();
+}
+
 function resolverIdComandoDesdeFisico(codigoFisico) {
   const cf = Number(codigoFisico);
   if (STATE.fisicoToComandoId.has(cf)) {
     return STATE.fisicoToComandoId.get(cf);
   }
-  return cf;
+  if (cf === CONFIG.COMMANDS.DETENER) {
+    return cf;
+  }
+  return null;
 }
 
 function renderMovimientosTemporizadosControl() {
@@ -105,7 +190,11 @@ function renderMovimientosTemporizadosControl() {
   if (!card || !grid) return;
 
   const temporizados = STATE.comandosVehiculo.filter(
-    (c) => (c.activo === 1 || c.activo === true) && c.duracion_ms !== null && Number(c.duracion_ms) > 0
+    (c) =>
+      esActivoFlag(c.activo) &&
+      c.duracion_ms !== null &&
+      Number(c.duracion_ms) > 0 &&
+      !STATE.disabledFisicos.has(Number(c.codigo_fisico ?? c.codigo))
   );
 
   grid.textContent = '';
@@ -144,9 +233,14 @@ function initJoystick() {
     getEl('joystickTrack'),
     getEl('joystickKnob'),
     {
+      disabledCommands: STATE.disabledFisicos,
       onDirection: (codigoFisico) => handleMovimiento(codigoFisico),
       onRelease: () => detenerVehiculo(),
       onVisualChange: (info) => actualizarGuiaVisual(info),
+      onBlocked: (codigoFisico) => {
+        const label = CONFIG.COMMAND_META[Number(codigoFisico)]?.label || `Comando ${codigoFisico}`;
+        UI.showToast(`${label} está deshabilitado actualmente.`, 'warning');
+      },
       onLockChange: (controller) => {
         STATE.activeController = controller;
         window.activeController = controller;
@@ -188,6 +282,11 @@ async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
     return true;
   }
 
+  if ((cmdObj && !esActivoFlag(cmdObj.activo)) || esComandoBaseInactivo(codigoFisico) || STATE.disabledFisicos.has(codigoFisico)) {
+    UI.showToast('Este movimiento está deshabilitado actualmente.', 'warning');
+    return false;
+  }
+
   if (STATE.busyCommands.has(cmdId)) return true;
   STATE.busyCommands.add(cmdId);
   const res = await api.enviarMovimiento(cmdId);
@@ -203,7 +302,18 @@ async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
   }
 
   UI.showToast(formatApiError(res, `No se pudo enviar el comando ${cmdId}`), 'danger');
-  if (res.status !== 403 && res.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+  if (res.code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
+    api.obtenerComandos(STATE.vehicleId).then((r) => {
+      if (r.ok) reconstruirMapaComandos(r.data);
+    });
+  }
+  if (
+    res.status !== 403 &&
+    res.status !== 401 &&
+    res.code !== 'COMANDO_INACTIVO' &&
+    res.code !== 'UNIDAD_INACTIVA' &&
+    STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER
+  ) {
     await detenerVehiculo();
   }
   return false;
@@ -228,6 +338,12 @@ async function handleMovimiento(codigoFisicoInput) {
   }
 
   const idComandoReal = resolverIdComandoDesdeFisico(codigoFisico);
+  if (!idComandoReal || STATE.disabledFisicos.has(codigoFisico) || esComandoBaseInactivo(codigoFisico)) {
+    const label = CONFIG.COMMAND_META[codigoFisico]?.label || `Comando ${codigoFisico}`;
+    UI.showToast(`${label} está deshabilitado actualmente en esta unidad.`, 'warning');
+    return false;
+  }
+
   const isMovementCmd = MOVIMIENTO_FISICO_IDS.includes(codigoFisico);
 
   if (STATE.busyCommands.has(idComandoReal)) {
@@ -267,7 +383,18 @@ async function handleMovimiento(codigoFisicoInput) {
   }
 
   UI.showToast(formatApiError(res, `No se pudo enviar el comando ${codigoFisico}`), 'danger');
-  if (res.status !== 403 && res.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+  if (res.code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
+    api.obtenerComandos(STATE.vehicleId).then((r) => {
+      if (r.ok) reconstruirMapaComandos(r.data);
+    });
+  }
+  if (
+    res.status !== 403 &&
+    res.status !== 401 &&
+    res.code !== 'COMANDO_INACTIVO' &&
+    res.code !== 'UNIDAD_INACTIVA' &&
+    STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER
+  ) {
     await detenerVehiculo();
   }
   return false;
@@ -343,7 +470,20 @@ async function iniciarDemo(explicitIdDemo = null) {
     UI.setDemoStatus(false);
     UI.showToast(formatApiError(res, 'Error al iniciar demo'), 'danger');
     UI.demoTimelineEnd('La rutina no pudo iniciarse', 'error');
-    if (res.status !== 403 && res.status !== 401) {
+    if (res.code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
+      api.obtenerComandos(STATE.vehicleId).then((r) => {
+        if (r.ok) reconstruirMapaComandos(r.data);
+      });
+    } else if (res.code === 'DEMO_INACTIVA') {
+      cargarCatalogoDemos();
+    }
+    if (
+      res.status !== 403 &&
+      res.status !== 401 &&
+      res.code !== 'COMANDO_INACTIVO' &&
+      res.code !== 'DEMO_INACTIVA' &&
+      res.code !== 'UNIDAD_INACTIVA'
+    ) {
       await detenerVehiculo();
     }
   }
@@ -885,7 +1025,8 @@ async function cargarCatalogoDemos() {
   }
   const res = await api.obtenerDemos(STATE.vehicleId);
   if (res.ok) {
-    const demos = Array.isArray(res.data) ? res.data : res.data?.demos || [];
+    const rawDemos = Array.isArray(res.data) ? res.data : res.data?.demos || [];
+    const demos = rawDemos.filter((d) => d.activo === undefined || esActivoFlag(d.activo));
     STATE.demos = demos;
     UI.renderDemos(demos);
     UI.renderDemoSelect(demos);
@@ -1385,12 +1526,111 @@ function bindWebSocketEvents() {
   });
 
   wsService.on('authError', ({ code, reason }) => {
-    if (code === 4403) {
-      UI.showToast(`Acceso operativo restringido (403): ${reason}`, 'warning');
+    if (code === 4403 || code === 4410) {
+      STATE.demoActive = false;
+      UI.setDemoStatus(false);
+      UI.setCommandState(CONFIG.COMMANDS.DETENER, 'ACCESO RESTRINGIDO');
+      UI.setPulseState('active-stopped');
+      if (auth.getRole() === 'INVITADO') {
+        finalizarPruebaInvitado(reason || 'Tu sesión de exhibición finalizó o la unidad fue deshabilitada.');
+        return;
+      }
+      UI.showToast(`Acceso operativo restringido (${code}): ${reason}`, 'warning');
+      STATE.vehicleId = null;
+      STATE.vehicleInfo = null;
+      if (auth.getRole() === 'USUARIO') {
+        entrarAVista('user-vehicles');
+        cargarMisVehiculosModulo();
+      } else if (auth.getRole() === 'ADMIN') {
+        entrarAVista('admin');
+      }
     } else if (code === 4401 && auth.getRole() === 'INVITADO') {
       finalizarPruebaInvitado(reason || 'Tu sesión de prueba finalizó.');
     } else if (code === 4401 && auth.isAuthenticated()) {
       UI.showToast(`Sesión WSS cerrada: ${reason}`, 'warning');
+      wsService.disconnect(reason || 'Sesión cerrada');
+    }
+  });
+
+  wsService.on('comandos_actualizados', (payload) => {
+    if (STATE.vehicleId && Number(payload?.id_vehiculo) === STATE.vehicleId) {
+      if (Array.isArray(payload?.comandos)) {
+        reconstruirMapaComandos(payload.comandos);
+      } else {
+        api.obtenerComandos(STATE.vehicleId).then((r) => {
+          if (r.ok) reconstruirMapaComandos(r.data);
+        });
+      }
+      UI.showToast('Permisos de comandos actualizados en tiempo real.', 'info');
+    }
+    if (auth.getRole() === 'USUARIO' && vistaActual === 'user-vehicles') {
+      cargarMisVehiculosModulo(STATE.vehicleId);
+    }
+  });
+
+  wsService.on('demos_actualizadas', (payload) => {
+    if (STATE.vehicleId && Number(payload?.id_vehiculo) === STATE.vehicleId && auth.isAuthenticated()) {
+      cargarCatalogoDemos();
+    }
+    if (auth.getRole() === 'USUARIO' && vistaActual === 'user-vehicles') {
+      cargarMisVehiculosModulo(STATE.vehicleId);
+    }
+  });
+
+  wsService.on('demo_interrumpida', (payload) => {
+    STATE.demoActive = false;
+    UI.setDemoStatus(false);
+    UI.setCommandState(CONFIG.COMMANDS.DETENER, 'VEHÍCULO DETENIDO');
+    UI.setPulseState('active-stopped');
+    syncDiagnostics();
+    const msg =
+      payload?.motivo ||
+      payload?.detail ||
+      'Demo interrumpida porque un movimiento fue deshabilitado.';
+    UI.showToast(msg, 'warning');
+    UI.demoTimelineEnd(msg, 'error');
+    if (STATE.vehicleId) {
+      api.obtenerComandos(STATE.vehicleId).then((r) => {
+        if (r.ok) reconstruirMapaComandos(r.data);
+      });
+    }
+  });
+
+  wsService.on('error_comando', (payload) => {
+    const code = String(payload?.code || '');
+    const msg = payload?.detail || payload?.motivo || 'Comando rechazado por el servidor.';
+    UI.showToast(msg, 'warning');
+    if (code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
+      api.obtenerComandos(STATE.vehicleId).then((r) => {
+        if (r.ok) reconstruirMapaComandos(r.data);
+      });
+    }
+  });
+
+  wsService.on('acceso_revocado', (payload) => {
+    const motivo = payload?.motivo || payload?.detail || 'Tu acceso operativo sobre esta unidad cambió.';
+    STATE.demoActive = false;
+    UI.setDemoStatus(false);
+    UI.setCommandState(CONFIG.COMMANDS.DETENER, 'ACCESO REVOCADO');
+    UI.setPulseState('active-stopped');
+    if (auth.getRole() === 'INVITADO') {
+      finalizarPruebaInvitado(motivo);
+      return;
+    }
+    UI.showToast(motivo, 'warning');
+    const errCode = String(payload?.error_code || payload?.code || '');
+    wsService.disconnect(motivo);
+    if (errCode === 'USUARIO_INACTIVO' || errCode === 'ROL_CAMBIADO') {
+      auth.logout();
+      return;
+    }
+    STATE.vehicleId = null;
+    STATE.vehicleInfo = null;
+    if (auth.getRole() === 'USUARIO') {
+      entrarAVista('user-vehicles');
+      cargarMisVehiculosModulo();
+    } else if (auth.getRole() === 'ADMIN') {
+      entrarAVista('admin');
     }
   });
 
@@ -1879,6 +2119,10 @@ async function boot() {
       codigoFisico === CONFIG.COMMANDS.ENCENDER ||
       codigoFisico === CONFIG.COMMANDS.APAGAR
     ) {
+      if (STATE.disabledFisicos.has(codigoFisico) || esComandoBaseInactivo(codigoFisico)) {
+        UI.showToast('Este comando está deshabilitado actualmente.', 'warning');
+        return;
+      }
       if (codigoFisico === CONFIG.COMMANDS.APAGAR) {
         const now = Date.now();
         if (now > STATE.apagarArmadoHasta) {
@@ -1897,13 +2141,28 @@ async function boot() {
         armarBotonApagar(btn, false);
       }
       const idCmd = resolverIdComandoDesdeFisico(codigoFisico);
+      if (!idCmd) {
+        UI.showToast('Este comando está deshabilitado actualmente.', 'warning');
+        return;
+      }
       if (STATE.busyCommands.has(idCmd)) return;
       STATE.busyCommands.add(idCmd);
       const resPulse = await api.enviarMovimiento(idCmd);
       STATE.busyCommands.delete(idCmd);
       if (!resPulse.ok) {
         UI.showToast(formatApiError(resPulse, `Fallo envío comando ${codigoFisico}`), 'danger');
-        if (resPulse.status !== 403 && resPulse.status !== 401 && STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER) {
+        if (resPulse.code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
+          api.obtenerComandos(STATE.vehicleId).then((r) => {
+            if (r.ok) reconstruirMapaComandos(r.data);
+          });
+        }
+        if (
+          resPulse.status !== 403 &&
+          resPulse.status !== 401 &&
+          resPulse.code !== 'COMANDO_INACTIVO' &&
+          resPulse.code !== 'UNIDAD_INACTIVA' &&
+          STATE.lastSentCommand !== CONFIG.COMMANDS.DETENER
+        ) {
           await detenerVehiculo();
         }
       }
@@ -1977,6 +2236,12 @@ async function boot() {
       }
       await seleccionarVehiculoActivo(vehiculo);
       salirDeMonitor();
+    },
+    onCommandsChanged: async (idVehiculo) => {
+      if (STATE.vehicleId === Number(idVehiculo)) {
+        const cmdRes = await api.obtenerComandos(idVehiculo);
+        if (cmdRes.ok) reconstruirMapaComandos(cmdRes.data);
+      }
     },
   });
 

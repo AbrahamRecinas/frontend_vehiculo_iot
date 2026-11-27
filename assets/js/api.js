@@ -115,6 +115,10 @@ class ApiService {
         return {
           ok: false,
           status: response.status,
+          code:
+            typeof data?.code === 'string'
+              ? data.code
+              : response.headers.get('x-error-code') || null,
           data,
           latencyMs,
           retryAfterSec: Number.isFinite(retryAfterSec) ? retryAfterSec : null,
