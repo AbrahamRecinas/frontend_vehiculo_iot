@@ -41,6 +41,8 @@ const ESTADO = {
   filtroEstadoVehiculo: '',
   usuarios: [],
   comandos: [],
+  vehiculoCapacidades: [],
+  vehiculoCapacidadesModeloId: null,
   demos: [],
   pasos: [],
   vehiculoId: CONFIG.VEHICLE_ID,
@@ -835,9 +837,45 @@ function poblarSelectClientesAsignacion() {
 // ---------------------------------------------------------------------------
 // 5. COMANDOS V2 (BASE vs TEMPORIZADOS) + DEMOS + PASOS
 // ---------------------------------------------------------------------------
+function esBaseActivaVehiculo(codigoFisico) {
+  const cf = Number(codigoFisico);
+  if (cf === CONFIG.COMMANDS.DETENER) return true;
+  const base = ESTADO.comandos.find(
+    (c) =>
+      Number(c.codigo_fisico ?? c.codigo) === cf &&
+      (c.duracion_ms === null || c.duracion_ms === undefined)
+  );
+  return !base || esActivo(base.activo);
+}
+
+async function cargarCapacidadesVehiculoActivo() {
+  const vid = ESTADO.vehiculoId;
+  const veh = ESTADO.vehiculos.find((v) => Number(v.id_vehiculo) === Number(vid));
+  const idModelo = veh?.id_modelo ? Number(veh.id_modelo) : null;
+  if (!vid || !idModelo) {
+    ESTADO.vehiculoCapacidades = [];
+    ESTADO.vehiculoCapacidadesModeloId = null;
+    return [];
+  }
+  const res = await adminApi.capacidades.listar(idModelo);
+  if (vid !== ESTADO.vehiculoId) return ESTADO.vehiculoCapacidades;
+  if (!res.ok) {
+    ESTADO.vehiculoCapacidades = [];
+    ESTADO.vehiculoCapacidadesModeloId = null;
+    return [];
+  }
+  ESTADO.vehiculoCapacidades = lista(res).sort(
+    (a, b) => Number(a.codigo_fisico) - Number(b.codigo_fisico)
+  );
+  ESTADO.vehiculoCapacidadesModeloId = idModelo;
+  return ESTADO.vehiculoCapacidades;
+}
+
 async function cargarDatosVehiculo() {
   if (!ESTADO.vehiculoId) {
     ESTADO.comandos = [];
+    ESTADO.vehiculoCapacidades = [];
+    ESTADO.vehiculoCapacidadesModeloId = null;
     ESTADO.demos = [];
     ESTADO.pasos = [];
     pintarMensajeEnTbody('adminComandosBody', 'Selecciona una unidad.');
@@ -846,7 +884,7 @@ async function cargarDatosVehiculo() {
     poblarSelectDemos();
     return;
   }
-  await Promise.all([cargarComandos(), cargarDemos()]);
+  await Promise.all([cargarComandos(), cargarCapacidadesVehiculoActivo(), cargarDemos()]);
   await cargarPasos();
 }
 
@@ -1402,38 +1440,126 @@ function abrirModalUsuario(item = null) {
 
 function sincronizarTipoComandoForm() {
   const form = $('formComando');
+  if (!form) return;
   const esTemp = form.elements.es_temporizado.checked;
   $('wrapComandoDuracion').hidden = !esTemp;
   form.elements.duracion_ms.required = esTemp;
-  if (!esTemp) form.elements.duracion_ms.value = '';
+  if (esTemp) {
+    if (!form.elements.duracion_ms.value) {
+      form.elements.duracion_ms.value = '1500';
+    }
+    if ($('comandoDuracionRange')) {
+      $('comandoDuracionRange').value = String(form.elements.duracion_ms.value || '1500');
+    }
+  } else {
+    form.elements.duracion_ms.value = '';
+  }
 }
 
-function abrirModalComando(item = null) {
+async function abrirModalComando(item = null) {
   if (!ESTADO.vehiculoId) {
     toast('Selecciona primero una unidad.', 'warning');
     return;
   }
+
+  await cargarCapacidadesVehiculoActivo();
+
   const form = $('formComando');
   const editando = Boolean(item);
   const esDetener = editando && esComandoDetenerProtegido(item);
+  const esTemp = !editando
+    ? true
+    : item.duracion_ms !== null && item.duracion_ms !== undefined && Number(item.duracion_ms) > 0;
+
   form.reset();
   form.elements.id.value = editando ? String(item.id_comando) : '';
-  $('modalComandoTitulo').textContent = esDetener
-    ? 'Editar comando · DETENER (Seguridad)'
-    : editando
-      ? 'Editar comando'
-      : 'Nuevo comando';
-  form.elements.nombre.value = editando ? item.nombre || '' : '';
   form.elements.codigo.value = editando ? String(item.codigo) : '';
-  form.elements.codigo_fisico.value = editando ? String(item.codigo_fisico ?? item.codigo) : '';
-  form.elements.codigo_fisico.readOnly = esDetener;
-  form.elements.descripcion.value = editando ? item.descripcion || '' : '';
 
-  const esTemp = editando && item.duracion_ms !== null && item.duracion_ms !== undefined && Number(item.duracion_ms) > 0;
+  const select = form.elements.codigo_fisico;
+  select.textContent = '';
+
+  if (!editando || esTemp) {
+    const capsTemp = ESTADO.vehiculoCapacidades.filter(
+      (c) => esActivo(c.activo) && esActivo(c.permite_temporizado) && esBaseActivaVehiculo(c.codigo_fisico)
+    );
+    if (capsTemp.length) {
+      capsTemp.forEach((c) => {
+        select.appendChild(
+          new Option(`${c.nombre_base} (código físico ${c.codigo_fisico})`, String(c.codigo_fisico))
+        );
+      });
+    } else if (!ESTADO.vehiculoCapacidades.length) {
+      [1, 2, 3, 4, 5, 6, 7, 8]
+        .filter((cf) => esBaseActivaVehiculo(cf))
+        .forEach((cf) => {
+          const m = CONFIG.COMMAND_META[cf];
+          select.appendChild(new Option(`${m?.label || `Acción ${cf}`} (físico ${cf})`, String(cf)));
+        });
+    }
+    if (!editando && !select.options.length) {
+      toast('No hay acciones físicas activas disponibles para movimientos temporizados.', 'warning');
+      return;
+    }
+    if (editando) {
+      const cfActual = String(item.codigo_fisico ?? item.codigo);
+      if (!Array.from(select.options).some((o) => o.value === cfActual)) {
+        const capMatch = ESTADO.vehiculoCapacidades.find((c) => String(c.codigo_fisico) === cfActual);
+        const m = CONFIG.COMMAND_META[Number(cfActual)];
+        const lbl = capMatch
+          ? `${capMatch.nombre_base} (código físico ${cfActual})`
+          : `${m?.label || item.nombre || `Acción ${cfActual}`} (código físico ${cfActual})`;
+        select.appendChild(new Option(lbl, cfActual));
+      }
+      select.value = cfActual;
+    }
+  } else {
+    ESTADO.vehiculoCapacidades.forEach((c) => {
+      select.appendChild(
+        new Option(`${c.nombre_base} (código físico ${c.codigo_fisico})`, String(c.codigo_fisico))
+      );
+    });
+    const cfActual = String(item.codigo_fisico ?? item.codigo);
+    if (!Array.from(select.options).some((o) => o.value === cfActual)) {
+      const m = CONFIG.COMMAND_META[Number(cfActual)];
+      select.appendChild(
+        new Option(`${item.nombre || m?.label || `Acción ${cfActual}`} (código físico ${cfActual})`, cfActual)
+      );
+    }
+    select.value = cfActual;
+  }
+
+  $('modalComandoTitulo').textContent = !editando
+    ? 'Nuevo movimiento temporizado'
+    : esDetener
+      ? 'Editar comando · DETENER (Seguridad)'
+      : esTemp
+        ? 'Editar movimiento temporizado'
+        : 'Editar comando base';
+
+  const hintEl = $('comandoCodigoFisicoHint');
+  if (hintEl) {
+    hintEl.textContent = !editando || esTemp
+      ? 'Solo capacidades con temporizado permitido en el modelo.'
+      : esDetener
+        ? 'El paro de emergencia (12) está protegido y no puede modificarse ni desactivarse.'
+        : 'Acción física base de la unidad.';
+  }
+
+  form.elements.nombre.value = editando ? item.nombre || '' : '';
+  select.disabled = esDetener;
+
   form.elements.es_temporizado.checked = esTemp;
   form.elements.es_temporizado.disabled = esDetener;
-  form.elements.duracion_ms.value = esTemp ? String(item.duracion_ms) : '';
+  if ($('wrapComandoEsTemporizado')) $('wrapComandoEsTemporizado').hidden = true;
+
+  const dur = esTemp ? (editando ? Number(item.duracion_ms) : 1500) : '';
+  form.elements.duracion_ms.value = dur !== '' ? String(dur) : '';
+  if ($('comandoDuracionRange')) {
+    $('comandoDuracionRange').value = dur !== '' ? String(dur) : '1500';
+  }
+  form.elements.descripcion.value = editando ? item.descripcion || '' : '';
   form.elements.permitido_invitado.checked = editando ? esActivo(item.permitido_invitado) : false;
+
   $('wrapActivoComando').hidden = !editando;
   form.elements.activo.checked = esDetener ? true : editando ? esActivo(item.activo) : true;
   form.elements.activo.disabled = esDetener;
@@ -1738,6 +1864,14 @@ export function initAdmin({ onOperarVehiculo, onCommandsChanged } = {}) {
   });
 
   $('formComando')?.elements?.es_temporizado?.addEventListener('change', sincronizarTipoComandoForm);
+  $('comandoDuracionRange')?.addEventListener('input', (e) => {
+    const inp = $('comandoDuracionMs');
+    if (inp) inp.value = e.target.value;
+  });
+  $('comandoDuracionMs')?.addEventListener('input', (e) => {
+    const rng = $('comandoDuracionRange');
+    if (rng) rng.value = e.target.value;
+  });
 
   // Filtros y paginación de auditoría
   $('formFiltrosAuditoria')?.addEventListener('submit', (e) => {
@@ -1897,33 +2031,41 @@ export function initAdmin({ onOperarVehiculo, onCommandsChanged } = {}) {
     e.preventDefault();
     const form = e.currentTarget;
     const editando = form.elements.id.value !== '';
+    const id = Number(form.elements.id.value);
+    const actualCmd = editando
+      ? ESTADO.comandos.find((c) => Number(c.id_comando) === id)
+      : null;
     const esTemp = form.elements.es_temporizado.checked;
-    const codigo = leerEntero(form, 'codigo');
-    const codigoFisico = leerEntero(form, 'codigo_fisico');
+    const nombre = leerTexto(form, 'nombre');
+    const codigoRaw = leerEntero(form, 'codigo');
+    const codigoFisicoRaw = leerEntero(form, 'codigo_fisico');
+    const codigoFisico = Number.isInteger(codigoFisicoRaw)
+      ? codigoFisicoRaw
+      : Number(actualCmd?.codigo_fisico ?? actualCmd?.codigo);
     const duracionMs = esTemp ? leerEntero(form, 'duracion_ms') : null;
 
-    if (!leerTexto(form, 'nombre')) return toast('El nombre del comando es obligatorio.', 'warning');
-    if (!Number.isInteger(codigo) || codigo < 1) {
-      return toast('El código lógico debe ser un entero >= 1.', 'warning');
-    }
+    if (!nombre) return toast('El nombre del movimiento es obligatorio.', 'warning');
     if (!Number.isInteger(codigoFisico) || codigoFisico < 1) {
-      return toast('El código físico debe ser un entero >= 1.', 'warning');
+      return toast('Selecciona una acción física válida.', 'warning');
     }
     if (esTemp && (!Number.isInteger(duracionMs) || duracionMs < 1 || duracionMs > 10000)) {
-      return toast('La duración temporizada debe estar entre 1 y 10000 ms.', 'warning');
+      return toast('La duración debe estar entre 1 y 10000 ms.', 'warning');
     }
 
     const datos = {
-      nombre: leerTexto(form, 'nombre'),
-      codigo,
+      nombre,
       codigo_fisico: codigoFisico,
       duracion_ms: duracionMs,
       descripcion: leerTexto(form, 'descripcion') || null,
       permitido_invitado: form.elements.permitido_invitado.checked,
     };
-    const id = Number(form.elements.id.value);
     if (editando) {
-      const actualCmd = ESTADO.comandos.find((c) => Number(c.id_comando) === id);
+      const codigoEdit = Number.isInteger(codigoRaw) && codigoRaw >= 1
+        ? codigoRaw
+        : Number(actualCmd?.codigo);
+      if (Number.isInteger(codigoEdit) && codigoEdit >= 1) {
+        datos.codigo = codigoEdit;
+      }
       datos.activo = actualCmd && esComandoDetenerProtegido(actualCmd) ? true : form.elements.activo.checked;
     }
 
@@ -1934,7 +2076,7 @@ export function initAdmin({ onOperarVehiculo, onCommandsChanged } = {}) {
           ? adminApi.comandos.actualizar(id, datos)
           : adminApi.comandos.crear(ESTADO.vehiculoId, datos),
       'modalComando',
-      'Comando guardado.',
+      editando ? 'Comando actualizado.' : 'Movimiento temporizado creado.',
       async () => {
         await cargarComandos();
         onCommandsChangedCallback?.(ESTADO.vehiculoId);

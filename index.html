@@ -1614,37 +1614,34 @@
       </div>
     </div>
 
-    <!-- Comando v2 (Base vs Temporizado) -->
+    <!-- Comando v2 (mismo diseño táctil que modalUserTimedCmd sin alterar Capacidades) -->
     <div class="modal fade" id="modalComando" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <form class="modal-content" id="formComando" novalidate>
           <div class="modal-header">
-            <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo comando</h2>
+            <h2 class="modal-title h6" id="modalComandoTitulo">Nuevo movimiento temporizado</h2>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
             <input type="hidden" name="id" />
+            <input type="hidden" id="comandoCodigo" name="codigo" />
             <div class="mb-2">
-              <label for="comandoNombre" class="form-label small">Nombre <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm" id="comandoNombre" name="nombre" maxlength="60" required />
+              <label for="comandoNombre" class="form-label small">Nombre del movimiento <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm" id="comandoNombre" name="nombre" maxlength="60" placeholder="Ej. Avance corto 1.5s" required />
             </div>
-            <div class="row g-2 mb-2">
-              <div class="col-6">
-                <label for="comandoCodigo" class="form-label small">Código lógico <span class="text-danger">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="comandoCodigo" name="codigo" min="1" required />
-              </div>
-              <div class="col-6">
-                <label for="comandoCodigoFisico" class="form-label small">Código físico (HW) <span class="text-danger">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="comandoCodigoFisico" name="codigo_fisico" min="1" required />
-              </div>
+            <div class="mb-2">
+              <label for="comandoCodigoFisico" class="form-label small">Acción física base <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" id="comandoCodigoFisico" name="codigo_fisico" required></select>
+              <div class="form-text small" id="comandoCodigoFisicoHint">Solo capacidades con temporizado permitido en el modelo.</div>
             </div>
-            <div class="form-check form-switch mb-2">
-              <input class="form-check-input" type="checkbox" id="comandoEsTemporizado" name="es_temporizado" />
+            <div class="form-check form-switch mb-2" id="wrapComandoEsTemporizado" hidden>
+              <input class="form-check-input" type="checkbox" id="comandoEsTemporizado" name="es_temporizado" checked />
               <label class="form-check-label small" for="comandoEsTemporizado">Es movimiento temporizado (duracion_ms 1..10000)</label>
             </div>
-            <div class="mb-2" id="wrapComandoDuracion" hidden>
-              <label for="comandoDuracionMs" class="form-label small">Duración (ms) <span class="text-danger">*</span></label>
-              <input type="number" class="form-control form-control-sm" id="comandoDuracionMs" name="duracion_ms" min="1" max="10000" />
+            <div class="mb-2" id="wrapComandoDuracion">
+              <label for="comandoDuracionMs" class="form-label small">Duración (1..10000 ms) <span class="text-danger">*</span></label>
+              <input type="range" class="form-range" id="comandoDuracionRange" min="100" max="10000" step="100" value="1500" />
+              <input type="number" class="form-control form-control-sm font-monospace" id="comandoDuracionMs" name="duracion_ms" min="1" max="10000" value="1500" required />
             </div>
             <div class="mb-2">
               <label for="comandoDescripcion" class="form-label small">Descripción</label>
@@ -1652,9 +1649,9 @@
             </div>
             <div class="form-check form-switch mb-1">
               <input class="form-check-input" type="checkbox" id="comandoPermitidoInvitado" name="permitido_invitado" />
-              <label class="form-check-label small" for="comandoPermitidoInvitado">Permitido para sesiones de invitado</label>
+              <label class="form-check-label small" for="comandoPermitidoInvitado">Permitido para invitados en modo exhibición</label>
             </div>
-            <div class="form-check form-switch" id="wrapActivoComando">
+            <div class="form-check form-switch mt-1" id="wrapActivoComando" hidden>
               <input class="form-check-input" type="checkbox" id="comandoActivo" name="activo" />
               <label class="form-check-label small" for="comandoActivo">Activo</label>
             </div>
@@ -1883,6 +1880,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3.5"></script>
+  <script type="module" src="./assets/js/app.js?v=4.3.6"></script>
 </body>
 </html>

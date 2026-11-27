@@ -11,7 +11,7 @@ import { api, formatApiError } from './api.js?v=4.3.5';
 import { wsService } from './ws.js?v=4.3.5';
 import { JoystickController } from './joystick.js?v=4.3.5';
 import { UI } from './ui.js?v=4.3.5';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.5';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.6';
 import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.5';
 import {
   initGuestModule,
