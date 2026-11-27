@@ -33,8 +33,12 @@ export class JoystickController {
     this.center = { x: 0, y: 0 };
     this.maxRadius = 70; // Se recalcula en pointerdown
     this.deadzoneRadius = 20; // Se recalcula en pointerdown (25% del radio)
-    this.disabledCommands = new Set();
-    this.onBlockedDirection = null;
+    this.disabledCommands = new Set(
+      Array.from(callbacks.disabledCommands || [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n !== CONFIG.COMMANDS.DETENER)
+    );
+    this.onBlockedDirection = typeof callbacks.onBlocked === 'function' ? callbacks.onBlocked : null;
     this.lastBlockedNoticeAt = 0;
 
     this.initEvents();

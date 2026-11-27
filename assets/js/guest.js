@@ -391,9 +391,12 @@ export async function finalizarPruebaInvitado(mensaje = 'Prueba finalizada. Coma
 export function applyGuestControlRestrictions(comandosPermitidos = []) {
   const permitidosFisicos = new Set([CONFIG.COMMANDS.DETENER]); // DETENER (12) siempre activo
   (comandosPermitidos || []).forEach((c) => {
-    const activo = c.activo === 1 || c.activo === true;
+    const activo = c.activo === 1 || c.activo === true || c.activo === '1';
+    const baseActiva = c.base_activa !== false && c.base_activa !== 0;
+    const esBase = c.duracion_ms === null || c.duracion_ms === undefined || Number(c.duracion_ms) === 0;
     const cf = Number(c.codigo_fisico ?? c.codigo);
-    if (Number.isInteger(cf) && (activo || cf === CONFIG.COMMANDS.DETENER)) {
+    if (!Number.isInteger(cf)) return;
+    if (cf === CONFIG.COMMANDS.DETENER || (esBase && activo && baseActiva)) {
       permitidosFisicos.add(cf);
     }
   });
@@ -405,7 +408,16 @@ export function applyGuestControlRestrictions(comandosPermitidos = []) {
     btn.classList.toggle('guest-cmd-blocked', !allowed);
     if (!allowed) {
       btn.disabled = true;
-      btn.title = 'Comando restringido en modo invitado';
+      btn.setAttribute('aria-disabled', 'true');
+      if (!btn.classList.contains('cmd-disabled-admin')) {
+        btn.title = 'Comando restringido en modo invitado';
+      }
+    } else if (!btn.classList.contains('cmd-disabled-admin')) {
+      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
+      if (btn.title === 'Comando restringido en modo invitado') {
+        btn.removeAttribute('title');
+      }
     }
   });
 }

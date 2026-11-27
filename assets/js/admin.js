@@ -843,7 +843,7 @@ function esBaseActivaVehiculo(codigoFisico) {
   const base = ESTADO.comandos.find(
     (c) =>
       Number(c.codigo_fisico ?? c.codigo) === cf &&
-      (c.duracion_ms === null || c.duracion_ms === undefined)
+      (c.duracion_ms === null || c.duracion_ms === undefined || Number(c.duracion_ms) === 0)
   );
   return !base || esActivo(base.activo);
 }
@@ -948,6 +948,21 @@ async function cargarComandos() {
       );
     }
 
+    const baseActiva =
+      c.base_activa !== false &&
+      c.base_activa !== 0 &&
+      esBaseActivaVehiculo(c.codigo_fisico ?? c.codigo);
+    const estadoTd =
+      esActivo(c.activo) && esTemporizado && !baseActiva
+        ? celdaBadge(
+            'Inactivo (base)',
+            'bg-warning-subtle text-warning border border-warning-subtle'
+          )
+        : celdaEstado(c.activo);
+    if (esActivo(c.activo) && esTemporizado && !baseActiva) {
+      estadoTd.title = 'Deshabilitado mientras su comando físico base esté inactivo';
+    }
+
     tr.append(
       celda(c.codigo, 'text-center font-monospace'),
       celda(c.codigo_fisico ?? c.codigo, 'text-center font-monospace'),
@@ -959,7 +974,7 @@ async function cargarComandos() {
           ? 'bg-primary-subtle text-primary border border-primary-subtle'
           : 'bg-secondary-subtle text-secondary border border-secondary-subtle'
       ),
-      celdaEstado(c.activo),
+      estadoTd,
       acciones
     );
     tbody.appendChild(tr);

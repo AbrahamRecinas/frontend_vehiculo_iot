@@ -9,10 +9,10 @@ import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { api, formatApiError } from './api.js?v=4.3.5';
 import { wsService } from './ws.js?v=4.3.5';
-import { JoystickController } from './joystick.js?v=4.3.5';
+import { JoystickController } from './joystick.js?v=4.3.7';
 import { UI } from './ui.js?v=4.3.5';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.6';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.5';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.7';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.7';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -21,7 +21,7 @@ import {
   finalizarPruebaInvitado,
   applyGuestControlRestrictions,
   clearGuestControlRestrictions,
-} from './guest.js?v=4.3.5';
+} from './guest.js?v=4.3.7';
 
 let joystickController = null;
 let mandoActivo = false;
@@ -48,6 +48,9 @@ const STATE = {
   activeController: null,
   monitorHistorial: [],
   reconcileSeq: 0,
+  lucesEncendidas: true,
+  sonidoEncendido: true,
+  processedAccessoryEvents: new Set(),
 };
 
 window.activeController = null;
@@ -74,6 +77,10 @@ function esActivoFlag(v) {
   return v === 1 || v === true || v === '1';
 }
 
+function esComandoBase(cmd) {
+  return cmd?.duracion_ms === null || cmd?.duracion_ms === undefined || Number(cmd?.duracion_ms) === 0;
+}
+
 function esComandoBaseInactivo(codigoFisico) {
   const cf = Number(codigoFisico);
   if (cf === CONFIG.COMMANDS.DETENER) return false;
@@ -81,7 +88,94 @@ function esComandoBaseInactivo(codigoFisico) {
   return Boolean(base && !esActivoFlag(base.activo));
 }
 
+function sincronizarIndicadoresAccesorios() {
+  const syncBtn = (btnId, badgeId, isOn, iconOn, iconOff, titleOn, titleOff) => {
+    const btn = getEl(btnId);
+    const badge = getEl(badgeId);
+    if (!btn) return;
+    const blocked =
+      btn.disabled ||
+      btn.classList.contains('cmd-disabled-admin') ||
+      btn.classList.contains('guest-cmd-blocked');
+    const visualOn = !blocked && Boolean(isOn);
+
+    btn.classList.toggle('is-accessory-on', visualOn);
+    btn.classList.toggle('is-accessory-off', !blocked && !isOn);
+    btn.setAttribute('aria-pressed', visualOn ? 'true' : 'false');
+
+    const ico = btn.querySelector('.btn-icon');
+    if (ico) {
+      ico.className = `bi ${visualOn ? iconOn : iconOff} btn-icon mb-1`;
+    }
+    if (badge) {
+      badge.textContent = blocked ? 'INACT.' : visualOn ? 'ON' : 'OFF';
+      badge.classList.toggle('is-on', visualOn);
+    }
+    if (!blocked) {
+      btn.title = visualOn ? titleOn : titleOff;
+    }
+  };
+
+  syncBtn(
+    'btnLuces',
+    'lucesStateBadge',
+    STATE.lucesEncendidas,
+    'bi-lightbulb-fill',
+    'bi-lightbulb',
+    'Luces encendidas (pulsa para apagar)',
+    'Luces apagadas (pulsa para encender)'
+  );
+  syncBtn(
+    'btnSonido',
+    'sonidoStateBadge',
+    STATE.sonidoEncendido,
+    'bi-megaphone-fill',
+    'bi-megaphone',
+    'Sonido encendido (pulsa para silenciar)',
+    'Sonido apagado (pulsa para activar)'
+  );
+}
+
+function registrarEventoAccesorio(codigoFisico, { idHistorial = null, fallbackKey = null } = {}) {
+  const cf = Number(codigoFisico);
+  if (
+    cf !== CONFIG.COMMANDS.LUCES &&
+    cf !== CONFIG.COMMANDS.SONIDO &&
+    cf !== CONFIG.COMMANDS.ENCENDER &&
+    cf !== CONFIG.COMMANDS.APAGAR
+  ) {
+    return;
+  }
+
+  const dedupeKey = idHistorial
+    ? `hist:${idHistorial}:${cf}`
+    : fallbackKey || `ts:${Math.floor(Date.now() / 700)}:${cf}`;
+  if (STATE.processedAccessoryEvents.has(dedupeKey)) return;
+  STATE.processedAccessoryEvents.add(dedupeKey);
+  if (STATE.processedAccessoryEvents.size > 40) {
+    const oldest = STATE.processedAccessoryEvents.values().next().value;
+    if (oldest) STATE.processedAccessoryEvents.delete(oldest);
+  }
+
+  if (cf === CONFIG.COMMANDS.LUCES) {
+    STATE.lucesEncendidas = !STATE.lucesEncendidas;
+  } else if (cf === CONFIG.COMMANDS.SONIDO) {
+    STATE.sonidoEncendido = !STATE.sonidoEncendido;
+  } else if (cf === CONFIG.COMMANDS.ENCENDER) {
+    STATE.lucesEncendidas = true;
+    STATE.sonidoEncendido = true;
+  } else if (cf === CONFIG.COMMANDS.APAGAR) {
+    STATE.lucesEncendidas = false;
+    STATE.sonidoEncendido = false;
+  }
+  sincronizarIndicadoresAccesorios();
+}
+
 function sincronizarControlesMando() {
+  if (auth.getRole() !== 'INVITADO') {
+    clearGuestControlRestrictions();
+  }
+
   document.querySelectorAll('#mandoView [data-cmd]').forEach((el) => {
     const cf = Number(el.dataset.cmd);
     if (el.id === 'btnEmergencyStop' || cf === CONFIG.COMMANDS.DETENER) {
@@ -106,6 +200,10 @@ function sincronizarControlesMando() {
     }
   });
 
+  if (auth.getRole() === 'INVITADO') {
+    applyGuestControlRestrictions(STATE.comandosVehiculo);
+  }
+
   const joystickGuides = {
     [CONFIG.COMMANDS.AVANZAR]: getEl('joystickGuideN'),
     [CONFIG.COMMANDS.RETROCEDER]: getEl('joystickGuideS'),
@@ -113,8 +211,13 @@ function sincronizarControlesMando() {
     [CONFIG.COMMANDS.DIAGONAL_IZQUIERDA]: getEl('joystickGuideW'),
   };
   Object.entries(joystickGuides).forEach(([cfStr, guideEl]) => {
+    const cf = Number(cfStr);
+    const deshabilitado = STATE.disabledFisicos.has(cf);
     if (guideEl) {
-      guideEl.classList.toggle('is-disabled', STATE.disabledFisicos.has(Number(cfStr)));
+      guideEl.classList.toggle('is-disabled', deshabilitado);
+      if (deshabilitado) guideEl.classList.remove('active');
+      const baseLabel = CONFIG.COMMAND_META[cf]?.label || `Comando ${cf}`;
+      guideEl.title = deshabilitado ? `${baseLabel} (${cf}) · Deshabilitado` : `${baseLabel} (${cf})`;
     }
   });
 
@@ -127,14 +230,15 @@ function sincronizarControlesMando() {
   getEl('joystickPanel')?.classList.toggle('cmd-disabled-admin', allJoyDisabled);
 
   if (joystickController && typeof joystickController.setDisabledCommands === 'function') {
-    joystickController.setDisabledCommands(STATE.disabledFisicos);
+    joystickController.setDisabledCommands(STATE.disabledFisicos, (codigoFisico) => {
+      const label = codigoFisico
+        ? CONFIG.COMMAND_META[Number(codigoFisico)]?.label || `Comando ${codigoFisico}`
+        : 'Dirección';
+      UI.showToast(`${label} está deshabilitado actualmente en esta unidad.`, 'warning');
+    });
   }
 
-  if (auth.getRole() === 'INVITADO') {
-    applyGuestControlRestrictions(STATE.comandosVehiculo);
-  } else {
-    clearGuestControlRestrictions();
-  }
+  sincronizarIndicadoresAccesorios();
 }
 
 function reconstruirMapaComandos(comandos = []) {
@@ -145,22 +249,34 @@ function reconstruirMapaComandos(comandos = []) {
 
   STATE.comandosVehiculo.forEach((c) => {
     const cf = Number(c.codigo_fisico ?? c.codigo);
-    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
-    if (esBase && Number.isInteger(cf) && !baseMap.has(cf)) {
-      baseMap.set(cf, c);
+    if (!Number.isInteger(cf)) return;
+    if (esComandoBase(c)) {
+      if (!baseMap.has(cf)) baseMap.set(cf, c);
       if (cf !== CONFIG.COMMANDS.DETENER && !esActivoFlag(c.activo)) {
         disabledFisicos.add(cf);
       }
+    } else if (cf !== CONFIG.COMMANDS.DETENER && c.base_activa === false) {
+      disabledFisicos.add(cf);
     }
   });
 
+  if (auth.getRole() === 'INVITADO') {
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14].forEach((cf) => {
+      const base = baseMap.get(cf);
+      if (!base || !esActivoFlag(base.activo) || base.base_activa === false) {
+        disabledFisicos.add(cf);
+      }
+    });
+  }
+
   STATE.comandosVehiculo.forEach((c) => {
     const activo = esActivoFlag(c.activo);
+    const baseActiva = c.base_activa !== false && c.base_activa !== 0;
     const cf = Number(c.codigo_fisico ?? c.codigo);
     const idCmd = Number(c.id_comando);
-    const esBase = c.duracion_ms === null || c.duracion_ms === undefined;
+    const esBase = esComandoBase(c);
     if (!Number.isInteger(cf) || !Number.isInteger(idCmd)) return;
-    if (cf !== CONFIG.COMMANDS.DETENER && (!activo || disabledFisicos.has(cf))) return;
+    if (cf !== CONFIG.COMMANDS.DETENER && (!activo || !baseActiva || disabledFisicos.has(cf))) return;
     if (!mapa.has(cf) || esBase) {
       mapa.set(cf, idCmd);
     }
@@ -189,12 +305,13 @@ function renderMovimientosTemporizadosControl() {
   const grid = getEl('timedCommandsGrid');
   if (!card || !grid) return;
 
+  const isGuest = auth.getRole() === 'INVITADO';
   const temporizados = STATE.comandosVehiculo.filter(
     (c) =>
-      esActivoFlag(c.activo) &&
       c.duracion_ms !== null &&
+      c.duracion_ms !== undefined &&
       Number(c.duracion_ms) > 0 &&
-      !STATE.disabledFisicos.has(Number(c.codigo_fisico ?? c.codigo))
+      (!isGuest || esActivoFlag(c.permitido_invitado))
   );
 
   grid.textContent = '';
@@ -205,10 +322,28 @@ function renderMovimientosTemporizadosControl() {
 
   card.hidden = false;
   temporizados.forEach((c) => {
+    const cf = Number(c.codigo_fisico ?? c.codigo);
+    const cmdActivo = esActivoFlag(c.activo);
+    const baseActiva =
+      c.base_activa !== false &&
+      c.base_activa !== 0 &&
+      !STATE.disabledFisicos.has(cf) &&
+      !esComandoBaseInactivo(cf);
+    const ejecutable = cmdActivo && baseActiva;
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm btn-outline-info timed-cmd-btn';
-    const meta = CONFIG.COMMAND_META[Number(c.codigo_fisico)] || null;
+    if (!ejecutable) {
+      btn.disabled = true;
+      btn.classList.add('cmd-disabled-admin');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.title = !baseActiva
+        ? 'Acción física base deshabilitada por administración'
+        : 'Movimiento temporizado deshabilitado';
+    }
+
+    const meta = CONFIG.COMMAND_META[cf] || null;
     if (meta?.icon) {
       const i = document.createElement('i');
       i.className = `bi ${meta.icon} me-1`;
@@ -217,8 +352,14 @@ function renderMovimientosTemporizadosControl() {
     }
     btn.appendChild(document.createTextNode(`${c.nombre} `));
     const badge = document.createElement('span');
-    badge.className = 'badge text-bg-dark border border-info-subtle ms-1 font-monospace';
-    badge.textContent = `${(Number(c.duracion_ms) / 1000).toFixed(1)}s`;
+    badge.className = ejecutable
+      ? 'badge text-bg-dark border border-info-subtle ms-1 font-monospace'
+      : 'badge bg-danger-subtle text-danger border border-danger-subtle ms-1';
+    badge.textContent = !ejecutable
+      ? !baseActiva
+        ? 'Base inactiva'
+        : 'Inactivo'
+      : `${(Number(c.duracion_ms) / 1000).toFixed(1)}s`;
     btn.appendChild(badge);
     btn.addEventListener('click', () => ejecutarComandoPorId(c.id_comando, c));
     grid.appendChild(btn);
@@ -238,8 +379,10 @@ function initJoystick() {
       onRelease: () => detenerVehiculo(),
       onVisualChange: (info) => actualizarGuiaVisual(info),
       onBlocked: (codigoFisico) => {
-        const label = CONFIG.COMMAND_META[Number(codigoFisico)]?.label || `Comando ${codigoFisico}`;
-        UI.showToast(`${label} está deshabilitado actualmente.`, 'warning');
+        const label = codigoFisico
+          ? CONFIG.COMMAND_META[Number(codigoFisico)]?.label || `Comando ${codigoFisico}`
+          : 'Dirección';
+        UI.showToast(`${label} está deshabilitado actualmente en esta unidad.`, 'warning');
       },
       onLockChange: (controller) => {
         STATE.activeController = controller;
@@ -262,7 +405,8 @@ function actualizarGuiaVisual(info) {
     if (el) el.classList.remove('active');
   });
 
-  const activeGuide = info?.latchedCommand ? guides[info.latchedCommand] : null;
+  const cmd = info?.latchedCommand;
+  const activeGuide = cmd && !STATE.disabledFisicos.has(Number(cmd)) ? guides[cmd] : null;
   if (activeGuide) activeGuide.classList.add('active');
 }
 
@@ -282,7 +426,11 @@ async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
     return true;
   }
 
-  if ((cmdObj && !esActivoFlag(cmdObj.activo)) || esComandoBaseInactivo(codigoFisico) || STATE.disabledFisicos.has(codigoFisico)) {
+  if (
+    (cmdObj && (!esActivoFlag(cmdObj.activo) || cmdObj.base_activa === false)) ||
+    esComandoBaseInactivo(codigoFisico) ||
+    STATE.disabledFisicos.has(codigoFisico)
+  ) {
     UI.showToast('Este movimiento está deshabilitado actualmente.', 'warning');
     return false;
   }
@@ -298,6 +446,10 @@ async function ejecutarComandoPorId(idComandoReal, cmdObj = null) {
     const sufijo = cmdObj?.duracion_ms ? ` (${(Number(cmdObj.duracion_ms) / 1000).toFixed(1)}s)` : '';
     UI.setCommandState(cmdId, `VEHÍCULO · ${label.toUpperCase()}${sufijo}`);
     UI.setPulseState('active-moving');
+    const histId = res.data?.id_historial;
+    if (histId || wsService.getState() !== 'open') {
+      registrarEventoAccesorio(codigoFisico, { idHistorial: histId });
+    }
     return true;
   }
 
@@ -807,12 +959,19 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
 
     const tdEstado = document.createElement('td');
     tdEstado.className = 'text-center';
-    const activo = cmd?.activo === 1 || cmd?.activo === true;
+    const activo = esActivoFlag(cmd?.activo);
+    const esTemp = cmd?.duracion_ms !== null && cmd?.duracion_ms !== undefined && Number(cmd?.duracion_ms) > 0;
+    const baseInactiva =
+      cmd?.base_activa === false ||
+      cmd?.base_activa === 0 ||
+      (esTemp && (STATE.disabledFisicos.has(Number(cf)) || esComandoBaseInactivo(cf)));
     const badgeEstado = document.createElement('span');
-    badgeEstado.className = activo
-      ? 'badge bg-success-subtle text-success border border-success-subtle'
-      : 'badge bg-secondary-subtle text-secondary border border-secondary-subtle';
-    badgeEstado.textContent = activo ? 'Activo' : 'Inactivo';
+    badgeEstado.className = !activo
+      ? 'badge bg-secondary-subtle text-secondary border border-secondary-subtle'
+      : baseInactiva
+        ? 'badge bg-warning-subtle text-warning border border-warning-subtle'
+        : 'badge bg-success-subtle text-success border border-success-subtle';
+    badgeEstado.textContent = !activo ? 'Inactivo' : baseInactiva ? 'Inactivo (base)' : 'Activo';
     tdEstado.appendChild(badgeEstado);
 
     tr.append(tdNumero, tdNombre, tdDesc, tdEstado);
@@ -933,6 +1092,19 @@ function ordenarYAcotarHistorial(lista = []) {
  * consulta /estado y /historial, descarta respuestas atrasadas si cambió de unidad
  * y actualiza hardware ESP8266 + historial deduplicado de máx. 10 individuales.
  */
+async function refrescarComandosUnidadActiva(expectedVehicleId = STATE.vehicleId) {
+  const vid = Number(expectedVehicleId);
+  if (!auth.isAuthenticated() || !vid || STATE.vehicleId !== vid) return false;
+  if (esUnidadBloqueadaParaAdmin(STATE.vehicleInfo)) return false;
+  const cmdRes = await api.obtenerComandos(vid);
+  if (STATE.vehicleId !== vid) return false;
+  if (cmdRes.ok) {
+    reconstruirMapaComandos(cmdRes.data);
+    return true;
+  }
+  return false;
+}
+
 async function reconciliarEstadoTrasReconexionWss(expectedVehicleId) {
   const vid = Number(expectedVehicleId);
   if (!auth.isAuthenticated() || !vid || STATE.vehicleId !== vid) return;
@@ -940,15 +1112,21 @@ async function reconciliarEstadoTrasReconexionWss(expectedVehicleId) {
 
   const seq = ++STATE.reconcileSeq;
   const incluirHistorial = auth.getRole() !== 'INVITADO';
-  const [estadoSettled, historialSettled] = await Promise.allSettled([
+  const [estadoSettled, historialSettled, comandosSettled] = await Promise.allSettled([
     api.obtenerEstado(vid),
     incluirHistorial ? api.obtenerHistorial(vid) : Promise.resolve({ ok: false, skipped: true }),
+    api.obtenerComandos(vid),
   ]);
 
   if (seq !== STATE.reconcileSeq || STATE.vehicleId !== vid) return;
 
   const estadoRes = estadoSettled.status === 'fulfilled' ? estadoSettled.value : null;
   const historialRes = historialSettled.status === 'fulfilled' ? historialSettled.value : null;
+  const comandosRes = comandosSettled.status === 'fulfilled' ? comandosSettled.value : null;
+
+  if (comandosRes?.ok) {
+    reconstruirMapaComandos(comandosRes.data);
+  }
 
   if (estadoRes?.ok) {
     const estRow = Array.isArray(estadoRes.data) ? estadoRes.data[0] : estadoRes.data;
@@ -977,9 +1155,16 @@ async function reconciliarEstadoTrasReconexionWss(expectedVehicleId) {
 async function seleccionarVehiculoActivo(vehiculo, { conectarWss = true } = {}) {
   if (!vehiculo || !vehiculo.id_vehiculo) return false;
   const nuevoId = Number(vehiculo.id_vehiculo);
+  const cambioUnidad = STATE.vehicleId !== nuevoId;
   STATE.vehicleId = nuevoId;
   STATE.vehicleInfo = vehiculo;
   api.setVehicleId(nuevoId);
+
+  if (cambioUnidad) {
+    STATE.lucesEncendidas = true;
+    STATE.sonidoEncendido = true;
+    STATE.processedAccessoryEvents.clear();
+  }
 
   UI.updateVehicleContext({
     id: nuevoId,
@@ -1168,6 +1353,8 @@ function salirDeMonitor() {
     wsService.resetAndReconnect(STATE.vehicleId);
   }
   UI.setView('mando');
+  refrescarComandosUnidadActiva(STATE.vehicleId);
+  sincronizarIndicadoresAccesorios();
 }
 
 function bindViewNavigation() {
@@ -1198,7 +1385,13 @@ async function aplicarEstadoAutenticacion(session, reason = 'boot') {
     STATE.vehicleId = null;
     STATE.vehicleInfo = null;
     STATE.comandosVehiculo = [];
+    STATE.baseComandosByFisico.clear();
     STATE.fisicoToComandoId.clear();
+    STATE.disabledFisicos.clear();
+    STATE.lucesEncendidas = true;
+    STATE.sonidoEncendido = true;
+    STATE.processedAccessoryEvents.clear();
+    sincronizarControlesMando();
     UI.setHardwareStatus(null);
     if (UI.elements.vehicleBadge) UI.elements.vehicleBadge.textContent = 'Sin unidad';
     if (reason === 'expired') {
@@ -1684,6 +1877,11 @@ function bindWebSocketEvents() {
     STATE.monitorHistorial = ordenarYAcotarHistorial([mov, ...STATE.monitorHistorial]);
     renderHistorial(STATE.monitorHistorial);
     renderUltimoMovimiento(mov);
+    if (mov?.codigoFisico) {
+      registrarEventoAccesorio(mov.codigoFisico, {
+        idHistorial: mov.idRegistro ?? payload?.id_historial ?? null,
+      });
+    }
     syncDiagnostics();
   });
 
@@ -1714,6 +1912,9 @@ function bindWebSocketEvents() {
       STATE.lastSentCommand = cf;
       UI.setCommandState(payload?.id_comando ?? cf, `DEMO · ${mov.comando.toUpperCase()}`);
       UI.setPulseState('active-demo');
+      registrarEventoAccesorio(cf, {
+        fallbackKey: `demo:${payload?.timestamp || ''}:${payload?.orden || ''}:${cf}`,
+      });
     }
 
     renderUltimoMovimiento(mov);
@@ -1958,6 +2159,7 @@ async function inicializarGoogleSignIn() {
 // ---------------------------------------------------------------------------
 async function boot() {
   UI.init();
+  sincronizarIndicadoresAccesorios();
 
   // Acceso directo al Modo Mando en móvil y escritorio (sin sala de espera)
   mandoActivo = true;
@@ -2149,7 +2351,12 @@ async function boot() {
       STATE.busyCommands.add(idCmd);
       const resPulse = await api.enviarMovimiento(idCmd);
       STATE.busyCommands.delete(idCmd);
-      if (!resPulse.ok) {
+      if (resPulse.ok) {
+        const histId = resPulse.data?.id_historial;
+        if (histId || wsService.getState() !== 'open') {
+          registrarEventoAccesorio(codigoFisico, { idHistorial: histId });
+        }
+      } else {
         UI.showToast(formatApiError(resPulse, `Fallo envío comando ${codigoFisico}`), 'danger');
         if (resPulse.code === 'COMANDO_INACTIVO' && STATE.vehicleId) {
           api.obtenerComandos(STATE.vehicleId).then((r) => {

@@ -37,8 +37,8 @@
   />
 
   <!-- Estilos propios Mobile First -->
-  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.5" />
-  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.5" />
+  <link rel="stylesheet" href="./assets/css/style.css?v=4.3.7" />
+  <link rel="stylesheet" href="./assets/css/mobile.css?v=4.3.7" />
 </head>
 <body data-view="auth">
   <div class="app-wrapper d-flex flex-column h-100">
@@ -703,7 +703,7 @@
               <div class="card-body p-2 d-flex flex-column align-items-center justify-content-center position-relative">
                 <div class="joystick-wrapper position-relative" id="joystickTrack" role="application" aria-label="Joystick de dirección" tabindex="0">
                   <div class="joystick-ring"></div>
-                  <div class="joystick-guide joystick-guide--n active" id="joystickGuideN" data-dir="1" title="Avanzar (1)">▲</div>
+                  <div class="joystick-guide joystick-guide--n" id="joystickGuideN" data-dir="1" title="Avanzar (1)">▲</div>
                   <div class="joystick-guide joystick-guide--s" id="joystickGuideS" data-dir="2" title="Retroceder (2)">▼</div>
                   <div class="joystick-guide joystick-guide--e" id="joystickGuideE" data-dir="7" title="Avanzar derecha (7)">↗</div>
                   <div class="joystick-guide joystick-guide--w" id="joystickGuideW" data-dir="8" title="Avanzar izquierda (8)">↖</div>
@@ -730,12 +730,14 @@
                 </div>
                 <div class="card-body p-2">
                   <div id="energyCommandGrid">
-                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center" data-cmd="9" id="btnLuces">
-                      <i class="bi bi-lightbulb btn-icon mb-1" aria-hidden="true"></i>
+                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center is-accessory-on" data-cmd="9" id="btnLuces" aria-pressed="true">
+                      <span class="accessory-state-pill is-on" id="lucesStateBadge">ON</span>
+                      <i class="bi bi-lightbulb-fill btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Luces</strong>
                     </button>
-                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center" data-cmd="10" id="btnSonido">
-                      <i class="bi bi-megaphone btn-icon mb-1" aria-hidden="true"></i>
+                    <button type="button" class="btn btn-action btn-sm btn-outline-info d-flex flex-column align-items-center justify-content-center is-accessory-on" data-cmd="10" id="btnSonido" aria-pressed="true">
+                      <span class="accessory-state-pill is-on" id="sonidoStateBadge">ON</span>
+                      <i class="bi bi-megaphone-fill btn-icon mb-1" aria-hidden="true"></i>
                       <strong class="fw-semibold text-light action-name mb-0">Sonido</strong>
                     </button>
                     <button type="button" class="btn btn-danger px-2 py-2 d-flex align-items-center justify-content-center stop-emergencia-btn" id="btnEmergencyStop" aria-label="Detener vehículo inmediatamente (12)">
@@ -1880,6 +1882,6 @@
   ></script>
 
   <!-- JavaScript Modular Principal -->
-  <script type="module" src="./assets/js/app.js?v=4.3.6"></script>
+  <script type="module" src="./assets/js/app.js?v=4.3.7"></script>
 </body>
 </html>

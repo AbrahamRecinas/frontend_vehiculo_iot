@@ -23,7 +23,7 @@ function esBaseActiva(codigoFisico) {
   const base = STORE.comandos.find(
     (c) =>
       Number(c.codigo_fisico ?? c.codigo) === cf &&
-      (c.duracion_ms === null || c.duracion_ms === undefined)
+      (c.duracion_ms === null || c.duracion_ms === undefined || Number(c.duracion_ms) === 0)
   );
   return !base || esActivo(base.activo);
 }
@@ -536,7 +536,7 @@ function renderTablasComandos() {
       timedCmds.forEach((c) => {
         const tr = document.createElement('tr');
         const cmdActivo = esActivo(c.activo);
-        const baseActiva = esBaseActiva(c.codigo_fisico);
+        const baseActiva = c.base_activa !== false && c.base_activa !== 0 && esBaseActiva(c.codigo_fisico);
         const ejecutable = cmdActivo && baseActiva;
 
         const tdNom = document.createElement('td');
@@ -889,7 +889,9 @@ function renderEditorPasos() {
   STORE.pasos.forEach((p, idx) => {
     const cf = Number(p.codigo_fisico ?? p.codigo);
     const cmdMatch = STORE.comandos.find((c) => Number(c.id_comando) === Number(p.id_comando));
-    const pasoActivo = (!cmdMatch || esActivo(cmdMatch.activo)) && esBaseActiva(cf);
+    const pasoActivo =
+      (!cmdMatch || (esActivo(cmdMatch.activo) && cmdMatch.base_activa !== false && cmdMatch.base_activa !== 0)) &&
+      esBaseActiva(cf);
     if (!pasoActivo) hayPasoInactivo = true;
 
     const item = document.createElement('div');
