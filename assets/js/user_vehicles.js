@@ -10,12 +10,23 @@
  */
 
 import { CONFIG } from './config.js';
-import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.4';
+import { api, formatApiError } from './api.js?v=4.3.5';
+import { UI } from './ui.js?v=4.3.5';
 
 const $ = (id) => document.getElementById(id);
 const esActivo = (v) => v === 1 || v === true || v === '1';
 const toast = (msg, tipo = 'info') => UI.showToast(msg, tipo);
+
+function esBaseActiva(codigoFisico) {
+  const cf = Number(codigoFisico);
+  if (cf === CONFIG.COMMANDS.DETENER) return true;
+  const base = STORE.comandos.find(
+    (c) =>
+      Number(c.codigo_fisico ?? c.codigo) === cf &&
+      (c.duracion_ms === null || c.duracion_ms === undefined)
+  );
+  return !base || esActivo(base.activo);
+}
 
 const STORE = {
   vehiculos: [],
@@ -473,7 +484,12 @@ function renderTablasComandos() {
         const tdTipo = document.createElement('td');
         tdTipo.className = 'text-center';
         tdTipo.appendChild(
-          crearBadge('Base · protegido', 'bg-secondary-subtle text-light border border-secondary')
+          crearBadge(
+            esActivo(c.activo) ? 'Base · protegido' : 'Deshabilitado (Admin)',
+            esActivo(c.activo)
+              ? 'bg-secondary-subtle text-light border border-secondary'
+              : 'bg-danger-subtle text-danger border border-danger-subtle'
+          )
         );
 
         const tdInv = document.createElement('td');
@@ -489,15 +505,17 @@ function renderTablasComandos() {
 
         const tdAcc = document.createElement('td');
         tdAcc.className = 'text-end';
-        tdAcc.appendChild(
-          crearBoton({
-            icono: 'bi-play-fill',
-            texto: 'Ejecutar',
-            clase: 'btn-outline-success',
-            disabled: !esActivo(c.activo),
-            onClick: () => callbacks.onExecuteCommand?.(STORE.vehiculoActivo, c),
-          })
-        );
+        const btnExec = crearBoton({
+          icono: 'bi-play-fill',
+          texto: 'Ejecutar',
+          clase: 'btn-outline-success',
+          disabled: !esActivo(c.activo),
+          onClick: () => callbacks.onExecuteCommand?.(STORE.vehiculoActivo, c),
+        });
+        if (!esActivo(c.activo)) {
+          btnExec.title = 'Comando base deshabilitado por administración';
+        }
+        tdAcc.appendChild(btnExec);
 
         tr.append(tdCod, tdNom, tdTipo, tdInv, tdAcc);
         baseBody.appendChild(tr);
@@ -517,6 +535,9 @@ function renderTablasComandos() {
     } else {
       timedCmds.forEach((c) => {
         const tr = document.createElement('tr');
+        const cmdActivo = esActivo(c.activo);
+        const baseActiva = esBaseActiva(c.codigo_fisico);
+        const ejecutable = cmdActivo && baseActiva;
 
         const tdNom = document.createElement('td');
         const meta = CONFIG.COMMAND_META[Number(c.codigo_fisico)];
@@ -527,6 +548,15 @@ function renderTablasComandos() {
           tdNom.appendChild(ico);
         }
         tdNom.appendChild(document.createTextNode(c.nombre));
+        if (!ejecutable) {
+          tdNom.appendChild(document.createTextNode(' '));
+          tdNom.appendChild(
+            crearBadge(
+              !baseActiva ? 'Base deshabilitada' : 'Inactivo',
+              'bg-danger-subtle text-danger border border-danger-subtle ms-1'
+            )
+          );
+        }
 
         const tdFis = document.createElement('td');
         tdFis.className = 'text-center font-monospace';
@@ -552,14 +582,20 @@ function renderTablasComandos() {
 
         const tdAcc = document.createElement('td');
         tdAcc.className = 'text-end text-nowrap';
+        const btnProbar = crearBoton({
+          icono: 'bi-play-fill',
+          texto: 'Probar',
+          clase: 'btn-outline-success me-1',
+          disabled: !ejecutable,
+          onClick: () => callbacks.onExecuteCommand?.(STORE.vehiculoActivo, c),
+        });
+        if (!ejecutable) {
+          btnProbar.title = !baseActiva
+            ? 'Acción base deshabilitada por administración'
+            : 'Movimiento inactivo';
+        }
         tdAcc.append(
-          crearBoton({
-            icono: 'bi-play-fill',
-            texto: 'Probar',
-            clase: 'btn-outline-success me-1',
-            disabled: !esActivo(c.activo),
-            onClick: () => callbacks.onExecuteCommand?.(STORE.vehiculoActivo, c),
-          }),
+          btnProbar,
           crearBoton({
             icono: 'bi-pencil-square',
             texto: 'Editar',
@@ -592,11 +628,11 @@ function abrirModalTemporizado(item = null) {
     ? 'Editar movimiento temporizado'
     : 'Nuevo movimiento temporizado';
 
-  // Filtrar capacidades físicas con permite_temporizado = 1
+  // Filtrar capacidades físicas con permite_temporizado = 1 y comando base activo
   const select = form.elements.codigo_fisico;
   select.textContent = '';
   const capsTemp = STORE.capacidades.filter(
-    (c) => esActivo(c.activo) && esActivo(c.permite_temporizado)
+    (c) => esActivo(c.activo) && esActivo(c.permite_temporizado) && esBaseActiva(c.codigo_fisico)
   );
   if (capsTemp.length) {
     capsTemp.forEach((c) => {
@@ -604,12 +640,18 @@ function abrirModalTemporizado(item = null) {
         new Option(`${c.nombre_base} (código físico ${c.codigo_fisico})`, String(c.codigo_fisico))
       );
     });
-  } else {
-    // Fallback informativo si la unidad no tiene modelo asociado
-    [1, 2, 3, 4, 5, 6, 7, 8].forEach((cf) => {
-      const m = CONFIG.COMMAND_META[cf];
-      select.appendChild(new Option(`${m?.label || `Acción ${cf}`} (físico ${cf})`, String(cf)));
-    });
+  } else if (!STORE.capacidades.length) {
+    // Fallback informativo si la unidad no tiene modelo asociado, filtrando base activa
+    [1, 2, 3, 4, 5, 6, 7, 8]
+      .filter((cf) => esBaseActiva(cf))
+      .forEach((cf) => {
+        const m = CONFIG.COMMAND_META[cf];
+        select.appendChild(new Option(`${m?.label || `Acción ${cf}`} (físico ${cf})`, String(cf)));
+      });
+  }
+  if (!select.options.length) {
+    toast('No hay acciones físicas activas disponibles para movimientos temporizados.', 'warning');
+    return;
   }
 
   form.elements.nombre.value = editando ? item.nombre || '' : '';
@@ -690,6 +732,7 @@ function renderListaDemos() {
 
   STORE.demos.forEach((d) => {
     const esPrivada = d.tipo === 'PRIVADA';
+    const demoActiva = esActivo(d.activo);
     const activa = STORE.demoSeleccionada?.id_demo === d.id_demo;
 
     const card = document.createElement('div');
@@ -708,16 +751,34 @@ function renderListaDemos() {
     desc.textContent = d.descripcion || 'Sin descripción';
     info.append(title, desc);
 
+    const badges = document.createElement('div');
+    badges.className = 'd-flex flex-column align-items-end gap-1';
     const badge = crearBadge(
       esPrivada ? 'PRIVADA' : 'FÁBRICA · lectura',
       esPrivada
         ? 'bg-info-subtle text-info border border-info-subtle'
         : 'bg-secondary-subtle text-light border border-secondary'
     );
-    head.append(info, badge);
+    badges.appendChild(badge);
+    if (!demoActiva) {
+      badges.appendChild(
+        crearBadge('Inactiva', 'bg-danger-subtle text-danger border border-danger-subtle')
+      );
+    }
+    head.append(info, badges);
 
     const btns = document.createElement('div');
     btns.className = 'd-flex flex-wrap gap-1 mt-2';
+    const btnRun = crearBoton({
+      icono: 'bi-play-fill',
+      texto: 'Ejecutar',
+      clase: 'btn-outline-success',
+      disabled: !demoActiva,
+      onClick: () => callbacks.onExecuteDemo?.(STORE.vehiculoActivo, d),
+    });
+    if (!demoActiva) {
+      btnRun.title = 'Demo inactiva';
+    }
     btns.append(
       crearBoton({
         icono: 'bi-list-ol',
@@ -729,12 +790,7 @@ function renderListaDemos() {
           await cargarPasosDemo(d.id_demo);
         },
       }),
-      crearBoton({
-        icono: 'bi-play-fill',
-        texto: 'Ejecutar',
-        clase: 'btn-outline-success',
-        onClick: () => callbacks.onExecuteDemo?.(STORE.vehiculoActivo, d),
-      })
+      btnRun
     );
 
     if (esPrivada) {
@@ -829,15 +885,23 @@ function renderEditorPasos() {
     return;
   }
 
+  let hayPasoInactivo = false;
   STORE.pasos.forEach((p, idx) => {
+    const cf = Number(p.codigo_fisico ?? p.codigo);
+    const cmdMatch = STORE.comandos.find((c) => Number(c.id_comando) === Number(p.id_comando));
+    const pasoActivo = (!cmdMatch || esActivo(cmdMatch.activo)) && esBaseActiva(cf);
+    if (!pasoActivo) hayPasoInactivo = true;
+
     const item = document.createElement('div');
-    item.className = 'demo-step-editor-card p-2 rounded border border-secondary-subtle bg-dark mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2';
+    item.className = `demo-step-editor-card p-2 rounded border bg-dark mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2 ${
+      pasoActivo ? 'border-secondary-subtle' : 'border-danger-subtle'
+    }`;
 
     const left = document.createElement('div');
     left.className = 'd-flex align-items-center gap-2 min-w-0';
 
     const num = crearBadge(`#${p.orden}`, 'text-bg-primary font-monospace');
-    const meta = CONFIG.COMMAND_META[Number(p.codigo_fisico ?? p.codigo)];
+    const meta = CONFIG.COMMAND_META[cf];
 
     const textBox = document.createElement('div');
     textBox.className = 'min-w-0';
@@ -852,6 +916,12 @@ function renderEditorPasos() {
     cmdLine.appendChild(
       document.createTextNode(`${p.comando || `Comando #${p.id_comando}`} (fís. ${p.codigo_fisico ?? p.codigo})`)
     );
+    if (!pasoActivo) {
+      cmdLine.appendChild(document.createTextNode(' '));
+      cmdLine.appendChild(
+        crearBadge('Deshabilitado', 'bg-danger-subtle text-danger border border-danger-subtle ms-1')
+      );
+    }
     const durLine = document.createElement('small');
     durLine.className = 'text-secondary font-monospace';
     durLine.textContent = `Duración: ${p.duracion_ms} ms (${(Number(p.duracion_ms) / 1000).toFixed(1)}s) · Pausa: ${p.pausa_ms} ms`;
@@ -898,6 +968,18 @@ function renderEditorPasos() {
     item.append(left, actions);
     wrap.appendChild(item);
   });
+
+  if (btnRun) {
+    const demoActiva = esActivo(demo.activo);
+    btnRun.disabled = !demo || !STORE.pasos.length || !demoActiva || hayPasoInactivo;
+    if (hayPasoInactivo) {
+      btnRun.title = 'Contiene pasos con comandos deshabilitados por administración';
+    } else if (!demoActiva) {
+      btnRun.title = 'Demo inactiva';
+    } else {
+      btnRun.removeAttribute('title');
+    }
+  }
 }
 
 async function moverPasoDemo(idMov, delta) {
@@ -950,7 +1032,9 @@ function eliminarDemoPrivada(demo) {
 
 function abrirModalPasoPrivado(item = null) {
   if (!STORE.demoSeleccionada || STORE.demoSeleccionada.tipo !== 'PRIVADA') return;
-  const activos = STORE.comandos.filter((c) => esActivo(c.activo));
+  const activos = STORE.comandos.filter(
+    (c) => esActivo(c.activo) && esBaseActiva(c.codigo_fisico ?? c.codigo)
+  );
   if (!activos.length) {
     toast('Esta unidad no tiene comandos activos disponibles.', 'warning');
     return;

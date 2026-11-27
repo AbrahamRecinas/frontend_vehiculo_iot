@@ -12,8 +12,8 @@
 
 import { CONFIG } from './config.js';
 import { auth } from './auth.js';
-import { api, formatApiError } from './api.js';
-import { UI } from './ui.js?v=4.3.4';
+import { api, formatApiError } from './api.js?v=4.3.5';
+import { UI } from './ui.js?v=4.3.5';
 
 const DEFAULT_MODEL_IMG = './assets/img/modelo-default.svg';
 const GRUA_MODEL_IMG = './assets/img/modelo-grua.svg';
@@ -391,25 +391,23 @@ export async function finalizarPruebaInvitado(mensaje = 'Prueba finalizada. Coma
 export function applyGuestControlRestrictions(comandosPermitidos = []) {
   const permitidosFisicos = new Set([CONFIG.COMMANDS.DETENER]); // DETENER (12) siempre activo
   (comandosPermitidos || []).forEach((c) => {
+    const activo = c.activo === 1 || c.activo === true;
     const cf = Number(c.codigo_fisico ?? c.codigo);
-    if (Number.isInteger(cf)) permitidosFisicos.add(cf);
+    if (Number.isInteger(cf) && (activo || cf === CONFIG.COMMANDS.DETENER)) {
+      permitidosFisicos.add(cf);
+    }
   });
 
-  // Filtrar botones con data-cmd (energía, accesorios y D-Pad)
   document.querySelectorAll('#mandoView [data-cmd]').forEach((btn) => {
+    if (btn.id === 'btnEmergencyStop') return;
     const cf = Number(btn.dataset.cmd);
     const allowed = permitidosFisicos.has(cf);
-    btn.disabled = !allowed;
     btn.classList.toggle('guest-cmd-blocked', !allowed);
-    btn.title = allowed ? '' : 'Comando restringido en modo invitado';
+    if (!allowed) {
+      btn.disabled = true;
+      btn.title = 'Comando restringido en modo invitado';
+    }
   });
-
-  // Verificar si el joystick tiene al menos una dirección permitida (1, 2, 7, 8)
-  const dirPerm = [1, 2, 7, 8].some((cf) => permitidosFisicos.has(cf));
-  const joyCard = $('joystickPanel');
-  if (joyCard) {
-    joyCard.classList.toggle('guest-cmd-blocked', !dirPerm);
-  }
 }
 
 export function clearGuestControlRestrictions() {
@@ -417,7 +415,6 @@ export function clearGuestControlRestrictions() {
   if (demoCard) demoCard.hidden = false;
 
   document.querySelectorAll('#mandoView [data-cmd]').forEach((btn) => {
-    btn.disabled = false;
     btn.classList.remove('guest-cmd-blocked');
   });
 

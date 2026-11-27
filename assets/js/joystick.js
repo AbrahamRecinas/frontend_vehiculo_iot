@@ -33,8 +33,44 @@ export class JoystickController {
     this.center = { x: 0, y: 0 };
     this.maxRadius = 70; // Se recalcula en pointerdown
     this.deadzoneRadius = 20; // Se recalcula en pointerdown (25% del radio)
+    this.disabledCommands = new Set();
+    this.onBlockedDirection = null;
+    this.lastBlockedNoticeAt = 0;
 
     this.initEvents();
+  }
+
+  setDisabledCommands(cmdsIterable = [], onBlockedDirection = null) {
+    this.disabledCommands = new Set(
+      Array.from(cmdsIterable || [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n !== CONFIG.COMMANDS.DETENER)
+    );
+    if (typeof onBlockedDirection === 'function') {
+      this.onBlockedDirection = onBlockedDirection;
+    }
+    if (this.latchedCommand && this.disabledCommands.has(this.latchedCommand)) {
+      this.forceRelease();
+      if (this.callbacks.onRelease) {
+        this.callbacks.onRelease({ forcedStop: true });
+      }
+    }
+  }
+
+  _notifyBlocked(cmdId) {
+    const now = Date.now();
+    if (now - this.lastBlockedNoticeAt < 1100) return;
+    this.lastBlockedNoticeAt = now;
+    this.onBlockedDirection?.(cmdId);
+  }
+
+  _allAxesDisabled() {
+    return [
+      CONFIG.COMMANDS.AVANZAR,
+      CONFIG.COMMANDS.RETROCEDER,
+      CONFIG.COMMANDS.DIAGONAL_DERECHA,
+      CONFIG.COMMANDS.DIAGONAL_IZQUIERDA,
+    ].every((cf) => this.disabledCommands.has(cf));
   }
 
   initEvents() {
@@ -100,6 +136,11 @@ export class JoystickController {
     if (this.activePointerId !== null) return; // Solo un puntero activo a la vez
     // FASE 4: exclusión mutua — si el D-Pad tiene el control, el joystick no responde
     if (window.activeController === 'dpad') return;
+    if (this._allAxesDisabled()) {
+      e.preventDefault();
+      this._notifyBlocked(null);
+      return;
+    }
     e.preventDefault();
 
     this.activePointerId = e.pointerId;
@@ -198,6 +239,27 @@ export class JoystickController {
     this.knob.style.transform = `translate3d(${visualX}px, ${visualY}px, 0)`;
 
     const detectedSector = this.calculateSector(rawDx, rawDy);
+
+    // Si la dirección fue deshabilitada por administración, bloquear envío y liberar movimiento previo
+    if (detectedSector && this.disabledCommands.has(detectedSector)) {
+      if (this.latchedCommand !== null) {
+        this.latchedCommand = null;
+        currentJoystickCmd = CONFIG.COMMANDS.DETENER;
+        if (this.callbacks.onRelease) {
+          this.callbacks.onRelease({ hadMovement: true });
+        }
+      }
+      this._notifyBlocked(detectedSector);
+      if (this.callbacks.onVisualChange) {
+        this.callbacks.onVisualChange({
+          dx: visualX,
+          dy: visualY,
+          distance,
+          latchedCommand: null,
+        });
+      }
+      return;
+    }
 
     // Durante el arrastre: si la direccion cambia, enviar el nuevo POST inmediatamente
     if (detectedSector && distance >= this.deadzoneRadius) {
@@ -304,6 +366,10 @@ export class JoystickController {
     if (cmd === null) return;
     e.preventDefault();
     if (e.repeat) return;
+    if (this.disabledCommands.has(cmd)) {
+      this._notifyBlocked(cmd);
+      return;
+    }
 
     // FASE 4: exclusión mutua — con la cruceta o el puntero en uso, el teclado no responde
     if (window.activeController === 'dpad' || this.isDragging) return;
