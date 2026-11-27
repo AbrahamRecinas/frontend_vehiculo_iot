@@ -560,6 +560,7 @@ async function cargarCapacidades() {
   }
   ESTADO.capacidades.forEach((c) => {
     const tr = document.createElement('tr');
+    const esDetenerCap = Number(c.codigo_fisico) === CONFIG.COMMANDS.DETENER;
     const acciones = document.createElement('td');
     acciones.className = 'text-end text-nowrap';
     acciones.append(
@@ -570,16 +571,29 @@ async function cargarCapacidades() {
         accion: 'editar',
         tipo: 'capacidad',
         id: c.id_capacidad,
-      }),
-      crearBoton({
-        icono: 'bi-trash',
-        texto: 'Eliminar',
-        clase: 'btn-table-action btn-table-action-danger',
-        accion: 'eliminar',
-        tipo: 'capacidad',
-        id: c.id_capacidad,
       })
     );
+    if (esDetenerCap) {
+      const shield = document.createElement('span');
+      shield.className = 'badge bg-danger-subtle text-danger border border-danger-subtle ms-1';
+      shield.title = 'El paro de emergencia (12) no puede desactivarse ni eliminarse';
+      const ico = document.createElement('i');
+      ico.className = 'bi bi-shield-lock-fill me-1';
+      ico.setAttribute('aria-hidden', 'true');
+      shield.append(ico, document.createTextNode('Seguridad · Siempre activo'));
+      acciones.appendChild(shield);
+    } else {
+      acciones.appendChild(
+        crearBoton({
+          icono: 'bi-trash',
+          texto: 'Eliminar',
+          clase: 'btn-table-action btn-table-action-danger',
+          accion: 'eliminar',
+          tipo: 'capacidad',
+          id: c.id_capacidad,
+        })
+      );
+    }
     tr.append(
       celda(c.codigo_fisico, 'text-center font-monospace'),
       celda(c.nombre_base),
@@ -952,14 +966,21 @@ async function cargarComandos() {
       c.base_activa !== false &&
       c.base_activa !== 0 &&
       esBaseActivaVehiculo(c.codigo_fisico ?? c.codigo);
-    const estadoTd =
-      esActivo(c.activo) && esTemporizado && !baseActiva
+    const capInactiva = c.capacidad_activa === false || c.capacidad_activa === 0;
+    const estadoTd = capInactiva
+      ? celdaBadge(
+          'Inactivo (modelo)',
+          'bg-warning-subtle text-warning border border-warning-subtle'
+        )
+      : esActivo(c.activo) && esTemporizado && !baseActiva
         ? celdaBadge(
             'Inactivo (base)',
             'bg-warning-subtle text-warning border border-warning-subtle'
           )
         : celdaEstado(c.activo);
-    if (esActivo(c.activo) && esTemporizado && !baseActiva) {
+    if (capInactiva) {
+      estadoTd.title = 'Deshabilitado desde las capacidades físicas del modelo';
+    } else if (esActivo(c.activo) && esTemporizado && !baseActiva) {
       estadoTd.title = 'Deshabilitado mientras su comando físico base esté inactivo';
     }
 
@@ -1714,11 +1735,16 @@ function manejarAccion(btn) {
       );
     }
     if (tipo === 'capacidad') {
+      const capObj = ESTADO.capacidades.find((x) => x.id_capacidad === id);
+      if (capObj && Number(capObj.codigo_fisico) === CONFIG.COMMANDS.DETENER) {
+        return toast('El paro de emergencia DETENER (12) no puede eliminarse por seguridad.', 'warning');
+      }
       return pedirConfirmacion('¿Eliminar esta capacidad física del modelo?', async () => {
         const res = await adminApi.capacidades.eliminar(id);
         if (!res.ok) return toast(formatApiError(res), 'danger');
         toast('Capacidad eliminada.', 'success');
-        await cargarCapacidades();
+        await Promise.all([cargarCapacidades(), cargarComandos()]);
+        onCommandsChangedCallback?.(ESTADO.vehiculoId);
       });
     }
     if (tipo === 'vehiculo') {
@@ -1956,7 +1982,10 @@ export function initAdmin({ onOperarVehiculo, onCommandsChanged } = {}) {
           : adminApi.capacidades.crear(ESTADO.modeloId, datos),
       'modalCapacidad',
       'Capacidad guardada.',
-      cargarCapacidades
+      async () => {
+        await Promise.all([cargarCapacidades(), cargarComandos()]);
+        onCommandsChangedCallback?.(ESTADO.vehiculoId);
+      }
     );
   });
 

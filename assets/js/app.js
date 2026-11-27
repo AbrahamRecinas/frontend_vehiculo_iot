@@ -11,8 +11,8 @@ import { api, formatApiError } from './api.js?v=4.3.5';
 import { wsService } from './ws.js?v=4.3.5';
 import { JoystickController } from './joystick.js?v=4.3.7';
 import { UI } from './ui.js?v=4.3.5';
-import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.7';
-import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.7';
+import { initAdmin, alEntrarAdmin } from './admin.js?v=4.3.8';
+import { initUserVehicles, cargarMisVehiculosModulo } from './user_vehicles.js?v=4.3.8';
 import {
   initGuestModule,
   cargarCatalogoInvitado,
@@ -85,7 +85,11 @@ function esComandoBaseInactivo(codigoFisico) {
   const cf = Number(codigoFisico);
   if (cf === CONFIG.COMMANDS.DETENER) return false;
   const base = STATE.baseComandosByFisico.get(cf);
-  return Boolean(base && !esActivoFlag(base.activo));
+  if (base && (!esActivoFlag(base.activo) || base.base_activa === false || base.capacidad_activa === false)) {
+    return true;
+  }
+  const anyCmd = STATE.comandosVehiculo.find((c) => Number(c.codigo_fisico ?? c.codigo) === cf);
+  return Boolean(anyCmd && (anyCmd.capacidad_activa === false || anyCmd.base_activa === false));
 }
 
 function sincronizarIndicadoresAccesorios() {
@@ -250,12 +254,13 @@ function reconstruirMapaComandos(comandos = []) {
   STATE.comandosVehiculo.forEach((c) => {
     const cf = Number(c.codigo_fisico ?? c.codigo);
     if (!Number.isInteger(cf)) return;
+    const capInactiva = c.capacidad_activa === false || c.capacidad_activa === 0;
     if (esComandoBase(c)) {
       if (!baseMap.has(cf)) baseMap.set(cf, c);
-      if (cf !== CONFIG.COMMANDS.DETENER && !esActivoFlag(c.activo)) {
+      if (cf !== CONFIG.COMMANDS.DETENER && (!esActivoFlag(c.activo) || capInactiva || c.base_activa === false || c.base_activa === 0)) {
         disabledFisicos.add(cf);
       }
-    } else if (cf !== CONFIG.COMMANDS.DETENER && c.base_activa === false) {
+    } else if (cf !== CONFIG.COMMANDS.DETENER && (c.base_activa === false || c.base_activa === 0 || capInactiva)) {
       disabledFisicos.add(cf);
     }
   });
@@ -263,7 +268,7 @@ function reconstruirMapaComandos(comandos = []) {
   if (auth.getRole() === 'INVITADO') {
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14].forEach((cf) => {
       const base = baseMap.get(cf);
-      if (!base || !esActivoFlag(base.activo) || base.base_activa === false) {
+      if (!base || !esActivoFlag(base.activo) || base.base_activa === false || base.capacidad_activa === false) {
         disabledFisicos.add(cf);
       }
     });
@@ -271,12 +276,13 @@ function reconstruirMapaComandos(comandos = []) {
 
   STATE.comandosVehiculo.forEach((c) => {
     const activo = esActivoFlag(c.activo);
+    const capActiva = c.capacidad_activa !== false && c.capacidad_activa !== 0;
     const baseActiva = c.base_activa !== false && c.base_activa !== 0;
     const cf = Number(c.codigo_fisico ?? c.codigo);
     const idCmd = Number(c.id_comando);
     const esBase = esComandoBase(c);
     if (!Number.isInteger(cf) || !Number.isInteger(idCmd)) return;
-    if (cf !== CONFIG.COMMANDS.DETENER && (!activo || !baseActiva || disabledFisicos.has(cf))) return;
+    if (cf !== CONFIG.COMMANDS.DETENER && (!activo || !capActiva || !baseActiva || disabledFisicos.has(cf))) return;
     if (!mapa.has(cf) || esBase) {
       mapa.set(cf, idCmd);
     }
@@ -324,7 +330,9 @@ function renderMovimientosTemporizadosControl() {
   temporizados.forEach((c) => {
     const cf = Number(c.codigo_fisico ?? c.codigo);
     const cmdActivo = esActivoFlag(c.activo);
+    const capInactiva = c.capacidad_activa === false || c.capacidad_activa === 0;
     const baseActiva =
+      !capInactiva &&
       c.base_activa !== false &&
       c.base_activa !== 0 &&
       !STATE.disabledFisicos.has(cf) &&
@@ -338,9 +346,11 @@ function renderMovimientosTemporizadosControl() {
       btn.disabled = true;
       btn.classList.add('cmd-disabled-admin');
       btn.setAttribute('aria-disabled', 'true');
-      btn.title = !baseActiva
-        ? 'Acción física base deshabilitada por administración'
-        : 'Movimiento temporizado deshabilitado';
+      btn.title = capInactiva
+        ? 'Capacidad física deshabilitada en el modelo'
+        : !baseActiva
+          ? 'Acción física base deshabilitada por administración'
+          : 'Movimiento temporizado deshabilitado';
     }
 
     const meta = CONFIG.COMMAND_META[cf] || null;
@@ -356,9 +366,11 @@ function renderMovimientosTemporizadosControl() {
       ? 'badge text-bg-dark border border-info-subtle ms-1 font-monospace'
       : 'badge bg-danger-subtle text-danger border border-danger-subtle ms-1';
     badge.textContent = !ejecutable
-      ? !baseActiva
-        ? 'Base inactiva'
-        : 'Inactivo'
+      ? capInactiva
+        ? 'Modelo inactivo'
+        : !baseActiva
+          ? 'Base inactiva'
+          : 'Inactivo'
       : `${(Number(c.duracion_ms) / 1000).toFixed(1)}s`;
     btn.appendChild(badge);
     btn.addEventListener('click', () => ejecutarComandoPorId(c.id_comando, c));
@@ -960,6 +972,7 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
     const tdEstado = document.createElement('td');
     tdEstado.className = 'text-center';
     const activo = esActivoFlag(cmd?.activo);
+    const capInactiva = cmd?.capacidad_activa === false || cmd?.capacidad_activa === 0;
     const esTemp = cmd?.duracion_ms !== null && cmd?.duracion_ms !== undefined && Number(cmd?.duracion_ms) > 0;
     const baseInactiva =
       cmd?.base_activa === false ||
@@ -968,10 +981,16 @@ function renderComandosCatalogo(comandos = [], emptyText = 'Sin comandos disponi
     const badgeEstado = document.createElement('span');
     badgeEstado.className = !activo
       ? 'badge bg-secondary-subtle text-secondary border border-secondary-subtle'
-      : baseInactiva
+      : capInactiva || baseInactiva
         ? 'badge bg-warning-subtle text-warning border border-warning-subtle'
         : 'badge bg-success-subtle text-success border border-success-subtle';
-    badgeEstado.textContent = !activo ? 'Inactivo' : baseInactiva ? 'Inactivo (base)' : 'Activo';
+    badgeEstado.textContent = !activo
+      ? 'Inactivo'
+      : capInactiva
+        ? 'Inactivo (modelo)'
+        : baseInactiva
+          ? 'Inactivo (base)'
+          : 'Activo';
     tdEstado.appendChild(badgeEstado);
 
     tr.append(tdNumero, tdNombre, tdDesc, tdEstado);

@@ -25,7 +25,14 @@ function esBaseActiva(codigoFisico) {
       Number(c.codigo_fisico ?? c.codigo) === cf &&
       (c.duracion_ms === null || c.duracion_ms === undefined || Number(c.duracion_ms) === 0)
   );
-  return !base || esActivo(base.activo);
+  if (base && (!esActivo(base.activo) || base.capacidad_activa === false || base.base_activa === false)) {
+    return false;
+  }
+  const anyCmd = STORE.comandos.find((c) => Number(c.codigo_fisico ?? c.codigo) === cf);
+  if (anyCmd && (anyCmd.capacidad_activa === false || anyCmd.base_activa === false)) {
+    return false;
+  }
+  return true;
 }
 
 const STORE = {
@@ -481,12 +488,19 @@ function renderTablasComandos() {
         }
         tdNom.appendChild(document.createTextNode(c.nombre));
 
+        const capInactiva = c.capacidad_activa === false || c.capacidad_activa === 0;
+        const baseDisponible = esActivo(c.activo) && !capInactiva && c.base_activa !== false && c.base_activa !== 0;
+
         const tdTipo = document.createElement('td');
         tdTipo.className = 'text-center';
         tdTipo.appendChild(
           crearBadge(
-            esActivo(c.activo) ? 'Base · protegido' : 'Deshabilitado (Admin)',
-            esActivo(c.activo)
+            capInactiva
+              ? 'Deshabilitado (Modelo)'
+              : !baseDisponible
+                ? 'Deshabilitado (Admin)'
+                : 'Base · protegido',
+            baseDisponible
               ? 'bg-secondary-subtle text-light border border-secondary'
               : 'bg-danger-subtle text-danger border border-danger-subtle'
           )
@@ -509,11 +523,13 @@ function renderTablasComandos() {
           icono: 'bi-play-fill',
           texto: 'Ejecutar',
           clase: 'btn-outline-success',
-          disabled: !esActivo(c.activo),
+          disabled: !baseDisponible,
           onClick: () => callbacks.onExecuteCommand?.(STORE.vehiculoActivo, c),
         });
-        if (!esActivo(c.activo)) {
-          btnExec.title = 'Comando base deshabilitado por administración';
+        if (!baseDisponible) {
+          btnExec.title = capInactiva
+            ? 'Capacidad física deshabilitada en el modelo'
+            : 'Comando base deshabilitado por administración';
         }
         tdAcc.appendChild(btnExec);
 
@@ -536,7 +552,8 @@ function renderTablasComandos() {
       timedCmds.forEach((c) => {
         const tr = document.createElement('tr');
         const cmdActivo = esActivo(c.activo);
-        const baseActiva = c.base_activa !== false && c.base_activa !== 0 && esBaseActiva(c.codigo_fisico);
+        const capInactiva = c.capacidad_activa === false || c.capacidad_activa === 0;
+        const baseActiva = !capInactiva && c.base_activa !== false && c.base_activa !== 0 && esBaseActiva(c.codigo_fisico);
         const ejecutable = cmdActivo && baseActiva;
 
         const tdNom = document.createElement('td');
@@ -552,7 +569,11 @@ function renderTablasComandos() {
           tdNom.appendChild(document.createTextNode(' '));
           tdNom.appendChild(
             crearBadge(
-              !baseActiva ? 'Base deshabilitada' : 'Inactivo',
+              capInactiva
+                ? 'Modelo deshabilitado'
+                : !baseActiva
+                  ? 'Base deshabilitada'
+                  : 'Inactivo',
               'bg-danger-subtle text-danger border border-danger-subtle ms-1'
             )
           );
@@ -890,7 +911,12 @@ function renderEditorPasos() {
     const cf = Number(p.codigo_fisico ?? p.codigo);
     const cmdMatch = STORE.comandos.find((c) => Number(c.id_comando) === Number(p.id_comando));
     const pasoActivo =
-      (!cmdMatch || (esActivo(cmdMatch.activo) && cmdMatch.base_activa !== false && cmdMatch.base_activa !== 0)) &&
+      (!cmdMatch ||
+        (esActivo(cmdMatch.activo) &&
+          cmdMatch.capacidad_activa !== false &&
+          cmdMatch.capacidad_activa !== 0 &&
+          cmdMatch.base_activa !== false &&
+          cmdMatch.base_activa !== 0)) &&
       esBaseActiva(cf);
     if (!pasoActivo) hayPasoInactivo = true;
 
